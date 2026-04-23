@@ -183,30 +183,33 @@ jobs:
           GOLOGIN_PASSWORD: "11223344"
         run: |
           pip install pyautogui pygetwindow
-          python -c "
-          import pyautogui, pygetwindow as gw, time, os, sys
-          wait_time = 0; win = None
-          while wait_time < 60:
-              for title in['Gologin', 'GoLogin', 'gologin']:
-                  windows = gw.getWindowsWithTitle(title)
-                  if windows: win = windows[0]; break
-              if win: break
-              time.sleep(2); wait_time += 2
-
-          if win:
-              try: win.activate(); win.maximize()
-              except: pass
-              time.sleep(5)
-              pyautogui.press('tab', presses=8, interval=0.5)
-              pyautogui.press('enter')
-              time.sleep(4)
-              pyautogui.write(os.environ.get('GOLOGIN_EMAIL', ''))
-              pyautogui.press('tab')
-              pyautogui.write(os.environ.get('GOLOGIN_PASSWORD', ''))
-              pyautogui.press('enter')
-              print('Login automated successfully.')
-          else: sys.exit(1)
-          "
+          $pyCode = "import pyautogui, pygetwindow as gw, time, os, sys`n" +
+                    "wait_time = 0`n" +
+                    "win = None`n" +
+                    "while wait_time < 60:`n" +
+                    "    for title in['Gologin', 'GoLogin', 'gologin']:`n" +
+                    "        windows = gw.getWindowsWithTitle(title)`n" +
+                    "        if windows: win = windows[0]; break`n" +
+                    "    if win: break`n" +
+                    "    time.sleep(2); wait_time += 2`n" +
+                    "if win:`n" +
+                    "    try:`n" +
+                    "        win.activate()`n" +
+                    "        win.maximize()`n" +
+                    "    except: pass`n" +
+                    "    time.sleep(5)`n" +
+                    "    pyautogui.press('tab', presses=8, interval=0.5)`n" +
+                    "    pyautogui.press('enter')`n" +
+                    "    time.sleep(4)`n" +
+                    "    pyautogui.write(os.environ.get('GOLOGIN_EMAIL', ''))`n" +
+                    "    pyautogui.press('tab')`n" +
+                    "    pyautogui.write(os.environ.get('GOLOGIN_PASSWORD', ''))`n" +
+                    "    pyautogui.press('enter')`n" +
+                    "    print('Login automated successfully.')`n" +
+                    "else: sys.exit(1)`n"
+          
+          $pyCode | Out-File -FilePath "$env:TEMP\gologin_ui.py" -Encoding utf8
+          python -u "$env:TEMP\gologin_ui.py"
 
       - name: Auto-Detect, Foreground Install & Automate UI Clicks (Windows)
         if: runner.os == 'Windows'
@@ -239,27 +242,25 @@ jobs:
                       $locked = $true
                       while ($locked) { Start-Sleep -Seconds 2; try { $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None'); $s.Close(); $locked = $false } catch { } }
 
-                      # Start Installer
                       Start-Process -FilePath $file.FullName
 
-                      # Python UI Automation Script
                       Write-Output "[AVG] Sending automated UI keys..."
-                      python -u -c "
-          import pyautogui, pygetwindow as gw, time
-          for _ in range(60):
-              wins =[w for w in gw.getAllWindows() if 'AVG' in w.title or 'Antivirus' in w.title]
-              if wins:
-                  try:
-                      wins[0].activate()
-                      time.sleep(5)
-                      pyautogui.press('enter')
-                      time.sleep(1)
-                      pyautogui.press('space')
-                      print('[AVG-UI] Keys sent to installer.')
-                  except Exception as e: print(f'[AVG-UI] Err: {e}')
-                  break
-              time.sleep(2)
-                      "
+                      $pyCode = "import pyautogui, pygetwindow as gw, time`n" +
+                                "for _ in range(60):`n" +
+                                "    wins =[w for w in gw.getAllWindows() if 'AVG' in w.title or 'Antivirus' in w.title]`n" +
+                                "    if wins:`n" +
+                                "        try:`n" +
+                                "            wins[0].activate()`n" +
+                                "            time.sleep(5)`n" +
+                                "            pyautogui.press('enter')`n" +
+                                "            time.sleep(1)`n" +
+                                "            pyautogui.press('space')`n" +
+                                "            print('[AVG-UI] Keys sent to installer.')`n" +
+                                "        except Exception as e: print(f'[AVG-UI] Err: {e}')`n" +
+                                "        break`n" +
+                                "    time.sleep(2)`n"
+                      $pyCode | Out-File -FilePath "$env:TEMP\avg_ui.py" -Encoding utf8
+                      python -u "$env:TEMP\avg_ui.py"
                       
                       Write-Output "[AVG] Waiting for final application deployment..."
                       $avgPaths = @("C:\Program Files\AVG\Antivirus\AVGUI.exe", "C:\Program Files (x86)\AVG\Antivirus\AVGUI.exe")
@@ -297,25 +298,23 @@ jobs:
                       $locked = $true
                       while ($locked) { Start-Sleep -Seconds 2; try { $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None'); $s.Close(); $locked = $false } catch { } }
 
-                      # Start Installer
                       Start-Process -FilePath $file.FullName
 
-                      # Python UI Automation Script
                       Write-Output "[OperaGX] Sending automated UI keys..."
-                      python -u -c "
-          import pyautogui, pygetwindow as gw, time
-          for _ in range(30):
-              wins =[w for w in gw.getAllWindows() if 'Opera' in w.title or 'Installer' in w.title]
-              if wins:
-                  try:
-                      wins[0].activate()
-                      time.sleep(3)
-                      pyautogui.press('enter')
-                      print('[OperaGX-UI] Keys sent to installer.')
-                  except: pass
-                  break
-              time.sleep(2)
-                      "
+                      $pyCode = "import pyautogui, pygetwindow as gw, time`n" +
+                                "for _ in range(30):`n" +
+                                "    wins =[w for w in gw.getAllWindows() if 'Opera' in w.title or 'Installer' in w.title]`n" +
+                                "    if wins:`n" +
+                                "        try:`n" +
+                                "            wins[0].activate()`n" +
+                                "            time.sleep(3)`n" +
+                                "            pyautogui.press('enter')`n" +
+                                "            print('[OperaGX-UI] Keys sent to installer.')`n" +
+                                "        except: pass`n" +
+                                "        break`n" +
+                                "    time.sleep(2)`n"
+                      $pyCode | Out-File -FilePath "$env:TEMP\gx_ui.py" -Encoding utf8
+                      python -u "$env:TEMP\gx_ui.py"
                       
                       Write-Output "[OperaGX] Waiting for final application deployment..."
                       $gxPath = "$userProfile\AppData\Local\Programs\Opera GX\launcher.exe"
@@ -350,25 +349,23 @@ jobs:
                       $locked = $true
                       while ($locked) { Start-Sleep -Seconds 2; try { $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None'); $s.Close(); $locked = $false } catch { } }
 
-                      # Start Installer
                       Start-Process -FilePath $file.FullName
 
-                      # Python UI Automation Script
                       Write-Output "[OperaOne] Sending automated UI keys..."
-                      python -u -c "
-          import pyautogui, pygetwindow as gw, time
-          for _ in range(30):
-              wins =[w for w in gw.getAllWindows() if 'Opera' in w.title or 'Installer' in w.title]
-              if wins:
-                  try:
-                      wins[0].activate()
-                      time.sleep(3)
-                      pyautogui.press('enter')
-                      print('[OperaOne-UI] Keys sent to installer.')
-                  except: pass
-                  break
-              time.sleep(2)
-                      "
+                      $pyCode = "import pyautogui, pygetwindow as gw, time`n" +
+                                "for _ in range(30):`n" +
+                                "    wins =[w for w in gw.getAllWindows() if 'Opera' in w.title or 'Installer' in w.title]`n" +
+                                "    if wins:`n" +
+                                "        try:`n" +
+                                "            wins[0].activate()`n" +
+                                "            time.sleep(3)`n" +
+                                "            pyautogui.press('enter')`n" +
+                                "            print('[OperaOne-UI] Keys sent to installer.')`n" +
+                                "        except: pass`n" +
+                                "        break`n" +
+                                "    time.sleep(2)`n"
+                      $pyCode | Out-File -FilePath "$env:TEMP\one_ui.py" -Encoding utf8
+                      python -u "$env:TEMP\one_ui.py"
                       
                       Write-Output "[OperaOne] Waiting for final application deployment..."
                       $onePath = "$userProfile\AppData\Local\Programs\Opera\launcher.exe"
@@ -461,7 +458,7 @@ jobs:
           sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceAccessibility', 'com.apple.systemevents', 0, 2, 4, 1, 0);" || true
 
           sleep 30
-          osascript <<'EOF'
+          osascript -e '
           set userEmail to system attribute "GOLOGIN_EMAIL"
           set userPass to system attribute "GOLOGIN_PASSWORD"
           tell application "System Events"
@@ -486,7 +483,7 @@ jobs:
               key code 36
               delay 5
           end tell
-          EOF
+          '
 
       - name: Auto-Detect, Foreground Install & Automate UI Clicks (macOS)
         if: runner.os == 'macOS'
@@ -513,7 +510,7 @@ jobs:
                   while[ "$stable_count" -lt 3 ]; do
                       sleep 2
                       local curr_size=$(du -sk "$1" 2>/dev/null | awk '{print $1}')
-                      if [ "$curr_size" = "$prev_size" ]; then stable_count=$((stable_count + 1)); else stable_count=0; fi
+                      if[ "$curr_size" = "$prev_size" ]; then stable_count=$((stable_count + 1)); else stable_count=0; fi
                       prev_size="$curr_size"
                   done
               else
@@ -526,14 +523,14 @@ jobs:
               local label="$2"
               local expected_app=""
               
-              if[ "$label" == "OperaGX" ]; then expected_app="/Applications/Opera GX.app"
+              if [ "$label" == "OperaGX" ]; then expected_app="/Applications/Opera GX.app"
               else expected_app="/Applications/Opera.app"; fi
 
               echo "[$label] Opening installer GUI..."
               open "$target"
 
               echo "[$label] Automating UI clicks via AppleScript..."
-              osascript <<EOF
+              osascript -e '
               tell application "System Events"
                   set attempts to 0
                   repeat while attempts < 30
@@ -551,7 +548,7 @@ jobs:
                       set attempts to attempts + 1
                   end repeat
               end tell
-EOF
+              '
 
               echo "[$label] Waiting for final application deployment..."
               local attempts=0
@@ -570,7 +567,7 @@ EOF
           (
               DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
               INSTALLED=false
-              while ! $INSTALLED &&[ "$(date +%s)" -lt "$DEADLINE" ]; do
+              while ! $INSTALLED && [ "$(date +%s)" -lt "$DEADLINE" ]; do
                   while IFS= read -r -d '' candidate; do
                       if is_new "$candidate" && [[ ! "$candidate" =~ \.(crdownload|download|part)$ ]]; then
                           echo "[OperaGX] Detected: $(basename "$candidate")"
@@ -590,7 +587,7 @@ EOF
           (
               DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
               INSTALLED=false
-              while ! $INSTALLED &&[ "$(date +%s)" -lt "$DEADLINE" ]; do
+              while ! $INSTALLED && [ "$(date +%s)" -lt "$DEADLINE" ]; do
                   while IFS= read -r -d '' candidate; do
                       if is_new "$candidate" && [[ ! "$candidate" =~ \.(crdownload|download|part)$ ]]; then
                           echo "[OperaOne] Detected: $(basename "$candidate")"
