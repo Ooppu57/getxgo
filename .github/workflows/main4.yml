@@ -36,7 +36,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '1'
+        default: '5'
 
 jobs:
   prepare_matrix:
@@ -62,8 +62,8 @@ jobs:
           email = os.environ.get("EMAIL", "").strip()
           num_devices = int(os.environ.get("NUM_DEVICES", "1"))
           os_version = os.environ.get("OS_VERSION", "windows-2025")
-          
-          includes =[]
+
+          includes = []
           if email:
               for i in range(1, num_devices + 1):
                   if "windows" in os_version.lower():
@@ -72,19 +72,20 @@ jobs:
                   else:
                       short_os = os_version.replace("macos-", "")
                       device_name = f"{i}-mac-{short_os}"
-                      
+
                   includes.append({
-                      "device": device_name, 
+                      "device": device_name,
                       "email": email,
                       "os": os_version
                   })
-                  
+
           if not includes:
               print("Error: Valid configuration could not be generated. Exiting.")
               exit(1)
-              
+
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"matrix={json.dumps({'include': includes})}\n")
+
       - name: Update Workflow Defaults (Remember Inputs)
         shell: python
         env:
@@ -95,34 +96,37 @@ jobs:
         run: |
           import re
           import os
-          # 👇 FIXED: Updated to match your exact workflow file name 👇
-          file_path = ".github/workflows/main4.yml" 
-          
+          file_path = ".github/workflows/main4.yml"
+
           with open(file_path, "r") as f:
               content = f.read()
+
           def update_default(input_name, new_val):
               global content
               pattern = r"(" + input_name + r":[\s\S]*?default:\s*')[^']*(')"
               content = re.sub(pattern, rf"\g<1>{new_val}\g<2>", content, count=1)
+
           update_default("os_version", os.environ.get("OS_VERSION"))
           update_default("getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
           update_default("gologin_email", os.environ.get("GOLOGIN_EMAIL"))
           update_default("num_devices", os.environ.get("NUM_DEVICES"))
+
           with open(file_path, "w") as f:
               f.write(content)
+
       - name: Commit and Push New Defaults
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          # 👇 FIXED: Updated git add target to main4.yml 👇
           git add .github/workflows/main4.yml
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs[skip ci]" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs [skip ci]" && git push)
+
   remote_session:
     name: Remote Session ${{ matrix.device }}
     needs: prepare_matrix
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    
+
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare_matrix.outputs.matrix) }}
@@ -156,15 +160,15 @@ jobs:
               }
           }
           if (-not $Success) { Write-Error "Failed to download Getscreen.me after $MaxRetries attempts"; exit 1 }
-          
+
           $DeviceName = "${{ matrix.device }}"
           Write-Host "Installing and linking Getscreen.me for Device $DeviceName..."
-          
+
           $InstallArgs = "/i getscreen.msi /qn REGISTER=`"${{ matrix.email }}`" CONFIG=`"name='$DeviceName' autostart=true nonadmin=true control=true disable_confirmation=true`""
           Start-Process msiexec.exe -Wait -ArgumentList $InstallArgs
-          
-          Write-Host "✅ Getscreen.me is configured and running."
-          
+
+          Write-Host "Getscreen.me is configured and running."
+
       - name: Download, Install, and Open GoLogin (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -190,19 +194,19 @@ jobs:
               }
           }
           if (-not $Success) { Write-Error "Failed to download GoLogin after $MaxRetries attempts"; exit 1 }
-          
+
           Write-Host "Installing GoLogin..."
           Start-Process -FilePath ".\gologin_installer.exe" -ArgumentList "/S" -Wait
-          
+
           $GoLoginPath = "$env:USERPROFILE\AppData\Local\Programs\GoLogin\GoLogin.exe"
-          
+
           Write-Host "Waiting up to 60 seconds for GoLogin.exe to appear on disk..."
           $WaitAttempts = 0
           while (-Not (Test-Path $GoLoginPath) -and $WaitAttempts -lt 30) {
               Start-Sleep -Seconds 2
               $WaitAttempts++
           }
-          
+
           if (-Not (Test-Path $GoLoginPath)) {
               Write-Host "Searching for GoLogin.exe in alternative AppData paths..."
               $Found = Get-ChildItem -Path "$env:USERPROFILE\AppData" -Filter "GoLogin.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -210,15 +214,15 @@ jobs:
                   $GoLoginPath = $Found.FullName
                   Write-Host "Found at $GoLoginPath"
               } else {
-                  Write-Error "❌ GoLogin.exe could not be found after installation."
+                  Write-Error "GoLogin.exe could not be found after installation."
                   exit 1
               }
           }
-          
+
           Write-Host "Launching GoLogin..."
           Start-Process $GoLoginPath
-          Write-Host "✅ GoLogin installed and opened!"
-          
+          Write-Host "GoLogin installed and opened!"
+
       - name: Automate GoLogin Login (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -228,7 +232,7 @@ jobs:
         run: |
           Write-Host "Installing Python UI Automation tools..."
           pip install pyautogui pygetwindow
-          
+
           Write-Host "Running Automation Script..."
           python -c "
           import pyautogui
@@ -236,14 +240,14 @@ jobs:
           import time
           import os
           import sys
-          
+
           print('Polling up to 60 seconds for GoLogin window to appear...')
           max_wait = 60
           wait_time = 0
           win = None
-          
+
           while wait_time < max_wait:
-              for title in['Gologin', 'GoLogin', 'gologin']:
+              for title in ['Gologin', 'GoLogin', 'gologin']:
                   windows = gw.getWindowsWithTitle(title)
                   if windows:
                       win = windows[0]
@@ -253,7 +257,7 @@ jobs:
               time.sleep(2)
               wait_time += 2
               print(f'Waited {wait_time} seconds...')
-          
+
           if win:
               try:
                   win.activate()
@@ -261,69 +265,157 @@ jobs:
               except Exception as e:
                   print('Could not maximize:', e)
               time.sleep(5)
-              
+
               print('Navigating to Login page...')
               pyautogui.press('tab', presses=8, interval=0.5)
               pyautogui.press('enter')
-              
+
               time.sleep(4)
-              
+
               print('Entering credentials...')
               pyautogui.write(os.environ.get('GOLOGIN_EMAIL', ''))
               pyautogui.press('tab')
-              
+
               pyautogui.write(os.environ.get('GOLOGIN_PASSWORD', ''))
               pyautogui.press('enter')
-              
-              print('✅ Login automated successfully.')
+
+              print('Login automated successfully.')
           else:
-              print('❌ Could not find GoLogin window within time limit.')
+              print('Could not find GoLogin window within time limit.')
               sys.exit(1)
           "
-          
-      - name: Monitor Downloads & Keep Runner Alive (Windows)
+
+      # ------------------------------------------------------------------
+      # WINDOWS: Background Auto-Installer
+      # Watches Downloads folder for AVG, Opera GX, and Opera One installers.
+      # Installs each one silently as soon as it finishes downloading.
+      # Keeps checking until all 3 have been installed (or timeout reached).
+      # ------------------------------------------------------------------
+      - name: Auto-Detect and Install Software in Background (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "============================================================" -ForegroundColor Cyan
+          Write-Host " Background Auto-Installer is now ACTIVE" -ForegroundColor Cyan
+          Write-Host " Watching Downloads folder for:" -ForegroundColor Cyan
+          Write-Host "   - AVG Antivirus  (avg_antivirus_free_setup.exe or similar)" -ForegroundColor Yellow
+          Write-Host "   - Opera GX       (OperaGXSetup.exe)" -ForegroundColor Yellow
+          Write-Host "   - Opera One      (OperaSetup.exe)" -ForegroundColor Yellow
+          Write-Host " Download them manually in the browser. Each will be" -ForegroundColor Cyan
+          Write-Host " detected and installed silently as it finishes." -ForegroundColor Cyan
+          Write-Host "============================================================" -ForegroundColor Cyan
+
+          $dlFolder = "$env:USERPROFILE\Downloads"
+
+          # Track which software has already been installed to avoid re-installing
+          $installed = @{
+              "AVG"      = $false
+              "OperaGX"  = $false
+              "OperaOne" = $false
+          }
+
+          # Software detection rules: each entry has a filename pattern and silent install args
+          $softwareRules = @(
+              @{
+                  Key        = "AVG"
+                  Label      = "AVG Antivirus"
+                  # AVG installer names vary; match any exe containing 'avg' (case-insensitive)
+                  Pattern    = "*avg*.exe"
+                  # AVG supports /silent or /SILENT flags
+                  InstallArgs = "/silent"
+              },
+              @{
+                  Key        = "OperaGX"
+                  Label      = "Opera GX"
+                  Pattern    = "OperaGXSetup.exe"
+                  InstallArgs = "/silent /launchopera 0 /setdefaultbrowser 0"
+              },
+              @{
+                  Key        = "OperaOne"
+                  Label      = "Opera One"
+                  Pattern    = "OperaSetup.exe"
+                  InstallArgs = "/silent /launchopera 0 /setdefaultbrowser 0"
+              }
+          )
+
+          # Helper: check if a file is fully downloaded (not locked by browser)
+          function Wait-UntilUnlocked {
+              param([string]$FilePath)
+              $locked = $true
+              while ($locked) {
+                  Start-Sleep -Seconds 2
+                  try {
+                      $stream = [System.IO.File]::Open($FilePath, 'Open', 'Read', 'None')
+                      $stream.Close()
+                      $locked = $false
+                  } catch {
+                      # File still being written — keep waiting
+                  }
+              }
+          }
+
+          $allDone = $false
+          $timeoutAt = (Get-Date).AddMinutes(55) # Stop a bit before the job timeout
+
+          while (-not $allDone -and (Get-Date) -lt $timeoutAt) {
+
+              foreach ($rule in $softwareRules) {
+                  # Skip if already installed
+                  if ($installed[$rule.Key]) { continue }
+
+                  # Search for matching file(s) in Downloads
+                  $candidates = Get-ChildItem -Path $dlFolder -Filter $rule.Pattern -ErrorAction SilentlyContinue |
+                                Where-Object { -not $_.Name.EndsWith(".crdownload") -and -not $_.Name.EndsWith(".part") } |
+                                Sort-Object LastWriteTime -Descending
+
+                  if ($candidates.Count -gt 0) {
+                      $dlFile = $candidates[0]
+                      Write-Host ""
+                      Write-Host "-> Detected: $($dlFile.Name)" -ForegroundColor Green
+                      Write-Host "   Waiting for download to complete..." -ForegroundColor Cyan
+
+                      Wait-UntilUnlocked -FilePath $dlFile.FullName
+
+                      Write-Host "   Download finished! Installing $($rule.Label) silently..." -ForegroundColor Cyan
+                      Start-Process -FilePath $dlFile.FullName -ArgumentList $rule.InstallArgs -Wait
+                      Write-Host "   $($rule.Label) installed successfully!" -ForegroundColor Green
+
+                      $installed[$rule.Key] = $true
+                  }
+              }
+
+              # Check if everything is done
+              $allDone = ($installed["AVG"] -and $installed["OperaGX"] -and $installed["OperaOne"])
+
+              if (-not $allDone) {
+                  $remaining = ($installed.Keys | Where-Object { -not $installed[$_] }) -join ", "
+                  Write-Host "Still waiting for: $remaining ..." -ForegroundColor Yellow
+                  Start-Sleep -Seconds 10
+              }
+          }
+
+          if ($allDone) {
+              Write-Host ""
+              Write-Host "============================================================" -ForegroundColor Green
+              Write-Host " All software installed successfully!" -ForegroundColor Green
+              Write-Host "============================================================" -ForegroundColor Green
+          } else {
+              Write-Host ""
+              Write-Host "============================================================" -ForegroundColor Yellow
+              Write-Host " Timeout reached. Summary:" -ForegroundColor Yellow
+              foreach ($key in $installed.Keys) {
+                  $status = if ($installed[$key]) { "Installed" } else { "NOT installed (not downloaded in time)" }
+                  Write-Host "   $key : $status" -ForegroundColor $(if ($installed[$key]) { "Green" } else { "Red" })
+              }
+              Write-Host "============================================================" -ForegroundColor Yellow
+          }
+
+      - name: Keep Runner Alive (Windows)
         if: always() && runner.os == 'Windows'
         shell: pwsh
         run: |
-          $Timeout = 3600
-          $StartTime = Get-Date
-          $DlFolder = "$env:USERPROFILE\Downloads"
-          
-          if (-not (Test-Path $DlFolder)) { New-Item -ItemType Directory -Path $DlFolder | Out-Null }
-          
-          $Processed = @()
-          Write-Host "Session is active. The runner will stay online for $Timeout seconds." -ForegroundColor Cyan
-          Write-Host "Monitoring '$DlFolder' for manually downloaded installers (AVG, Opera One, Opera GX)..." -ForegroundColor Cyan
-          
-          while ((Get-Date) -lt $StartTime.AddSeconds($Timeout)) {
-              # Find any .exe file that hasn't been processed yet
-              $NewFiles = Get-ChildItem -Path $DlFolder -Filter "*.exe" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notin $Processed }
-              
-              foreach ($File in $NewFiles) {
-                  Write-Host "`nFound newly downloading file: $($File.Name). Waiting for it to fully complete..." -ForegroundColor Yellow
-                  
-                  # Loop to check if the browser has finished writing to the file
-                  $Locked = $true
-                  while ($Locked -and ((Get-Date) -lt $StartTime.AddSeconds($Timeout))) {
-                      Start-Sleep -Seconds 2
-                      try {
-                          $Stream = [System.IO.File]::Open($File.FullName, 'Open', 'Read', 'None')
-                          $Stream.Close()
-                          $Locked = $false
-                      } catch { 
-                          # File is still downloading/locked
-                      }
-                  }
-                  
-                  if (-not $Locked) {
-                      Write-Host "-> Download finished! Executing $($File.Name) silently..." -ForegroundColor Green
-                      Start-Process -FilePath $File.FullName -ArgumentList "/silent" -Wait
-                      $Processed += $File.FullName
-                      Write-Host "✅ Done! Installation for $($File.Name) has been completed. Continuing to monitor..." -ForegroundColor Green
-                  }
-              }
-              Start-Sleep -Seconds 5
-          }
+          Write-Host "Session is active. This runner will remain online until the job timeout is reached."
+          Start-Sleep -Seconds 3600
 
       # ==========================================
       # macOS SPECIFIC STEPS
@@ -333,53 +425,51 @@ jobs:
         run: |
           echo "Creating 'admin' user with password 'admin'..."
           sudo sysadminctl -addUser admin -password admin -admin || true
-          
+
           echo "Setting default runner password to 'admin' as well..."
           sudo sysadminctl -adminUser "$USER" -password admin || true
-          
-          echo "✅ Credentials configured. You can now authorize macOS GUI prompts with Username: admin / Password: admin"
-          
+
+          echo "Credentials configured. You can now authorize macOS GUI prompts with Username: admin / Password: admin"
+
       - name: Install, Bypass Security, and Start Getscreen.me (macOS)
         if: runner.os == 'macOS'
         run: |
           echo "Downloading Getscreen.me Agent for macOS..."
           curl -L -o getscreen.dmg "https://getscreen.me/download/getscreen.dmg" --retry 3 --retry-delay 5
-          
+
           DeviceName="${{ matrix.device }}"
-          
+
           echo "Mounting DMG..."
           hdiutil attach getscreen.dmg -mountpoint /Volumes/getscreen -nobrowse -quiet
-          
+
           APP_PATH=$(find /Volumes/getscreen -maxdepth 1 -name "*.app" | head -n 1)
           APP_NAME=$(basename "$APP_PATH")
-          
+
           echo "Copying $APP_NAME to /Applications..."
           sudo cp -R "$APP_PATH" /Applications/
           hdiutil detach /Volumes/getscreen -quiet -force
-          
+
           echo "Bypassing macOS Screen Recording & Accessibility Prompts..."
           APP_BUNDLE_ID=$(defaults read "/Applications/$APP_NAME/Contents/Info.plist" CFBundleIdentifier)
-          
-          # Inject Getscreen into macOS TCC SQLite Database (Grants Screen Recording & Accessibility)
+
           sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceScreenCapture', '$APP_BUNDLE_ID', 0, 2, 4, 1, 0);" || true
           sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceAccessibility', '$APP_BUNDLE_ID', 0, 2, 4, 1, 0);" || true
-          
+
           EXEC_NAME=$(defaults read "/Applications/$APP_NAME/Contents/Info.plist" CFBundleExecutable)
           EXEC_PATH="/Applications/$APP_NAME/Contents/MacOS/$EXEC_NAME"
-          
+
           echo "Registering and Starting Getscreen.me..."
           sudo "$EXEC_PATH" -install || true
           sudo "$EXEC_PATH" -register "${{ matrix.email }}"
           sudo "$EXEC_PATH" -config "name='$DeviceName' autostart=true nonadmin=true control=true disable_confirmation=true"
           sudo "$EXEC_PATH" -start || true
-          echo "✅ Getscreen.me is running! Device Name set to: $DeviceName"
-          
+          echo "Getscreen.me is running! Device Name set to: $DeviceName"
+
       - name: Download, Install, and Open GoLogin (macOS)
         if: runner.os == 'macOS'
         run: |
           OS_VERSION="${{ matrix.os }}"
-          
-          # Check if OS is Intel based (macos-13 or macos-26-intel)
+
           if [[ "$OS_VERSION" == "macos-13" || "$OS_VERSION" == "macos-26-intel" ]]; then
               echo "Downloading GoLogin Intel (x64) for $OS_VERSION..."
               curl -L -o gologin.dmg "https://dl.gologin.com/gologin.dmg" --retry 3 --retry-delay 5
@@ -387,19 +477,19 @@ jobs:
               echo "Downloading GoLogin ARM64 for Apple Silicon ($OS_VERSION)..."
               curl -L -o gologin.dmg "https://dl.gologin.com/gologin-arm64.dmg" --retry 3 --retry-delay 5
           fi
-          
+
           echo "Mounting GoLogin DMG..."
           hdiutil attach gologin.dmg -mountpoint /Volumes/gologin -nobrowse -quiet
-          
+
           echo "Installing GoLogin to Applications..."
           sudo cp -R /Volumes/gologin/GoLogin.app /Applications/
           hdiutil detach /Volumes/gologin -quiet -force
-          
+
           echo "Launching GoLogin..."
           open /Applications/GoLogin.app
-          
-          echo "✅ GoLogin installed and opened!"
-          
+
+          echo "GoLogin installed and opened!"
+
       - name: Automate GoLogin Login (macOS Native)
         if: runner.os == 'macOS'
         env:
@@ -407,117 +497,214 @@ jobs:
           GOLOGIN_PASSWORD: "11223344"
         run: |
           echo "Injecting Accessibility permissions for osascript and System Events..."
-          # CRITICAL FIX FOR NEW macOS: Forces permission so AppleScript isn't blocked by the OS
           sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceAccessibility', '/usr/bin/osascript', 1, 2, 4, 1, 0);" || true
           sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceAccessibility', 'com.apple.systemevents', 0, 2, 4, 1, 0);" || true
-          
+
           echo "Waiting 30 seconds for GoLogin to completely render..."
           sleep 30
-          
+
           echo "Automating keystrokes using AppleScript (Clipboard Method)..."
           osascript <<'EOF'
           set userEmail to system attribute "GOLOGIN_EMAIL"
           set userPass to system attribute "GOLOGIN_PASSWORD"
-          
+
           tell application "System Events"
               tell application "GoLogin" to activate
               delay 3
-              
-              -- Depending on GoLogin's exact version, it defaults to "Sign Up". 
-              -- Pressing Tab 8 times brings it to "I already have an account - Log In"
+
               repeat 8 times
                   key code 48 -- Tab key
                   delay 0.5
               end repeat
-              
-              -- Press ENTER to switch to the Log In tab
-              key code 36 
+
+              key code 36
               delay 4
-              
-              -- Paste Email safely via clipboard (Fixes dropped characters in Electron)
+
               set the clipboard to userEmail
               delay 0.5
               keystroke "v" using command down
               delay 1
-              
-              -- Press TAB to move to Password field
+
               key code 48
               delay 1
-              
-              -- Paste Password safely via clipboard
+
               set the clipboard to userPass
               delay 0.5
               keystroke "v" using command down
               delay 1
-              
-              -- Press ENTER to trigger Login
+
               key code 36
               delay 5
           end tell
           EOF
-          
-          echo "✅ Login automation completed."
-          
-      - name: Monitor Downloads & Keep Runner Alive (macOS)
-        if: always() && runner.os == 'macOS'
+
+          echo "Login automation completed."
+
+      # ------------------------------------------------------------------
+      # macOS: Background Auto-Installer
+      # Watches ~/Downloads for Opera GX and Opera One installers (.app or .dmg).
+      # Installs each one as soon as it finishes downloading.
+      # Keeps checking until both have been installed (or timeout reached).
+      # ------------------------------------------------------------------
+      - name: Auto-Detect and Install Software in Background (macOS)
+        if: runner.os == 'macOS'
         run: |
-          timeout=3600
-          end_time=$((SECONDS + timeout))
-          dlFolder="$HOME/Downloads"
-          mkdir -p "$dlFolder"
-          
-          processed_files=()
-          
-          echo "Session is active. The runner will stay online for $timeout seconds."
-          echo "Monitoring '$dlFolder' for manually downloaded installers (Opera One, Opera GX)..."
-          
-          while [ $SECONDS -lt $end_time ]; do
-              # Scan for .app bundles or files with "Opera" in the name
-              while IFS= read -r -d '' item; do
-                  if [[ -z "$item" ]]; then continue; fi
-                  
-                  # Check if we already processed this installer
-                  is_processed=0
-                  for pf in "${processed_files[@]}"; do
-                      if [[ "$pf" == "$item" ]]; then
-                          is_processed=1
+          echo "============================================================"
+          echo " Background Auto-Installer is now ACTIVE"
+          echo " Watching Downloads folder for:"
+          echo "   - Opera GX   (Opera GX Installer.app or OperaGX*.dmg)"
+          echo "   - Opera One  (Opera Installer.app or Opera*.dmg)"
+          echo " Download them manually in the browser. Each will be"
+          echo " detected and installed automatically as it finishes."
+          echo "============================================================"
+
+          DL_FOLDER="$HOME/Downloads"
+
+          # Snapshot existing Opera files so we only act on NEW downloads
+          SNAPSHOT_FILE="/tmp/opera_mac_snapshot_$$"
+          find "$DL_FOLDER" -maxdepth 1 \( \
+              -iname "*OperaGX*" \
+              -o -iname "*Opera GX*" \
+              -o -iname "*OperaSetup*" \
+              -o -iname "*Opera Installer*" \
+              -o -iname "*Opera One*" \
+          \) -print0 2>/dev/null | tr '\0' '\n' > "$SNAPSHOT_FILE"
+
+          # Track installed state
+          OPERA_GX_DONE=false
+          OPERA_ONE_DONE=false
+
+          # Helper: true if path was NOT in the pre-run snapshot
+          is_new() {
+              local item="$1"
+              grep -qxF "$item" "$SNAPSHOT_FILE" 2>/dev/null && return 1
+              return 0
+          }
+
+          # Helper: wait until a .app bundle or file is stable (fully downloaded)
+          wait_until_stable() {
+              local target="$1"
+              if [[ -d "$target" ]]; then
+                  # .app bundle — use size-stability check
+                  local prev_size="-1"
+                  local stable_count=0
+                  while [ "$stable_count" -lt 3 ]; do
+                      sleep 2
+                      local curr_size
+                      curr_size=$(du -sk "$target" 2>/dev/null | awk '{print $1}')
+                      if [ "$curr_size" = "$prev_size" ]; then
+                          stable_count=$((stable_count + 1))
+                      else
+                          stable_count=0
+                      fi
+                      prev_size="$curr_size"
+                  done
+              else
+                  # Regular file — wait until not locked by browser
+                  while lsof "$target" >/dev/null 2>&1; do
+                      sleep 2
+                  done
+              fi
+          }
+
+          # Helper: install an Opera app or dmg
+          install_opera() {
+              local target="$1"
+              local label="$2"
+
+              echo "-> Installing $label from: $(basename "$target")"
+
+              if [[ "$target" == *.app ]]; then
+                  # .app bundle — copy directly to /Applications
+                  sudo cp -R "$target" /Applications/
+                  echo "   Copied $(basename "$target") to /Applications."
+
+              elif [[ "$target" == *.dmg ]]; then
+                  # .dmg — mount, copy .app, unmount
+                  local mount_point="/Volumes/opera_install_$$"
+                  hdiutil attach "$target" -mountpoint "$mount_point" -nobrowse -quiet
+
+                  local app_inside
+                  app_inside=$(find "$mount_point" -maxdepth 1 -name "*.app" | head -n 1)
+
+                  if [ -n "$app_inside" ]; then
+                      sudo cp -R "$app_inside" /Applications/
+                      echo "   Installed $(basename "$app_inside") to /Applications."
+                  else
+                      echo "   Warning: No .app found inside $target"
+                  fi
+
+                  hdiutil detach "$mount_point" -quiet -force 2>/dev/null || true
+              fi
+
+              echo "   $label installed successfully!"
+          }
+
+          TIMEOUT_SECS=$((55 * 60))  # 55 minutes — stop before job timeout
+          ELAPSED=0
+
+          while { ! $OPERA_GX_DONE || ! $OPERA_ONE_DONE; } && [ "$ELAPSED" -lt "$TIMEOUT_SECS" ]; do
+
+              # --- Check for Opera GX ---
+              if ! $OPERA_GX_DONE; then
+                  while IFS= read -r -d '' candidate; do
+                      if is_new "$candidate" && [[ ! "$candidate" =~ \.(crdownload|download|part)$ ]]; then
+                          echo ""
+                          echo "-> Detected Opera GX download: $(basename "$candidate")"
+                          echo "   Waiting for download to complete..."
+                          wait_until_stable "$candidate"
+                          install_opera "$candidate" "Opera GX"
+                          OPERA_GX_DONE=true
                           break
                       fi
-                  done
-                  
-                  if [[ $is_processed -eq 0 ]]; then
-                      echo -e "\nNew download detected: $(basename "$item"). Waiting for completion..."
-                      
-                      # Wait based on filetype (Apps use Size Stability check, .dmg/pkg use lsof Check)
-                      if [[ "$item" == *.app ]]; then
-                          prev_size="-1"
-                          stable_count=0
-                          while[ "$stable_count" -lt 3 ]; do
-                              sleep 2
-                              curr_size=$(du -sk "$item" 2>/dev/null | awk '{print $1}')
-                              if[ "$curr_size" == "$prev_size" ]; then
-                                  stable_count=$((stable_count + 1))
-                              else
-                                  stable_count=0
-                              fi
-                              prev_size="$curr_size"
-                          done
-                      else
-                          locked=true
-                          while $locked; do
-                              sleep 2
-                              if ! lsof "$item" >/dev/null 2>&1; then
-                                  locked=false
-                              fi
-                          done
+                  done < <(find "$DL_FOLDER" -maxdepth 1 \( \
+                      -iname "*OperaGX*" -o -iname "*Opera GX*" \
+                  \) -print0 2>/dev/null)
+              fi
+
+              # --- Check for Opera One ---
+              if ! $OPERA_ONE_DONE; then
+                  while IFS= read -r -d '' candidate; do
+                      if is_new "$candidate" && [[ ! "$candidate" =~ \.(crdownload|download|part)$ ]]; then
+                          echo ""
+                          echo "-> Detected Opera One download: $(basename "$candidate")"
+                          echo "   Waiting for download to complete..."
+                          wait_until_stable "$candidate"
+                          install_opera "$candidate" "Opera One"
+                          OPERA_ONE_DONE=true
+                          break
                       fi
-                      
-                      echo "-> Download finished! Opening $(basename "$item")..."
-                      open "$item"
-                      processed_files+=("$item")
-                      echo "✅ Done! Execution triggered for $(basename "$item"). Continuing to monitor..."
-                  fi
-              done < <(find "$dlFolder" -maxdepth 1 \( -iname "*Opera*.app" -o \( -type f -iname "*Opera*" ! -iname "*.download" ! -iname "*.crdownload" ! -iname "*.part" \) \) -print0 2>/dev/null)
-              
-              sleep 5
+                  done < <(find "$DL_FOLDER" -maxdepth 1 \( \
+                      -iname "*OperaSetup*" -o -iname "*Opera Installer*" -o -iname "*Opera One*" \
+                  \) ! -iname "*OperaGX*" ! -iname "*Opera GX*" -print0 2>/dev/null)
+              fi
+
+              if ! $OPERA_GX_DONE || ! $OPERA_ONE_DONE; then
+                  REMAINING=""
+                  $OPERA_GX_DONE  || REMAINING="$REMAINING Opera GX,"
+                  $OPERA_ONE_DONE || REMAINING="$REMAINING Opera One,"
+                  echo "Still waiting for:$REMAINING"
+                  sleep 10
+                  ELAPSED=$((ELAPSED + 10))
+              fi
+
           done
+
+          echo ""
+          echo "============================================================"
+          if $OPERA_GX_DONE && $OPERA_ONE_DONE; then
+              echo " All software installed successfully!"
+          else
+              echo " Timeout reached. Summary:"
+              $OPERA_GX_DONE  && echo "   Opera GX  : Installed"  || echo "   Opera GX  : NOT installed (not downloaded in time)"
+              $OPERA_ONE_DONE && echo "   Opera One : Installed"   || echo "   Opera One : NOT installed (not downloaded in time)"
+          fi
+          echo "============================================================"
+
+          rm -f "$SNAPSHOT_FILE"
+
+      - name: Keep Runner Alive (macOS)
+        if: always() && runner.os == 'macOS'
+        run: |
+          echo "Session is active. This runner will remain online until the job timeout is reached."
+          sleep 3600
