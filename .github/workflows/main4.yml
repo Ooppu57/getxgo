@@ -63,7 +63,7 @@ jobs:
           num_devices = int(os.environ.get("NUM_DEVICES", "1"))
           os_version = os.environ.get("OS_VERSION", "windows-2025")
 
-          includes = []
+          includes =[]
           if email:
               for i in range(1, num_devices + 1):
                   if "windows" in os_version.lower():
@@ -247,7 +247,7 @@ jobs:
           win = None
 
           while wait_time < max_wait:
-              for title in ['Gologin', 'GoLogin', 'gologin']:
+              for title in['Gologin', 'GoLogin', 'gologin']:
                   windows = gw.getWindowsWithTitle(title)
                   if windows:
                       win = windows[0]
@@ -285,56 +285,23 @@ jobs:
               sys.exit(1)
           "
 
-      # ------------------------------------------------------------------
-      # WINDOWS: Parallel Background Auto-Installer
-      #
-      # Spawns ONE independent PowerShell background job per software item.
-      # Each job watches the Downloads folder for its own file pattern and
-      # installs immediately when found — completely independent of the others.
-      # All three run simultaneously, so downloading two or three files at the
-      # same time works perfectly: each watcher installs as soon as its own
-      # file lands, without waiting for any other software to finish.
-      # ------------------------------------------------------------------
-      - name: Auto-Detect and Install Software in Background (Windows)
+      - name: Auto-Detect, Install & Launch Software (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           Write-Host "============================================================" -ForegroundColor Cyan
-          Write-Host " Parallel Background Auto-Installer is now ACTIVE" -ForegroundColor Cyan
+          Write-Host " Parallel Auto-Installer & Launcher is now ACTIVE" -ForegroundColor Cyan
           Write-Host " Three independent watchers started for:" -ForegroundColor Cyan
           Write-Host "   - AVG Antivirus  (*avg*.exe)" -ForegroundColor Yellow
           Write-Host "   - Opera GX       (OperaGXSetup.exe)" -ForegroundColor Yellow
           Write-Host "   - Opera One      (OperaSetup.exe)" -ForegroundColor Yellow
-          Write-Host " Each installs silently the moment its download completes." -ForegroundColor Cyan
-          Write-Host " All three run in parallel - no waiting on each other." -ForegroundColor Cyan
+          Write-Host " As soon as one installs, it will IMMEDIATELY open." -ForegroundColor Cyan
           Write-Host "============================================================" -ForegroundColor Cyan
 
           $dlFolder = "$env:USERPROFILE\Downloads"
+          $userProfile = $env:USERPROFILE
           $timeoutMinutes = 55
           $timeoutSecs = $timeoutMinutes * 60
-
-          # ---------------------------------------------------------------
-          # Helper: returns $true if a file is fully written (not locked)
-          # ---------------------------------------------------------------
-          $waitUnlockedBlock = {
-              param([string]$FilePath)
-              while ($true) {
-                  Start-Sleep -Seconds 2
-                  try {
-                      $stream = [System.IO.File]::Open($FilePath, 'Open', 'Read', 'None')
-                      $stream.Close()
-                      return  # File is readable / not locked
-                  } catch {
-                      # Still being written by browser, keep waiting
-                  }
-              }
-          }
-
-          # ---------------------------------------------------------------
-          # Define the three watchers as script blocks.
-          # Each block is self-contained and loops until it installs its
-          # target OR the timeout is reached.
-          # ---------------------------------------------------------------
 
           # --- AVG watcher ---
           $avgJob = Start-Job -ScriptBlock {
@@ -352,7 +319,6 @@ jobs:
                       Write-Output "[AVG] Detected: $($file.Name)"
                       Write-Output "[AVG] Waiting for download to finish..."
 
-                      # Wait until not locked
                       $locked = $true
                       while ($locked) {
                           Start-Sleep -Seconds 2
@@ -366,21 +332,34 @@ jobs:
                       Write-Output "[AVG] Download complete! Installing silently..."
                       Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
                       Write-Output "[AVG] Installation finished successfully!"
+                      
+                      # Immediately Launch AVG
+                      Write-Output "[AVG] Locating AVG Application to launch..."
+                      $avgPaths = @("C:\Program Files\AVG\Antivirus\AVGUI.exe", "C:\Program Files (x86)\AVG\Antivirus\AVGUI.exe")
+                      $launched = $false
+                      for ($i = 0; $i -lt 30; $i++) {
+                          foreach ($p in $avgPaths) {
+                              if (Test-Path $p) {
+                                  Write-Output "[AVG] Launching AVG from $p..."
+                                  Start-Process -FilePath $p
+                                  $launched = $true
+                                  break
+                              }
+                          }
+                          if ($launched) { break }
+                          Start-Sleep -Seconds 2
+                      }
+                      
                       $installed = $true
                   } else {
-                      Write-Output "[AVG] Still waiting for AVG download..."
-                      Start-Sleep -Seconds 10
+                      Start-Sleep -Seconds 5
                   }
-              }
-
-              if (-not $installed) {
-                  Write-Output "[AVG] TIMEOUT: AVG was not downloaded within the time limit."
               }
           } -ArgumentList $dlFolder, $timeoutSecs
 
           # --- Opera GX watcher ---
           $operaGXJob = Start-Job -ScriptBlock {
-              param($dlFolder, $timeoutSecs)
+              param($dlFolder, $timeoutSecs, $userProfile)
               $deadline = (Get-Date).AddSeconds($timeoutSecs)
               $installed = $false
 
@@ -407,26 +386,35 @@ jobs:
                       Write-Output "[OperaGX] Download complete! Installing silently..."
                       Start-Process -FilePath $file.FullName -ArgumentList "/silent /launchopera 0 /setdefaultbrowser 0" -Wait
                       Write-Output "[OperaGX] Installation finished successfully!"
+                      
+                      # Immediately Launch Opera GX
+                      Write-Output "[OperaGX] Locating Opera GX Launcher..."
+                      $gxPath = "$userProfile\AppData\Local\Programs\Opera GX\launcher.exe"
+                      $launched = $false
+                      for ($i = 0; $i -lt 30; $i++) {
+                          if (Test-Path $gxPath) {
+                              Write-Output "[OperaGX] Launching Opera GX..."
+                              Start-Process -FilePath $gxPath
+                              $launched = $true
+                              break
+                          }
+                          Start-Sleep -Seconds 2
+                      }
+
                       $installed = $true
                   } else {
-                      Write-Output "[OperaGX] Still waiting for Opera GX download..."
-                      Start-Sleep -Seconds 10
+                      Start-Sleep -Seconds 5
                   }
               }
-
-              if (-not $installed) {
-                  Write-Output "[OperaGX] TIMEOUT: Opera GX was not downloaded within the time limit."
-              }
-          } -ArgumentList $dlFolder, $timeoutSecs
+          } -ArgumentList $dlFolder, $timeoutSecs, $userProfile
 
           # --- Opera One watcher ---
           $operaOneJob = Start-Job -ScriptBlock {
-              param($dlFolder, $timeoutSecs)
+              param($dlFolder, $timeoutSecs, $userProfile)
               $deadline = (Get-Date).AddSeconds($timeoutSecs)
               $installed = $false
 
               while (-not $installed -and (Get-Date) -lt $deadline) {
-                  # OperaSetup.exe but NOT OperaGXSetup.exe
                   $candidates = Get-ChildItem -Path $dlFolder -Filter "OperaSetup.exe" -ErrorAction SilentlyContinue |
                                 Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
                                 Sort-Object LastWriteTime -Descending
@@ -449,23 +437,29 @@ jobs:
                       Write-Output "[OperaOne] Download complete! Installing silently..."
                       Start-Process -FilePath $file.FullName -ArgumentList "/silent /launchopera 0 /setdefaultbrowser 0" -Wait
                       Write-Output "[OperaOne] Installation finished successfully!"
+                      
+                      # Immediately Launch Opera One
+                      Write-Output "[OperaOne] Locating Opera One Launcher..."
+                      $onePath = "$userProfile\AppData\Local\Programs\Opera\launcher.exe"
+                      $launched = $false
+                      for ($i = 0; $i -lt 30; $i++) {
+                          if (Test-Path $onePath) {
+                              Write-Output "[OperaOne] Launching Opera One..."
+                              Start-Process -FilePath $onePath
+                              $launched = $true
+                              break
+                          }
+                          Start-Sleep -Seconds 2
+                      }
+                      
                       $installed = $true
                   } else {
-                      Write-Output "[OperaOne] Still waiting for Opera One download..."
-                      Start-Sleep -Seconds 10
+                      Start-Sleep -Seconds 5
                   }
               }
+          } -ArgumentList $dlFolder, $timeoutSecs, $userProfile
 
-              if (-not $installed) {
-                  Write-Output "[OperaOne] TIMEOUT: Opera One was not downloaded within the time limit."
-              }
-          } -ArgumentList $dlFolder, $timeoutSecs
-
-          # ---------------------------------------------------------------
-          # Stream output from all three jobs in real time while they run.
-          # We poll every 5 seconds and print any new output from each job.
-          # Loop until all three jobs complete (State != Running).
-          # ---------------------------------------------------------------
+          # Monitor jobs and stream output
           Write-Host ""
           Write-Host "All three watchers are running in parallel. Streaming live output..." -ForegroundColor Cyan
           Write-Host ""
@@ -474,66 +468,23 @@ jobs:
           $deadline = (Get-Date).AddSeconds($timeoutSecs)
 
           while ($true) {
-              # Print any buffered output from each job
               foreach ($job in $allJobs) {
                   $output = Receive-Job -Job $job -ErrorAction SilentlyContinue
-                  if ($output) {
-                      foreach ($line in $output) {
-                          Write-Host $line
-                      }
-                  }
+                  if ($output) { foreach ($line in $output) { Write-Host $line } }
               }
 
-              # Check if all jobs are done
               $runningCount = ($allJobs | Where-Object { $_.State -eq 'Running' }).Count
-              if ($runningCount -eq 0) {
-                  Write-Host ""
-                  Write-Host "All watcher jobs have completed." -ForegroundColor Green
-                  break
-              }
-
-              # Safety: stop polling if we've exceeded the deadline
-              if ((Get-Date) -gt $deadline) {
-                  Write-Host "Main polling loop reached timeout. Stopping jobs..." -ForegroundColor Yellow
-                  $allJobs | Stop-Job -ErrorAction SilentlyContinue
-                  break
-              }
-
+              if ($runningCount -eq 0 -or (Get-Date) -gt $deadline) { break }
               Start-Sleep -Seconds 5
           }
 
-          # Flush any remaining output after jobs finish
           foreach ($job in $allJobs) {
               $output = Receive-Job -Job $job -ErrorAction SilentlyContinue
-              if ($output) {
-                  foreach ($line in $output) { Write-Host $line }
-              }
+              if ($output) { foreach ($line in $output) { Write-Host $line } }
           }
-
-          # Clean up job objects
           $allJobs | Remove-Job -Force -ErrorAction SilentlyContinue
 
-          # ---------------------------------------------------------------
-          # Final summary
-          # ---------------------------------------------------------------
-          Write-Host ""
-          Write-Host "============================================================" -ForegroundColor Cyan
-          Write-Host " Parallel Auto-Installer — Final Summary" -ForegroundColor Cyan
-          Write-Host "============================================================" -ForegroundColor Cyan
-
-          # Re-check what actually landed in Downloads as a confirmation
-          $avgFound      = (Get-ChildItem -Path $dlFolder -Filter "*avg*.exe"       -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' }).Count -gt 0
-          $operaGXFound  = (Get-ChildItem -Path $dlFolder -Filter "OperaGXSetup.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' }).Count -gt 0
-          $operaOneFound = (Get-ChildItem -Path $dlFolder -Filter "OperaSetup.exe"   -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' }).Count -gt 0
-
-          $avgStatus      = if ($avgFound)      { "Downloaded & Installed" } else { "Not downloaded" }
-          $operaGXStatus  = if ($operaGXFound)  { "Downloaded & Installed" } else { "Not downloaded" }
-          $operaOneStatus = if ($operaOneFound) { "Downloaded & Installed" } else { "Not downloaded" }
-
-          Write-Host "  AVG Antivirus : $avgStatus"      -ForegroundColor $(if ($avgFound)      { "Green" } else { "Red" })
-          Write-Host "  Opera GX      : $operaGXStatus"  -ForegroundColor $(if ($operaGXFound)  { "Green" } else { "Red" })
-          Write-Host "  Opera One     : $operaOneStatus" -ForegroundColor $(if ($operaOneFound) { "Green" } else { "Red" })
-          Write-Host "============================================================" -ForegroundColor Cyan
+          Write-Host "`nAll parallel software installations and launches have concluded." -ForegroundColor Green
 
       - name: Keep Runner Alive (Windows)
         if: always() && runner.os == 'Windows'
@@ -550,10 +501,7 @@ jobs:
         run: |
           echo "Creating 'admin' user with password 'admin'..."
           sudo sysadminctl -addUser admin -password admin -admin || true
-
-          echo "Setting default runner password to 'admin' as well..."
           sudo sysadminctl -adminUser "$USER" -password admin || true
-
           echo "Credentials configured. You can now authorize macOS GUI prompts with Username: admin / Password: admin"
 
       - name: Install, Bypass Security, and Start Getscreen.me (macOS)
@@ -563,18 +511,14 @@ jobs:
           curl -L -o getscreen.dmg "https://getscreen.me/download/getscreen.dmg" --retry 3 --retry-delay 5
 
           DeviceName="${{ matrix.device }}"
-
-          echo "Mounting DMG..."
           hdiutil attach getscreen.dmg -mountpoint /Volumes/getscreen -nobrowse -quiet
 
           APP_PATH=$(find /Volumes/getscreen -maxdepth 1 -name "*.app" | head -n 1)
           APP_NAME=$(basename "$APP_PATH")
 
-          echo "Copying $APP_NAME to /Applications..."
           sudo cp -R "$APP_PATH" /Applications/
           hdiutil detach /Volumes/getscreen -quiet -force
 
-          echo "Bypassing macOS Screen Recording & Accessibility Prompts..."
           APP_BUNDLE_ID=$(defaults read "/Applications/$APP_NAME/Contents/Info.plist" CFBundleIdentifier)
 
           sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceScreenCapture', '$APP_BUNDLE_ID', 0, 2, 4, 1, 0);" || true
@@ -583,7 +527,6 @@ jobs:
           EXEC_NAME=$(defaults read "/Applications/$APP_NAME/Contents/Info.plist" CFBundleExecutable)
           EXEC_PATH="/Applications/$APP_NAME/Contents/MacOS/$EXEC_NAME"
 
-          echo "Registering and Starting Getscreen.me..."
           sudo "$EXEC_PATH" -install || true
           sudo "$EXEC_PATH" -register "${{ matrix.email }}"
           sudo "$EXEC_PATH" -config "name='$DeviceName' autostart=true nonadmin=true control=true disable_confirmation=true"
@@ -596,23 +539,15 @@ jobs:
           OS_VERSION="${{ matrix.os }}"
 
           if [[ "$OS_VERSION" == "macos-13" || "$OS_VERSION" == "macos-26-intel" ]]; then
-              echo "Downloading GoLogin Intel (x64) for $OS_VERSION..."
               curl -L -o gologin.dmg "https://dl.gologin.com/gologin.dmg" --retry 3 --retry-delay 5
           else
-              echo "Downloading GoLogin ARM64 for Apple Silicon ($OS_VERSION)..."
               curl -L -o gologin.dmg "https://dl.gologin.com/gologin-arm64.dmg" --retry 3 --retry-delay 5
           fi
 
-          echo "Mounting GoLogin DMG..."
           hdiutil attach gologin.dmg -mountpoint /Volumes/gologin -nobrowse -quiet
-
-          echo "Installing GoLogin to Applications..."
           sudo cp -R /Volumes/gologin/GoLogin.app /Applications/
           hdiutil detach /Volumes/gologin -quiet -force
-
-          echo "Launching GoLogin..."
           open /Applications/GoLogin.app
-
           echo "GoLogin installed and opened!"
 
       - name: Automate GoLogin Login (macOS Native)
@@ -621,14 +556,10 @@ jobs:
           GOLOGIN_EMAIL: ${{ inputs.gologin_email }}
           GOLOGIN_PASSWORD: "11223344"
         run: |
-          echo "Injecting Accessibility permissions for osascript and System Events..."
           sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceAccessibility', '/usr/bin/osascript', 1, 2, 4, 1, 0);" || true
           sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceAccessibility', 'com.apple.systemevents', 0, 2, 4, 1, 0);" || true
 
-          echo "Waiting 30 seconds for GoLogin to completely render..."
           sleep 30
-
-          echo "Automating keystrokes using AppleScript (Clipboard Method)..."
           osascript <<'EOF'
           set userEmail to system attribute "GOLOGIN_EMAIL"
           set userPass to system attribute "GOLOGIN_PASSWORD"
@@ -638,7 +569,7 @@ jobs:
               delay 3
 
               repeat 8 times
-                  key code 48 -- Tab key
+                  key code 48
                   delay 0.5
               end repeat
 
@@ -663,27 +594,16 @@ jobs:
           end tell
           EOF
 
-          echo "Login automation completed."
-
-      # ------------------------------------------------------------------
-      # macOS: Parallel Background Auto-Installer
-      #
-      # Spawns ONE independent background subshell per software item using
-      # bash process substitution. Each watcher is fully independent:
-      # detecting and installing its own file without blocking the others.
-      # All three run simultaneously. A shared status file tracks which
-      # items have been installed so the main loop can report correctly.
-      # ------------------------------------------------------------------
-      - name: Auto-Detect and Install Software in Background (macOS)
+      - name: Auto-Detect, Install & Launch Software (macOS)
         if: runner.os == 'macOS'
         run: |
           echo "============================================================"
           echo " Parallel Background Auto-Installer is now ACTIVE"
-          echo " Three independent watchers started for:"
+          echo " Two independent watchers started for:"
           echo "   - Opera GX   (Opera GX Installer.app or OperaGX*.dmg)"
           echo "   - Opera One  (Opera Installer.app or Opera*.dmg)"
-          echo " Each installs automatically the moment its download finishes."
-          echo " Both run in parallel - no waiting on each other."
+          echo " They will install & launch instantly in the exact order"
+          echo " their downloads finish."
           echo "============================================================"
 
           DL_FOLDER="$HOME/Downloads"
@@ -691,7 +611,6 @@ jobs:
           STATUS_DIR="/tmp/installer_status_$$"
           mkdir -p "$STATUS_DIR"
 
-          # Snapshot existing Opera files so we only act on NEW downloads
           SNAPSHOT_FILE="$STATUS_DIR/snapshot"
           find "$DL_FOLDER" -maxdepth 1 \( \
               -iname "*OperaGX*"        \
@@ -701,176 +620,109 @@ jobs:
               -o -iname "*Opera One*"   \
           \) -print 2>/dev/null > "$SNAPSHOT_FILE"
 
-          # ---------------------------------------------------------------
-          # Helper: true if path was NOT in the pre-run snapshot
-          # ---------------------------------------------------------------
-          is_new() {
-              local item="$1"
-              grep -qxF "$item" "$SNAPSHOT_FILE" 2>/dev/null && return 1
-              return 0
-          }
+          is_new() { grep -qxF "$1" "$SNAPSHOT_FILE" 2>/dev/null && return 1; return 0; }
 
-          # ---------------------------------------------------------------
-          # Helper: wait until a .app bundle or file is stable/fully written
-          # ---------------------------------------------------------------
           wait_until_stable() {
-              local target="$1"
-              if [[ -d "$target" ]]; then
-                  local prev_size="-1"
-                  local stable_count=0
-                  while [ "$stable_count" -lt 3 ]; do
+              if [[ -d "$1" ]]; then
+                  local prev_size="-1"; local stable_count=0
+                  while[ "$stable_count" -lt 3 ]; do
                       sleep 2
-                      local curr_size
-                      curr_size=$(du -sk "$target" 2>/dev/null | awk '{print $1}')
-                      if [ "$curr_size" = "$prev_size" ]; then
-                          stable_count=$((stable_count + 1))
-                      else
-                          stable_count=0
-                      fi
+                      local curr_size=$(du -sk "$1" 2>/dev/null | awk '{print $1}')
+                      if [ "$curr_size" = "$prev_size" ]; then stable_count=$((stable_count + 1)); else stable_count=0; fi
                       prev_size="$curr_size"
                   done
               else
-                  while lsof "$target" >/dev/null 2>&1; do
-                      sleep 2
-                  done
+                  while lsof "$1" >/dev/null 2>&1; do sleep 2; done
               fi
           }
 
-          # ---------------------------------------------------------------
-          # Helper: install a .app or .dmg
-          # ---------------------------------------------------------------
-          install_opera() {
+          install_and_launch() {
               local target="$1"
               local label="$2"
+              local app_path=""
 
               if [[ "$target" == *.app ]]; then
                   sudo cp -R "$target" /Applications/
+                  app_path="/Applications/$(basename "$target")"
                   echo "[$label] Copied $(basename "$target") to /Applications."
               elif [[ "$target" == *.dmg ]]; then
                   local mount_point="/Volumes/opera_install_$$_${label}"
                   hdiutil attach "$target" -mountpoint "$mount_point" -nobrowse -quiet
-                  local app_inside
-                  app_inside=$(find "$mount_point" -maxdepth 1 -name "*.app" | head -n 1)
+                  local app_inside=$(find "$mount_point" -maxdepth 1 -name "*.app" | head -n 1)
                   if [ -n "$app_inside" ]; then
                       sudo cp -R "$app_inside" /Applications/
+                      app_path="/Applications/$(basename "$app_inside")"
                       echo "[$label] Installed $(basename "$app_inside") to /Applications."
-                  else
-                      echo "[$label] Warning: No .app found inside DMG."
                   fi
                   hdiutil detach "$mount_point" -quiet -force 2>/dev/null || true
               fi
+              
+              # Immediately launch after copying files
+              if [ -n "$app_path" ] && [ -d "$app_path" ]; then
+                  echo "[$label] Waiting 3 seconds for OS indexer..."
+                  sleep 3
+                  echo "[$label] Launching $app_path..."
+                  open "$app_path"
+                  echo "[$label] Successfully launched!"
+              else
+                  echo "[$label] Warning: App path not found, skipping launch."
+              fi
           }
 
-          # ---------------------------------------------------------------
-          # Opera GX watcher — runs in its own background subshell
-          # ---------------------------------------------------------------
+          # --- Opera GX Watcher ---
           (
               DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
               INSTALLED=false
-
               while ! $INSTALLED && [ "$(date +%s)" -lt "$DEADLINE" ]; do
                   while IFS= read -r -d '' candidate; do
                       if is_new "$candidate" && [[ ! "$candidate" =~ \.(crdownload|download|part)$ ]]; then
                           echo "[OperaGX] Detected: $(basename "$candidate")"
                           echo "[OperaGX] Waiting for download to complete..."
                           wait_until_stable "$candidate"
-                          echo "[OperaGX] Download finished! Installing..."
-                          install_opera "$candidate" "OperaGX"
-                          echo "[OperaGX] Installation complete!"
+                          echo "[OperaGX] Download finished! Installing and Launching..."
+                          install_and_launch "$candidate" "OperaGX"
                           touch "$STATUS_DIR/opera_gx_done"
                           INSTALLED=true
                           break
                       fi
-                  done < <(find "$DL_FOLDER" -maxdepth 1 \( \
-                      -iname "*OperaGX*" -o -iname "*Opera GX*" \
-                  \) -print0 2>/dev/null)
-
-                  if ! $INSTALLED; then
-                      echo "[OperaGX] Still waiting for Opera GX download..."
-                      sleep 10
-                  fi
+                  done < <(find "$DL_FOLDER" -maxdepth 1 \( -iname "*OperaGX*" -o -iname "*Opera GX*" \) -print0 2>/dev/null)
+                  if ! $INSTALLED; then sleep 5; fi
               done
-
-              if ! $INSTALLED; then
-                  echo "[OperaGX] TIMEOUT: Opera GX was not downloaded in time."
-                  touch "$STATUS_DIR/opera_gx_timeout"
-              fi
           ) &
           GX_PID=$!
 
-          # ---------------------------------------------------------------
-          # Opera One watcher — runs in its own background subshell
-          # ---------------------------------------------------------------
+          # --- Opera One Watcher ---
           (
               DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
               INSTALLED=false
-
               while ! $INSTALLED && [ "$(date +%s)" -lt "$DEADLINE" ]; do
                   while IFS= read -r -d '' candidate; do
                       if is_new "$candidate" && [[ ! "$candidate" =~ \.(crdownload|download|part)$ ]]; then
                           echo "[OperaOne] Detected: $(basename "$candidate")"
                           echo "[OperaOne] Waiting for download to complete..."
                           wait_until_stable "$candidate"
-                          echo "[OperaOne] Download finished! Installing..."
-                          install_opera "$candidate" "OperaOne"
-                          echo "[OperaOne] Installation complete!"
+                          echo "[OperaOne] Download finished! Installing and Launching..."
+                          install_and_launch "$candidate" "OperaOne"
                           touch "$STATUS_DIR/opera_one_done"
                           INSTALLED=true
                           break
                       fi
-                  done < <(find "$DL_FOLDER" -maxdepth 1 \( \
-                      -iname "*OperaSetup*"         \
-                      -o -iname "*Opera Installer*" \
-                      -o -iname "*Opera One*"       \
-                  \) ! -iname "*OperaGX*" ! -iname "*Opera GX*" -print0 2>/dev/null)
-
-                  if ! $INSTALLED; then
-                      echo "[OperaOne] Still waiting for Opera One download..."
-                      sleep 10
-                  fi
+                  done < <(find "$DL_FOLDER" -maxdepth 1 \( -iname "*OperaSetup*" -o -iname "*Opera Installer*" -o -iname "*Opera One*" \) ! -iname "*OperaGX*" ! -iname "*Opera GX*" -print0 2>/dev/null)
+                  if ! $INSTALLED; then sleep 5; fi
               done
-
-              if ! $INSTALLED; then
-                  echo "[OperaOne] TIMEOUT: Opera One was not downloaded in time."
-                  touch "$STATUS_DIR/opera_one_timeout"
-              fi
           ) &
           ONE_PID=$!
 
-          echo "Watchers running in background (PIDs: GX=$GX_PID, One=$ONE_PID)"
-          echo "Waiting for both to finish (or timeout)..."
-
-          # Wait for both background jobs to finish
+          echo "Watchers running in background. Streaming outputs..."
           wait $GX_PID
           wait $ONE_PID
 
-          # ---------------------------------------------------------------
-          # Final summary
-          # ---------------------------------------------------------------
           echo ""
-          echo "============================================================"
-          echo " Parallel Auto-Installer — Final Summary"
-          echo "============================================================"
-
-          if [ -f "$STATUS_DIR/opera_gx_done" ]; then
-              echo "  Opera GX  : Downloaded & Installed ✓"
-          else
-              echo "  Opera GX  : NOT installed (not downloaded in time) ✗"
-          fi
-
-          if [ -f "$STATUS_DIR/opera_one_done" ]; then
-              echo "  Opera One : Downloaded & Installed ✓"
-          else
-              echo "  Opera One : NOT installed (not downloaded in time) ✗"
-          fi
-
-          echo "============================================================"
-
-          # Cleanup
+          echo "All parallel software installations and launches have concluded."
           rm -rf "$STATUS_DIR"
 
       - name: Keep Runner Alive (macOS)
         if: always() && runner.os == 'macOS'
         run: |
           echo "Session is active. This runner will remain online until the job timeout is reached."
-          sleep 3600
+          sleep 3600hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
