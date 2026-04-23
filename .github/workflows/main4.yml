@@ -85,7 +85,6 @@ jobs:
               
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"matrix={json.dumps({'include': includes})}\n")
-
       - name: Update Workflow Defaults (Remember Inputs)
         shell: python
         env:
@@ -96,34 +95,28 @@ jobs:
         run: |
           import re
           import os
-
           # 👇 FIXED: Updated to match your exact workflow file name 👇
           file_path = ".github/workflows/main4.yml" 
           
           with open(file_path, "r") as f:
               content = f.read()
-
           def update_default(input_name, new_val):
               global content
               pattern = r"(" + input_name + r":[\s\S]*?default:\s*')[^']*(')"
               content = re.sub(pattern, rf"\g<1>{new_val}\g<2>", content, count=1)
-
           update_default("os_version", os.environ.get("OS_VERSION"))
           update_default("getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
           update_default("gologin_email", os.environ.get("GOLOGIN_EMAIL"))
           update_default("num_devices", os.environ.get("NUM_DEVICES"))
-
           with open(file_path, "w") as f:
               f.write(content)
-
       - name: Commit and Push New Defaults
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           # 👇 FIXED: Updated git add target to main4.yml 👇
           git add .github/workflows/main4.yml
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs [skip ci]" && git push)
-
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs[skip ci]" && git push)
   remote_session:
     name: Remote Session ${{ matrix.device }}
     needs: prepare_matrix
@@ -287,13 +280,50 @@ jobs:
               print('❌ Could not find GoLogin window within time limit.')
               sys.exit(1)
           "
-
-      - name: Keep Runner Alive (Windows)
+          
+      - name: Monitor Downloads & Keep Runner Alive (Windows)
         if: always() && runner.os == 'Windows'
         shell: pwsh
         run: |
-          Write-Host "Session is active. This runner will remain online until the job timeout is reached."
-          Start-Sleep -Seconds 3600
+          $Timeout = 3600
+          $StartTime = Get-Date
+          $DlFolder = "$env:USERPROFILE\Downloads"
+          
+          if (-not (Test-Path $DlFolder)) { New-Item -ItemType Directory -Path $DlFolder | Out-Null }
+          
+          $Processed = @()
+          Write-Host "Session is active. The runner will stay online for $Timeout seconds." -ForegroundColor Cyan
+          Write-Host "Monitoring '$DlFolder' for manually downloaded installers (AVG, Opera One, Opera GX)..." -ForegroundColor Cyan
+          
+          while ((Get-Date) -lt $StartTime.AddSeconds($Timeout)) {
+              # Find any .exe file that hasn't been processed yet
+              $NewFiles = Get-ChildItem -Path $DlFolder -Filter "*.exe" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notin $Processed }
+              
+              foreach ($File in $NewFiles) {
+                  Write-Host "`nFound newly downloading file: $($File.Name). Waiting for it to fully complete..." -ForegroundColor Yellow
+                  
+                  # Loop to check if the browser has finished writing to the file
+                  $Locked = $true
+                  while ($Locked -and ((Get-Date) -lt $StartTime.AddSeconds($Timeout))) {
+                      Start-Sleep -Seconds 2
+                      try {
+                          $Stream = [System.IO.File]::Open($File.FullName, 'Open', 'Read', 'None')
+                          $Stream.Close()
+                          $Locked = $false
+                      } catch { 
+                          # File is still downloading/locked
+                      }
+                  }
+                  
+                  if (-not $Locked) {
+                      Write-Host "-> Download finished! Executing $($File.Name) silently..." -ForegroundColor Green
+                      Start-Process -FilePath $File.FullName -ArgumentList "/silent" -Wait
+                      $Processed += $File.FullName
+                      Write-Host "✅ Done! Installation for $($File.Name) has been completed. Continuing to monitor..." -ForegroundColor Green
+                  }
+              }
+              Start-Sleep -Seconds 5
+          }
 
       # ==========================================
       # macOS SPECIFIC STEPS
@@ -428,8 +458,66 @@ jobs:
           
           echo "✅ Login automation completed."
           
-      - name: Keep Runner Alive (macOS)
+      - name: Monitor Downloads & Keep Runner Alive (macOS)
         if: always() && runner.os == 'macOS'
         run: |
-          echo "Session is active. This runner will remain online until the job timeout is reached."
-          sleep 3600
+          timeout=3600
+          end_time=$((SECONDS + timeout))
+          dlFolder="$HOME/Downloads"
+          mkdir -p "$dlFolder"
+          
+          processed_files=()
+          
+          echo "Session is active. The runner will stay online for $timeout seconds."
+          echo "Monitoring '$dlFolder' for manually downloaded installers (Opera One, Opera GX)..."
+          
+          while [ $SECONDS -lt $end_time ]; do
+              # Scan for .app bundles or files with "Opera" in the name
+              while IFS= read -r -d '' item; do
+                  if [[ -z "$item" ]]; then continue; fi
+                  
+                  # Check if we already processed this installer
+                  is_processed=0
+                  for pf in "${processed_files[@]}"; do
+                      if [[ "$pf" == "$item" ]]; then
+                          is_processed=1
+                          break
+                      fi
+                  done
+                  
+                  if [[ $is_processed -eq 0 ]]; then
+                      echo -e "\nNew download detected: $(basename "$item"). Waiting for completion..."
+                      
+                      # Wait based on filetype (Apps use Size Stability check, .dmg/pkg use lsof Check)
+                      if [[ "$item" == *.app ]]; then
+                          prev_size="-1"
+                          stable_count=0
+                          while[ "$stable_count" -lt 3 ]; do
+                              sleep 2
+                              curr_size=$(du -sk "$item" 2>/dev/null | awk '{print $1}')
+                              if[ "$curr_size" == "$prev_size" ]; then
+                                  stable_count=$((stable_count + 1))
+                              else
+                                  stable_count=0
+                              fi
+                              prev_size="$curr_size"
+                          done
+                      else
+                          locked=true
+                          while $locked; do
+                              sleep 2
+                              if ! lsof "$item" >/dev/null 2>&1; then
+                                  locked=false
+                              fi
+                          done
+                      fi
+                      
+                      echo "-> Download finished! Opening $(basename "$item")..."
+                      open "$item"
+                      processed_files+=("$item")
+                      echo "✅ Done! Execution triggered for $(basename "$item"). Continuing to monitor..."
+                  fi
+              done < <(find "$dlFolder" -maxdepth 1 \( -iname "*Opera*.app" -o \( -type f -iname "*Opera*" ! -iname "*.download" ! -iname "*.crdownload" ! -iname "*.part" \) \) -print0 2>/dev/null)
+              
+              sleep 5
+          done
