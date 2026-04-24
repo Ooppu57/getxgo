@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '2'
+        default: '1'
       avg_link:
         description: 'Select AVG Link'
         required: true
@@ -42,7 +42,7 @@ on:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
         type: string
-        default: 'c6c0df7f-47c8-47c3-bfc3-6adfda3c963b'
+        default: 'aa45bf56-82fa-4af5-9c92-33d8910d9607'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
