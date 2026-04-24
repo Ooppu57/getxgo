@@ -11,7 +11,7 @@ on:
           - 'windows-2025'
           - 'windows-2022'
           - 'windows-11-arm'
-        default: 'windows-2022'
+        default: 'windows-2025'
       getscreen_email:
         description: 'Getscreen.me Account Email'
         required: true
@@ -42,7 +42,7 @@ on:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
         type: string
-        default: '6e31b280-885d-4b63-a952-c8f57329404e'
+        default: ''
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -59,7 +59,7 @@ on:
         description: 'Enable Unique Sticky Sessions per Device'
         required: true
         type: boolean
-        default: false
+        default: true
 
 jobs:
   prepare_matrix:
@@ -237,7 +237,8 @@ jobs:
           if ($env:PROXY_PASS -ne "") {
               Write-Host "Starting UIA Proxy Auth handler for ScrapeOps..." -ForegroundColor Cyan
               $b64Proxy = "aW1wb3J0IHRpbWUsIHN5cwpmcm9tIHB5d2luYXV0byBpbXBvcnQgRGVza3RvcApkZWYgaGFuZGxlX3Byb3h5X2F1dGgodXNlcm5hbWUsIHBhc3N3b3JkLCB0aW1lb3V0PTkwKToKICAgIGRlc2t0b3AgPSBEZXNrdG9wKGJhY2tlbmQ9InVpYSIpCiAgICBzdGFydF90aW1lID0gdGltZS50aW1lKCkKICAgIHdoaWxlIHRpbWUudGltZSgpIC0gc3RhcnRfdGltZSA8IHRpbWVvdXQ6CiAgICAgICAgdHJ5OgogICAgICAgICAgICBmb3Igd2luZG93IGluIGRlc2t0b3Aud2luZG93cyh2aXNpYmxlX29ubHk9VHJ1ZSk6CiAgICAgICAgICAgICAgICB1c2VyX2ZpZWxkcyA9IHdpbmRvdy5kZXNjZW5kYW50cyhjb250cm9sX3R5cGU9IkVkaXQiLCB0aXRsZT0iVXNlcm5hbWUiKQogICAgICAgICAgICAgICAgcGFzc19maWVsZHMgPSB3aW5kb3cuZGVzY2VuZGFudHMoY29udHJvbF90eXBlPSJFZGl0IiwgdGl0bGU9IlBhc3N3b3JkIikKICAgICAgICAgICAgICAgIGlmIHVzZXJfZmllbGRzIGFuZCBwYXNzX2ZpZWxkczoKICAgICAgICAgICAgICAgICAgICB3aW5kb3cuc2V0X2ZvY3VzKCkKICAgICAgICAgICAgICAgICAgICB0aW1lLnNsZWVwKDAuNSkKICAgICAgICAgICAgICAgICAgICB1c2VyX2ZpZWxkc1swXS5jbGlja19pbnB1dCgpCiAgICAgICAgICAgICAgICAgICAgdXNlcl9maWVsZHNbMF0udHlwZV9rZXlzKHVzZXJuYW1lLCB3aXRoX3NwYWNlcz1UcnVlLCBwYXVzZT0wLjAyKQogICAgICAgICAgICAgICAgICAgIHBhc3NfZmllbGRzWzBdLmNsaWNrX2lucHV0KCkKICAgICAgICAgICAgICAgICAgICBwYXNzX2ZpZWxkc1swXS50eXBlX2tleXMocGFzc3dvcmQsIHdpdGhfc3BhY2VzPVRydWUsIHBhdXNlPTAuMDIpCiAgICAgICAgICAgICAgICAgICAgYnRuID0gd2luZG93LmRlc2NlbmRhbnRzKGNvbnRyb2xfdHlwZT0iQnV0dG9uIiwgdGl0bGU9IlNpZ24gaW4iKQogICAgICAgICAgICAgICAgICAgIGlmIGJ0bjoKICAgICAgICAgICAgICAgICAgICAgICAgYnRuWzBdLmNsaWNrX2lucHV0KCkKICAgICAgICAgICAgICAgICAgICBlbHNlOgogICAgICAgICAgICAgICAgICAgICAgICBwYXNzX2ZpZWxkc1swXS50eXBlX2tleXMoIntFTlRFUn0iKQogICAgICAgICAgICAgICAgICAgIHJldHVybiBUcnVlCiAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbjoKICAgICAgICAgICAgcGFzcwogICAgICAgIHRpbWUuc2xlZXAoMSkKICAgIHJldHVybiBGYWxzZQppZiBfX25hbWVfXyA9PSAiX19tYWluX18iOgogICAgaGFuZGxlX3Byb3h5X2F1dGgoc3lzLmFyZ3ZbMV0sIHN5cy5hcmd2WzJdKQ=="
-              [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64Proxy)) | Out-File -FilePath "$env:TEMP\proxy_ui.py" -Encoding utf8
+              $proxyPyCode =[System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64Proxy))
+              $proxyPyCode | Out-File -FilePath "$env:TEMP\proxy_ui.py" -Encoding utf8
               Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\proxy_ui.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`"" -WindowStyle Hidden
           }
 
@@ -263,7 +264,9 @@ jobs:
                       Start-Process -FilePath $file.FullName
 
                       Write-Output "[AVG] Sending automated UI keys..."
-                      $b64Avg = "aW1wb3J0IHB5YXV0b2d1aSwgcHlnZXR3aW5kb3cgYXMgZ3csIHRpbWUKZm9yIF8gaW4gcmFuZ2UoNjApOgogICAgd2lucyA9IFt3IGZvciB3IGluIGd3LmdldEFsbFdpbmRvd3MoKSBpZiAnQVZHJyBpbiB3LnRpdGxlIG9yICdBbnRpdmlydXMnIGluIHcudGl0bGVdCiAgICBpZiB3aW5zOgogICAgICAgIHRyeToKICAgICAgICAgICAgd2luc1swXS5hY3RpdmF0ZSgpCiAgICAgICAgICAgIHRpbWUuc2xlZXAoNSkKICAgICAgICAgICAgcHlhdXRvZ3VpLnByZXNzKCdlbnRlcicpCiAgICAgICAgICAgIHRpbWUuc2xlZXAoMSkKICAgICAgICAgICAgcHlhdXRvZ3VpLnByZXNzKCdzcGFjZScpCiAgICAgICAgICAgIHByaW50KCdbQVZHLVVJXSBLZXlzIHNlbnQgdG8gaW5zdGFsbGVyLicpCiAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbiBhcyBlOgogICAgICAgICAgICBwcmludChmJ1tBVkctVUldIEVycjoge2V9JykKICAgICAgICBicmVhawogICAgdGltZS5zbGVlcCgyKQ=="[System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64Avg)) | Out-File -FilePath "$env:TEMP\avg_ui.py" -Encoding utf8
+                      $b64Avg = "aW1wb3J0IHB5YXV0b2d1aSwgcHlnZXR3aW5kb3cgYXMgZ3csIHRpbWUKZm9yIF8gaW4gcmFuZ2UoNjApOgogICAgd2lucyA9IFt3IGZvciB3IGluIGd3LmdldEFsbFdpbmRvd3MoKSBpZiAnQVZHJyBpbiB3LnRpdGxlIG9yICdBbnRpdmlydXMnIGluIHcudGl0bGVdCiAgICBpZiB3aW5zOgogICAgICAgIHRyeToKICAgICAgICAgICAgd2luc1swXS5hY3RpdmF0ZSgpCiAgICAgICAgICAgIHRpbWUuc2xlZXAoNSkKICAgICAgICAgICAgcHlhdXRvZ3VpLnByZXNzKCdlbnRlcicpCiAgICAgICAgICAgIHRpbWUuc2xlZXAoMSkKICAgICAgICAgICAgcHlhdXRvZ3VpLnByZXNzKCdzcGFjZScpCiAgICAgICAgICAgIHByaW50KCdbQVZHLVVJXSBLZXlzIHNlbnQgdG8gaW5zdGFsbGVyLicpCiAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbiBhcyBlOgogICAgICAgICAgICBwcmludChmJ1tBVkctVUldIEVycjoge2V9JykKICAgICAgICBicmVhawogICAgdGltZS5zbGVlcCgyKQ=="
+                      $avgPyCode = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64Avg))
+                      $avgPyCode | Out-File -FilePath "$env:TEMP\avg_ui.py" -Encoding utf8
                       python -u "$env:TEMP\avg_ui.py"
                       
                       Write-Output "[AVG] Waiting for final application deployment..."
