@@ -338,7 +338,6 @@ jobs:
               ctrl_j_attempts = 0
               keep_clicked = False
               opera_download_clicked = False
-              opera_next_clicks = 0
               opera_launched_time = None
               opera_setup_completed = False
 
@@ -347,17 +346,20 @@ jobs:
                       edge_window = None
                       opera_window = None
 
+                      # Map windows robustly
                       for window in desktop.windows(visible_only=True):
                           wt = window.window_text()
+                          if not wt:
+                              continue
 
-                          # Detect Edge browser window
-                          if "Edge" in wt or "Browser" in wt or "sudetyj" in wt or "Fast and secure" in wt or "Thanks for downloading" in wt or "Get Ready" in wt or "Chrome Web Store" in wt:
-                              if not ("Welcome to Opera" in wt or "Speed Dial" in wt or "Start Page" in wt or "Opera One" in wt):
-                                  edge_window = window
+                          # Detect Edge browser window or extensions store
+                          if "Microsoft Edge" in wt or "sudetyj" in wt or "Chrome Web Store" in wt or "Edge" in wt:
+                              edge_window = window
 
-                          # Detect launched Opera/Opera GX window (after install)
-                          if "Opera GX" in wt or "Welcome to Opera" in wt or "Speed Dial" in wt or "Start Page" in wt or "Opera One" in wt or "Opera" == wt.strip():
-                              opera_window = window
+                          # Detect launched Opera/Opera GX window reliably (Exclude Edge titles!)
+                          if "Opera" in wt or "Speed Dial" in wt or "Start Page" in wt or "Welcome" in wt:
+                              if "Microsoft Edge" not in wt and "Edge" not in wt and "Chrome Web Store" not in wt:
+                                  opera_window = window
 
                       # --------------------------------------------------
                       # A. Proxy Authentication dialog
@@ -402,7 +404,7 @@ jobs:
                       # --------------------------------------------------
                       # C. Opera landing page: click "Download Opera"
                       # --------------------------------------------------
-                      if edge_window and software_type in["opera_gx", "opera_one", "ad_mvn"] and not opera_download_clicked:
+                      if edge_window and software_type in ["opera_gx", "opera_one", "ad_mvn"] and not opera_download_clicked:
                           for btn_title in ["Download Opera", "Download Opera GX", "Download now", "Download"]:
                               dl_btns = edge_window.descendants(control_type="Button", title=btn_title)
                               if dl_btns:
@@ -434,7 +436,7 @@ jobs:
                                   pass
                           else:
                               # 2. Check for 'Add to Chrome' or 'Get' on the Web Store page
-                              for btn_name in["Add to Chrome", "Get"]:
+                              for btn_name in ["Add to Chrome", "Get"]:
                                   install_btns = edge_window.descendants(control_type="Button", title=btn_name)
                                   if install_btns:
                                       try:
@@ -462,91 +464,85 @@ jobs:
                               pass
 
                       # --------------------------------------------------
-                      # F. Opera Post-install Welcome Setup Flow
+                      # F. Opera Post-install Keyboard Automation Flow
                       # --------------------------------------------------
-                      if software_type in["opera_gx", "opera_one", "ad_mvn"] and opera_window and not opera_setup_completed:
+                      if software_type in ["opera_gx", "opera_one", "ad_mvn"] and opera_window and not opera_setup_completed:
                           wt = opera_window.window_text()
-                          is_gx = "Opera GX" in wt
                           
+                          # Robust logic to decide which exact software launched
+                          if software_type == "ad_mvn":
+                              is_gx_flow = "GX" in wt.upper()
+                          else:
+                              is_gx_flow = (software_type == "opera_gx")
+
                           if not opera_launched_time:
                               opera_launched_time = time.time()
-                              print(f"[{software_type}] Opera Window Detected ('{wt}'). Waiting 15s for full rendering...")
+                              print(f"[{software_type}] Opera Window Detected: '{wt}'. Waiting 15s for full rendering...")
                               try:
+                                  opera_window.set_focus()
                                   opera_window.maximize()
                               except Exception:
                                   pass
                           
                           if time.time() - opera_launched_time > 15:
-                              opera_window.set_focus()
-                              time.sleep(0.5)
+                              try:
+                                  opera_window.set_focus()
+                              except Exception:
+                                  pass
+                              time.sleep(1)
 
-                              if is_gx:
-                                  # --- OPERA GX Logic: Click Next/Continue 10 times ---
-                                  if opera_next_clicks < 10:
-                                      clicked = False
-                                      
-                                      # 1. Search for clickable UI buttons
-                                      for elem in opera_window.descendants(control_type="Button"):
-                                          try:
-                                              text = elem.window_text()
-                                              if text and ("NEXT" in text.upper() or "ACCEPT" in text.upper() or "CONTINUE" in text.upper()):
-                                                  elem.click_input()
-                                                  clicked = True
-                                                  print(f"[Opera GX] Clicked {text} via UIA")
-                                                  break
-                                          except Exception:
-                                              pass
-                                      
-                                      # 2. Fallback: Coordinate click (X: 88%, Y: 65%)
-                                      if not clicked:
-                                          try:
-                                              rect = opera_window.rectangle()
-                                              w, h = rect.width(), rect.height()
-                                              target_x = rect.left + int(w * 0.88)
-                                              target_y = rect.top + int(h * 0.65)
-                                              pyautogui.click(x=target_x, y=target_y)
-                                              print(f"[Opera GX] Clicked NEXT via relative coordinates ({target_x}, {target_y})")
-                                          except Exception as e:
-                                              print(f"[Opera GX] Error in coordinate click: {e}")
-                                      
-                                      opera_next_clicks += 1
-                                      # Enforced 1 to 2 seconds delay as requested
-                                      delay = random.uniform(1.0, 2.0)
-                                      print(f"[Opera GX] Next Click Count: ({opera_next_clicks}/10) - Waiting {delay:.2f}s")
-                                      time.sleep(delay)
-                                  else:
+                              if is_gx_flow:
+                                  # --- OPERA GX Logic: Tab & Enter Sequence ---
+                                  print("[Opera GX] Starting TAB/ENTER automation flow...")
+                                  try:
+                                      # Tab 4 times
+                                      for _ in range(4):
+                                          send_keys('{TAB}')
+                                          time.sleep(0.5)
+                                      print("[Opera GX] Pressed TAB 4 times.")
+
+                                      # Enter 8 times with 1-2s delay
+                                      for i in range(8):
+                                          send_keys('{ENTER}')
+                                          delay = random.uniform(1.0, 2.0)
+                                          print(f"[Opera GX] Pressed ENTER ({i+1}/8), waiting {delay:.2f}s")
+                                          time.sleep(delay)
+
+                                      # Tab random 4 to 10 times
+                                      random_tabs = random.randint(4, 10)
+                                      for _ in range(random_tabs):
+                                          send_keys('{TAB}')
+                                          time.sleep(0.3)
+                                      print(f"[Opera GX] Pressed TAB {random_tabs} times.")
+
+                                      # Enter once to complete
+                                      send_keys('{ENTER}')
+                                      print("[Opera GX] Pressed final ENTER.")
+
                                       opera_setup_completed = True
+                                      print("[Opera GX] Setup automation successfully completed.")
+                                  except Exception as e:
+                                      print(f"[Opera GX] Error in TAB/ENTER flow: {e}")
                               
                               else:
-                                  # --- OPERA ONE Logic: Right Arrow Keys + Get Started ---
-                                  if opera_next_clicks < 10:
-                                      try:
+                                  # --- OPERA ONE Logic: Right Arrow Sequence ---
+                                  print("[Opera One] Starting RIGHT ARROW automation flow...")
+                                  try:
+                                      # Right Arrow 10 times with 1-2s delay
+                                      for i in range(10):
                                           send_keys('{RIGHT}')
-                                          opera_next_clicks += 1
-                                          print(f"[Opera One] Sent RIGHT arrow ({opera_next_clicks}/10)")
                                           delay = random.uniform(1.0, 2.0)
+                                          print(f"[Opera One] Sent RIGHT arrow ({i+1}/10), waiting {delay:.2f}s")
                                           time.sleep(delay)
-                                      except Exception as e:
-                                          print(f"[Opera One] Error sending keys: {e}")
-                                  else:
-                                      clicked_get_started = False
-                                      for elem in opera_window.descendants():
-                                          try:
-                                              text = elem.window_text()
-                                              if text and "GET STARTED" in text.upper():
-                                                  elem.click_input()
-                                                  print("[Opera One] Clicked 'Get started' successfully.")
-                                                  clicked_get_started = True
-                                                  opera_setup_completed = True
-                                                  break
-                                          except Exception:
-                                              pass
                                       
-                                      if not clicked_get_started:
-                                          print("[Opera One] 'Get started' not found via UIA, falling back to Enter")
-                                          send_keys('{ENTER}')
-                                          opera_setup_completed = True
-                                          time.sleep(2)
+                                      # Complete with Enter
+                                      send_keys('{ENTER}')
+                                      print("[Opera One] Pressed ENTER.")
+
+                                      opera_setup_completed = True
+                                      print("[Opera One] Setup automation successfully completed.")
+                                  except Exception as e:
+                                      print(f"[Opera One] Error in RIGHT ARROW flow: {e}")
 
                   except Exception as e:
                       pass
@@ -607,7 +603,7 @@ jobs:
                       while ($locked) {
                           Start-Sleep -Seconds 2
                           try {
-                              $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
+                              $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
                               $s.Close()
                               $locked = $false
                           } catch { }
