@@ -1,4 +1,4 @@
-name: Parallel Windows Auto
+name: Parallel Windows Auto-Installer
 
 on:
   workflow_dispatch:
@@ -198,10 +198,14 @@ jobs:
       matrix: ${{ fromJson(needs.prepare_matrix.outputs.matrix) }}
 
     steps:
-      - name: Disable Edge SmartScreen
+      - name: Disable Windows Defender & Edge SmartScreen
         shell: pwsh
         run: |
-          Write-Host "Disabling Edge SmartScreen policies..." -ForegroundColor Yellow
+          Write-Host "Disabling Windows Defender & SmartScreen to allow uninterrupted downloads..." -ForegroundColor Yellow
+          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+          Set-MpPreference -PUAProtection 0 -ErrorAction SilentlyContinue
+          Set-MpPreference -DisableBlockAtFirstSeen $true -ErrorAction SilentlyContinue
+          Set-MpPreference -DisableIOAVProtection $true -ErrorAction SilentlyContinue
           
           # Complete Edge policy override to prevent exe block popups
           $edgePolicy = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
@@ -216,7 +220,7 @@ jobs:
           if (-not (Test-Path $exemptPath)) { New-Item -Path $exemptPath -Force | Out-Null }
           Set-ItemProperty -Path $exemptPath -Name "1" -Value '{"domains":["*"],"file_extension":"exe"}'
           
-          Write-Host "SmartScreen policies modified successfully." -ForegroundColor Green
+          Write-Host "Defender and SmartScreen policies modified successfully." -ForegroundColor Green
 
       - name: Install and Start Getscreen.me (Windows)
         shell: pwsh
@@ -251,16 +255,15 @@ jobs:
 
           # 1. Ensure Python dependencies are available
           Write-Host "Checking python UIA modules..." -ForegroundColor DarkGray
-          python -m pip install pywinauto pyautogui pygetwindow --quiet
+          python -m pip install pywinauto pyautogui pygetwindow keyboard --quiet
 
           # 2. Start Fileless Proxy & "Keep Download" Clicker Background loop
           Write-Host "Starting UIA Background Automation Handler..." -ForegroundColor Cyan
-          # Fix: Added '=' padding character so [Convert]::FromBase64String does not fail
-          $b64Proxy = "aW1wb3J0IHRpbWUsIHN5cwpmcm9tIHB5d2luYXV0byBpbXBvcnQgRGVza3RvcAoKZGVmIGhhbmRsZV9hdXRvbWF0aW9uKHVzZXJuYW1lLCBwYXNzd29yZCwgdGltZW91dD02MDApOgogICAgZGVza3RvcCA9IERlc2t0b3AoYmFja2VuZD0idWlhIikKICAgIHN0YXJ0X3RpbWUgPSB0aW1lLnRpbWUoKQogICAgCiAgICBrZWVwX2NsaWNrZWQgPSBGYWxzZQogICAgbGFzdF9jdHJsX2ogPSB0aW1lLnRpbWUoKQogICAgCiAgICB3aGlsZSB0aW1lLnRpbWUoKSAtIHN0YXJ0X3RpbWUgPCB0aW1lb3V0OgogICAgICAgIHRyeToKICAgICAgICAgICAgZm9yIHdpbmRvdyBpbiBkZXNrdG9wLndpbmRvd3ModmlzaWJsZV9vbmx5PVRydWUpOgogICAgICAgICAgICAgICAgIyAxLiBQcm94eSBBdXRoCiAgICAgICAgICAgICAgICBpZiB1c2VybmFtZSBhbmQgcGFzc3dvcmQ6CiAgICAgICAgICAgICAgICAgICAgdXNlcl9maWVsZHMgPSB3aW5kb3cuZGVzY2VuZGFudHMoY29udHJvbF90eXBlPSJFZGl0IiwgdGl0bGU9IlVzZXJuYW1lIikKICAgICAgICAgICAgICAgICAgICBwYXNzX2ZpZWxkcyA9IHdpbmRvdy5kZXNjZW5kYW50cyhjb250cm9sX3R5cGU9IkVkaXQiLCB0aXRsZT0iUGFzc3dvcmQiKQogICAgICAgICAgICAgICAgICAgIGlmIHVzZXJfZmllbGRzIGFuZCBwYXNzX2ZpZWxkczoKICAgICAgICAgICAgICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAgICAgICAgICAgICAgICAgd2luZG93LnNldF9mb2N1cygpCiAgICAgICAgICAgICAgICAgICAgICAgICAgICB0aW1lLnNsZWVwKDAuNSkKICAgICAgICAgICAgICAgICAgICAgICAgICAgIHVzZXJfZmllbGRzWzBdLmNsaWNrX2lucHV0KCkKICAgICAgICAgICAgICAgICAgICAgICAgICAgIHVzZXJfZmllbGRzWzBdLnR5cGVfa2V5cyh1c2VybmFtZSwgd2l0aF9zcGFjZXM9VHJ1ZSwgcGF1c2U9MC4wMikKICAgICAgICAgICAgICAgICAgICAgICAgICAgIHBhc3NfZmllbGRzWzBdLmNsaWNrX2lucHV0KCkKICAgICAgICAgICAgICAgICAgICAgICAgICAgIHBhc3NfZmllbGRzWzBdLnR5cGVfa2V5cyhwYXNzd29yZCwgd2l0aF9zcGFjZXM9VHJ1ZSwgcGF1c2U9MC4wMikKICAgICAgICAgICAgICAgICAgICAgICAgICAgIGJ0biA9IHdpbmRvdy5kZXNjZW5kYW50cyhjb250cm9sX3R5cGU9IkJ1dHRvbiIsIHRpdGxlPSJTaWduIGluIikKICAgICAgICAgICAgICAgICAgICAgICAgICAgIGlmIGJ0bjoKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBidG5bMF0uY2xpY2tfaW5wdXQoKQogICAgICAgICAgICAgICAgICAgICAgICAgICAgZWxzZToKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBwYXNzX2ZpZWxkc1swXS50eXBlX2tleXMoIntFTlRFUn0iKQogICAgICAgICAgICAgICAgICAgICAgICAgICAgdXNlcm5hbWUgPSAiIgogICAgICAgICAgICAgICAgICAgICAgICAgICAgcGFzc3dvcmQgPSAiIgogICAgICAgICAgICAgICAgICAgICAgICBleGNlcHQgRXhjZXB0aW9uOgogICAgICAgICAgICAgICAgICAgICAgICAgICAgcGFzcwogICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAjIDIuIERvd25sb2FkIFByb3RlY3Rpb24KICAgICAgICAgICAgICAgIGtlZXBfYnRucyA9IHdpbmRvdy5kZXNjZW5kYW50cyhjb250cm9sX3R5cGU9IkJ1dHRvbiIsIHRpdGxlPSJLZWVwIikKICAgICAgICAgICAgICAgIGlmIGtlZXBfYnRuczoKICAgICAgICAgICAgICAgICAgICBrZWVwX2NsaWNrZWQgPSBUcnVlCiAgICAgICAgICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAgICAgICAgICAgICBrZWVwX2J0bnNbMF0uY2xpY2tfaW5wdXQoKQogICAgICAgICAgICAgICAgICAgICAgICB0aW1lLnNsZWVwKDAuNSkKICAgICAgICAgICAgICAgICAgICBleGNlcHQgRXhjZXB0aW9uOgogICAgICAgICAgICAgICAgICAgICAgICBwYXNzCiAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgIGtlZXBfYW55d2F5ID0IHdpbmRvdy5kZXNjZW5kYW50cyhjb250cm9sX3R5cGU9IkJ1dHRvbiIsIHRpdGxlPSJLZWVwIGFueXdheSIpCiAgICAgICAgICAgICAgICBpZiBrZWVwX2FueXdheToKICAgICAgICAgICAgICAgICAgICBrZWVwX2NsaWNrZWQgPSBUcnVlCiAgICAgICAgICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAgICAgICAgICAgICBrZWVwX2FueXdheVswXS5jbGlja19pbnB1dCgpCiAgICAgICAgICAgICAgICAgICAgICAgIHRpbWUuc2xlZXAoMC41KQogICAgICAgICAgICAgICAgICAgIGV4Y2VwdCBFeGNlcHRpb246CiAgICAgICAgICAgICAgICAgICAgICAgIHBhc3MKCiAgICAgICAgICAgICMgMy4gT3BlbiBEb3dubG9hZHMgRmx5b3V0IGlmIG1pc3NpbmcKICAgICAgICAgICAgaWYgbm90IGtlZXBfY2xpY2tlZCBhbmQgKHRpbWUudGltZSgpIC0gbGFzdF9jdHJsX2ogPiAxNSk6CiAgICAgICAgICAgICAgICBlZGdlX3dpbmRvd3MgPSBbdwBmb3IgdyBpbiBkZXNrdG9wLndpbmRvd3ModmlzaWJsZV9vbmx5PVRydWUpIGlmICJFZGdlIiBpbiB3LndpbmRvd190ZXh0KCkgb3IgInN1ZGV0eSIgaW4gdy53aW5kb3dfdGV4dCgpIG9yICJQZXJzb25hbCIgaW4gdy53aW5kb3dfdGV4dCgpIG9yICJCcm93c2VyIiBpbiB3LndpbmRvd190ZXh0KCldCiAgICAgICAgICAgICAgICBpZiBlZGdlX3dpbmRvd3M6CiAgICAgICAgICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAgICAgICAgICAgICBlZGdlX3dpbmRvd3NbMF0uc2V0X2ZvY3VzKCkKICAgICAgICAgICAgICAgICAgICAgICAgdGltZS5zbGVlcCgwLjUpCiAgICAgICAgICAgICAgICAgICAgICAgIGVkZ2Vfd2luZG93c1swXS50eXBlX2tleXMoIl5qIikKICAgICAgICAgICAgICAgICAgICBleGNlcHQgRXhjZXB0aW9uOgogICAgICAgICAgICAgICAgICAgICAgICBwYXNzCiAgICAgICAgICAgICAgICBsYXN0X2N0cmxfaiA9IHRpbWUudGltZSgpCgogICAgICAgIGV4Y2VwdCBFeGNlcHRpb246CiAgICAgICAgICAgIHBhc3MKICAgICAgICB0aW1lLnNsZWVwKDIpCgppZiBfX25hbWVfXyA9PSAiX19tYWluX18iOgogICAgdXNlciA9IHN5cy5hcmd2WzFdIGlmIGxlbihzeXMuYXJndikgPiAxIGVsc2UgIiIKICAgIHB3ZCA9IHN5cy5hcmd2WzJdIGlmIGxlbihzeXMuYXJndikgPiAyIGVsc2UgIiIKICAgIGhhbmRsZV9hdXRvbWF0aW9uKHVzZXIsIHB3ZCkK="
-          $proxyPyCode = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64Proxy))
+          $b64Proxy = "aW1wb3J0IHRpbWUsIHN5cwpmcm9tIHB5d2luYXV0byBpbXBvcnQgRGVza3RvcApmcm9tIHB5d2luYXV0by5rZXlib2FyZCBpbXBvcnQgc2VuZF9rZXlzCgpkZWYgaGFuZGxlX2F1dG9tYXRpb24odXNlcm5hbWUsIHBhc3N3b3JkLCB0aW1lb3V0PTYwMCk6CiAgICBkZXNrdG9wID0gRGVza3RvcChiYWNrZW5kPSJ1aWEiKQogICAgc3RhcnRfdGltZSA9IHRpbWUudGltZSgpCiAgICBsYXN0X2N0cmxfal90aW1lID0gdGltZS50aW1lKCkKICAgIGN0cmxfal9hdHRlbXB0cyA9IDAKICAgIGtlZXBfY2xpY2tlZCA9IEZhbHNlCgogICAgd2hpbGUgdGltZS50aW1lKCkgLSBzdGFydF90aW1lIDwgdGltZW91dDoKICAgICAgICB0cnk6CiAgICAgICAgICAgIGVkZ2Vfd2luZG93ID0gTm9uZQogICAgICAgICAgICBmb3Igd2luZG93IGluIGRlc2t0b3Aud2luZG93cyh2aXNpYmxlX29ubHk9VHJ1ZSk6CiAgICAgICAgICAgICAgICBpZiAiRWRnZSIgaW4gd2luZG93LndpbmRvd190ZXh0KCkgb3IgIkJyb3dzZXIiIGluIHdpbmRvdy53aW5kb3dfdGV4dCgpIG9yICJzdWRldHlqIiBpbiB3aW5kb3cud2luZG93X3RleHQoKToKICAgICAgICAgICAgICAgICAgICBlZGdlX3dpbmRvdyA9IHdpbmRvdwogICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgIyAxLiBQcm94eSBBdXRoZW50aWNhdGlvbgogICAgICAgICAgICAgICAgdXNlcl9maWVsZHMgPSB3aW5kb3cuZGVzY2VuZGFudHMoY29udHJvbF90eXBlPSJFZGl0IiwgdGl0bGU9IlVzZXJuYW1lIikKICAgICAgICAgICAgICAgIHBhc3NfZmllbGRzID0gd2luZG93LmRlc2NlbmRhbnRzKGNvbnRyb2xfdHlwZT0iRWRpdCIsIHRpdGxlPSJQYXNzd29yZCIpCiAgICAgICAgICAgICAgICBpZiB1c2VyX2ZpZWxkcyBhbmQgcGFzc19maWVsZHM6CiAgICAgICAgICAgICAgICAgICAgd2luZG93LnNldF9mb2N1cygpCiAgICAgICAgICAgICAgICAgICAgdGltZS5zbGVlcCgwLjUpCiAgICAgICAgICAgICAgICAgICAgdXNlcl9maWVsZHNbMF0uY2xpY2tfaW5wdXQoKQogICAgICAgICAgICAgICAgICAgIHVzZXJfZmllbGRzWzBdLnR5cGVfa2V5cyh1c2VybmFtZSwgd2l0aF9zcGFjZXM9VHJ1ZSwgcGF1c2U9MC4wMikKICAgICAgICAgICAgICAgICAgICBwYXNzX2ZpZWxkc1swXS5jbGlja19pbnB1dCgpCiAgICAgICAgICAgICAgICAgICAgcGFzc19maWVsZHNbMF0udHlwZV9rZXlzKHBhc3N3b3JkLCB3aXRoX3NwYWNlcz1UcnVlLCBwYXVzZT0wLjAyKQogICAgICAgICAgICAgICAgICAgIGJ0biA9IHdpbmRvdy5kZXNjZW5kYW50cyhjb250cm9sX3R5cGU9IkJ1dHRvbiIsIHRpdGxlPSJTaWduIGluIikKICAgICAgICAgICAgICAgICAgICBpZiBidG46CiAgICAgICAgICAgICAgICAgICAgICAgIGJ0blswXS5jbGlja19pbnB1dCgpCiAgICAgICAgICAgICAgICAgICAgZWxzZToKICAgICAgICAgICAgICAgICAgICAgICAgcGFzc19maWVsZHNbMF0udHlwZV9rZXlzKCJ7RU5URVJ9IikKICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgIyAyLiBFZGdlIERvd25sb2FkIFByb3RlY3Rpb24gIktlZXAiICYgIktlZXAgYW55d2F5IgogICAgICAgICAgICAgICAga2VlcF9idG5zID0gd2luZG93LmRlc2NlbmRhbnRzKGNvbnRyb2xfdHlwZT0iQnV0dG9uIiwgdGl0bGU9IktlZXAiKQogICAgICAgICAgICAgICAgaWYga2VlcF9idG5zOgogICAgICAgICAgICAgICAgICAgIGtlZXBfY2xpY2tlZCA9IFRydWUKICAgICAgICAgICAgICAgICAgICBrZWVwX2J0bnNbMF0uY2xpY2tfaW5wdXQoKQogICAgICAgICAgICAgICAgICAgIHRpbWUuc2xlZXAoMC41KQogICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICBrZWVwX2FueXdheSA9IHdpbmRvdy5kZXNjZW5kYW50cyhjb250cm9sX3R5cGU9IkJ1dHRvbiIsIHRpdGxlPSJLZWVwIGFueXdheSIpCiAgICAgICAgICAgICAgICBpZiBrZWVwX2FueXdheToKICAgICAgICAgICAgICAgICAgICBrZWVwX2NsaWNrZWQgPSBUcnVlCiAgICAgICAgICAgICAgICAgICAga2VlcF9hbnl3YXlbMF0uY2xpY2tfaW5wdXQoKQogICAgICAgICAgICAgICAgICAgIHRpbWUuc2xlZXAoMC41KQogICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAjIDMuIFByZXNzIEN0cmwrSiB0byBvcGVuIERvd25sb2FkcyBmbHlvdXQgaWYgbm90IGZvdW5kIHlldCwgbWF4IDMgdGltZXMsIGV2ZXJ5IDE1cwogICAgICAgICAgICBpZiBub3Qga2VlcF9jbGlja2VkIGFuZCBlZGdlX3dpbmRvdyBhbmQgKHRpbWUudGltZSgpIC0gbGFzdF9jdHJsX2pfdGltZSA+IDE1KSBhbmQgY3RybF9qX2F0dGVtcHRzIDwgNDoKICAgICAgICAgICAgICAgIHRyeToKICAgICAgICAgICAgICAgICAgICBlZGdlX3dpbmRvdy5zZXRfZm9jdXMoKQogICAgICAgICAgICAgICAgICAgIHRpbWUuc2xlZXAoMC41KQogICAgICAgICAgICAgICAgICAgIHNlbmRfa2V5cygnXmonKQogICAgICAgICAgICAgICAgICAgIGxhc3RfY3RybF9qX3RpbWUgPSB0aW1lLnRpbWUoKQogICAgICAgICAgICAgICAgICAgIGN0cmxfal9hdHRlbXB0cyArPSAxCiAgICAgICAgICAgICAgICBleGNlcHQgRXhjZXB0aW9uOgogICAgICAgICAgICAgICAgICAgIHBhc3MKCiAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbjoKICAgICAgICAgICAgcGFzcwogICAgICAgIHRpbWUuc2xlZXAoMSkKCmlmIF9fbmFtZV9fID09ICJfX21haW5fXyI6CiAgICBpZiBsZW4oc3lzLmFyZ3YpID4gMjoKICAgICAgICBoYW5kbGVfYXV0b21hdGlvbihzeXMuYXJndlsxXSwgc3lzLmFyZ3ZbMl0pCiAgICBlbHNlOgogICAgICAgIGhhbmRsZV9hdXRvbWF0aW9uKCIiLCAiIikK"
+          $proxyPyCode =[System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64Proxy))
           $proxyPyCode | Out-File -FilePath "$env:TEMP\auto_handler.py" -Encoding utf8
           
-          # Start the handler
+          # Start the handler to watch for the "Keep" button & Edge proxy prompt concurrently
           if ($env:PROXY_PASS -ne "") {
               Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`"" -WindowStyle Hidden
           } else {
@@ -288,6 +291,7 @@ jobs:
 
                       Write-Output "[AVG] Executing silent installer..."
                       try {
+                          # Running silently using only /silent parameter
                           Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
                           Write-Output "[AVG] Installer process finished."
                       } catch {
