@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '5'
+        default: '3'
       avg_link:
         description: 'Select AVG Link'
         required: true
@@ -37,12 +37,12 @@ on:
           - 'MlzYT'
           - 'F.ahmad'
           - 'B4Books'
-        default: 'Trader'
+        default: 'MlzYT'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
         type: string
-        default: ''
+        default: 'dec1711b-facd-4480-85ba-5b4995464eb7'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
