@@ -11,7 +11,7 @@ on:
           - 'windows-2025'
           - 'windows-2022'
           - 'windows-11-arm'
-        default: 'windows-11-arm'
+        default: 'windows-2025'
       getscreen_email:
         description: 'Getscreen.me Account Email'
         required: true
@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '1'
+        default: '5'
       avg_link:
         description: 'Select AVG Link'
         required: true
@@ -42,7 +42,7 @@ on:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
         type: string
-        default: '39b95eaf-c17d-43d2-a767-e93c43ebed9f'
+        default: ''
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -207,13 +207,20 @@ jobs:
           Set-MpPreference -DisableBlockAtFirstSeen $true -ErrorAction SilentlyContinue
           Set-MpPreference -DisableIOAVProtection $true -ErrorAction SilentlyContinue
           
+          # Complete Edge policy override to prevent exe block popups
           $edgePolicy = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
           if (-not (Test-Path $edgePolicy)) { New-Item -Path $edgePolicy -Force | Out-Null }
           Set-ItemProperty -Path $edgePolicy -Name "SmartScreenEnabled" -Value 0
           Set-ItemProperty -Path $edgePolicy -Name "SmartScreenPuaEnabled" -Value 0
+          Set-ItemProperty -Path $edgePolicy -Name "DownloadRestrictions" -Value 0
           Set-ItemProperty -Path $edgePolicy -Name "PreventSmartScreenPromptOverride" -Value 0
           Set-ItemProperty -Path $edgePolicy -Name "PreventSmartScreenPromptOverrideForFiles" -Value 0
-          Write-Host "Defender and SmartScreen disabled successfully." -ForegroundColor Green
+          
+          $exemptPath = "$edgePolicy\ExemptDomainFileTypePairsFromFileTypeDownloadWarnings"
+          if (-not (Test-Path $exemptPath)) { New-Item -Path $exemptPath -Force | Out-Null }
+          Set-ItemProperty -Path $exemptPath -Name "1" -Value '{"domains":["*"],"file_extension":"exe"}'
+          
+          Write-Host "Defender and SmartScreen policies modified successfully." -ForegroundColor Green
 
       - name: Install and Start Getscreen.me (Windows)
         shell: pwsh
@@ -250,16 +257,20 @@ jobs:
           Write-Host "Checking python UIA modules..." -ForegroundColor DarkGray
           python -m pip install pywinauto pyautogui pygetwindow --quiet
 
-          # 2. Start Fileless Proxy Authentication Background loop
+          # 2. Start Fileless Proxy & "Keep Download" Clicker Background loop
+          Write-Host "Starting UIA Background Automation Handler..." -ForegroundColor Cyan
+          $b64Proxy = "aW1wb3J0IHRpbWUsIHN5cwpmcm9tIHB5d2luYXV0byBpbXBvcnQgRGVza3RvcAoKZGVmIGhhbmRsZV9hdXRvbWF0aW9uKHVzZXJuYW1lLCBwYXNzd29yZCwgdGltZW91dD02MDApOgogICAgZGVza3RvcCA9IERlc2t0b3AoYmFja2VuZD0idWlhIikKICAgIHN0YXJ0X3RpbWUgPSB0aW1lLnRpbWUoKQogICAgd2hpbGUgdGltZS50aW1lKCkgLSBzdGFydF90aW1lIDwgdGltZW91dDoKICAgICAgICB0cnk6CiAgICAgICAgICAgIGZvciB3aW5kb3cgaW4gZGVza3RvcC53aW5kb3dzKHZpc2libGVfb25seT1UcnVlKToKICAgICAgICAgICAgICAgICMgMS4gUHJveHkgQXV0aGVudGljYXRpb24KICAgICAgICAgICAgICAgIHVzZXJfZmllbGRzID0gd2luZG93LmRlc2NlbmRhbnRzKGNvbnRyb2xfdHlwZT0iRWRpdCIsIHRpdGxlPSJVc2VybmFtZSIpCiAgICAgICAgICAgICAgICBwYXNzX2ZpZWxkcyA9IHdpbmRvdy5kZXNjZW5kYW50cyhjb250cm9sX3R5cGU9IkVkaXQiLCB0aXRsZT0iUGFzc3dvcmQiKQogICAgICAgICAgICAgICAgaWYgdXNlcl9maWVsZHMgYW5kIHBhc3NfZmllbGRzOgogICAgICAgICAgICAgICAgICAgIHdpbmRvdy5zZXRfZm9jdXMoKQogICAgICAgICAgICAgICAgICAgIHRpbWUuc2xlZXAoMC41KQogICAgICAgICAgICAgICAgICAgIHVzZXJfZmllbGRzWzBdLmNsaWNrX2lucHV0KCkKICAgICAgICAgICAgICAgICAgICB1c2VyX2ZpZWxkc1swXS50eXBlX2tleXModXNlcm5hbWUsIHdpdGhfc3BhY2VzPVRydWUsIHBhdXNlPTAuMDIpCiAgICAgICAgICAgICAgICAgICAgcGFzc19maWVsZHNbMF0uY2xpY2tfaW5wdXQoKQogICAgICAgICAgICAgICAgICAgIHBhc3NfZmllbGRzWzBdLnR5cGVfa2V5cyhwYXNzd29yZCwgd2l0aF9zcGFjZXM9VHJ1ZSwgcGF1c2U9MC4wMikKICAgICAgICAgICAgICAgICAgICBidG4gPSB3aW5kb3cuZGVzY2VuZGFudHMoY29udHJvbF90eXBlPSJCdXR0b24iLCB0aXRsZT0iU2lnbiBpbiIpCiAgICAgICAgICAgICAgICAgICAgaWYgYnRuOgogICAgICAgICAgICAgICAgICAgICAgICBidG5bMF0uY2xpY2tfaW5wdXQoKQogICAgICAgICAgICAgICAgICAgIGVsc2U6CiAgICAgICAgICAgICAgICAgICAgICAgIHBhc3NfZmllbGRzWzBdLnR5cGVfa2V5cygie0VOVEVSfSIpCiAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICMgMi4gRWRnZSBEb3dubG9hZCBQcm90ZWN0aW9uICJLZWVwIiAmICJLZWVwIGFueXdheSIKICAgICAgICAgICAgICAgIGtlZXBfYnRucyA9IHdpbmRvdy5kZXNjZW5kYW50cyhjb250cm9sX3R5cGU9IkJ1dHRvbiIsIHRpdGxlPSJLZWVwIikKICAgICAgICAgICAgICAgIGlmIGtlZXBfYnRuczoKICAgICAgICAgICAgICAgICAgICBrZWVwX2J0bnNbMF0uY2xpY2tfaW5wdXQoKQogICAgICAgICAgICAgICAgICAgIHRpbWUuc2xlZXAoMC41KQogICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICBrZWVwX2FueXdheSA9IHdpbmRvdy5kZXNjZW5kYW50cyhjb250cm9sX3R5cGU9IkJ1dHRvbiIsIHRpdGxlPSJLZWVwIGFueXdheSIpCiAgICAgICAgICAgICAgICBpZiBrZWVwX2FueXdheToKICAgICAgICAgICAgICAgICAgICBrZWVwX2FueXdheVswXS5jbGlja19pbnB1dCgpCiAgICAgICAgICAgICAgICAgICAgdGltZS5zbGVlcCgwLjUpCiAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbjoKICAgICAgICAgICAgcGFzcwogICAgICAgIHRpbWUuc2xlZXAoMSkKCmlmIF9fbmFtZV9fID09ICJfX21haW5fXyI6CiAgICBpZiBsZW4oc3lzLmFyZ3YpID4gMjoKICAgICAgICBoYW5kbGVfYXV0b21hdGlvbihzeXMuYXJndlsxXSwgc3lzLmFyZ3ZbMl0pCiAgICBlbHNlOgogICAgICAgIGhhbmRsZV9hdXRvbWF0aW9uKCIiLCAiIikK"
+          $proxyPyCode = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64Proxy))
+          $proxyPyCode | Out-File -FilePath "$env:TEMP\auto_handler.py" -Encoding utf8
+          
+          # Start the handler to watch for the "Keep" button & Edge proxy prompt concurrently
           if ($env:PROXY_PASS -ne "") {
-              Write-Host "Starting UIA Proxy Auth handler for ScrapeOps..." -ForegroundColor Cyan
-              $b64Proxy = "aW1wb3J0IHRpbWUsIHN5cwpmcm9tIHB5d2luYXV0byBpbXBvcnQgRGVza3RvcApkZWYgaGFuZGxlX3Byb3h5X2F1dGgodXNlcm5hbWUsIHBhc3N3b3JkLCB0aW1lb3V0PTkwKToKICAgIGRlc2t0b3AgPSBEZXNrdG9wKGJhY2tlbmQ9InVpYSIpCiAgICBzdGFydF90aW1lID0gdGltZS50aW1lKCkKICAgIHdoaWxlIHRpbWUudGltZSgpIC0gc3RhcnRfdGltZSA8IHRpbWVvdXQ6CiAgICAgICAgdHJ5OgogICAgICAgICAgICBmb3Igd2luZG93IGluIGRlc2t0b3Aud2luZG93cyh2aXNpYmxlX29ubHk9VHJ1ZSk6CiAgICAgICAgICAgICAgICB1c2VyX2ZpZWxkcyA9IHdpbmRvdy5kZXNjZW5kYW50cyhjb250cm9sX3R5cGU9IkVkaXQiLCB0aXRsZT0iVXNlcm5hbWUiKQogICAgICAgICAgICAgICAgcGFzc19maWVsZHMgPSB3aW5kb3cuZGVzY2VuZGFudHMoY29udHJvbF90eXBlPSJFZGl0IiwgdGl0bGU9IlBhc3N3b3JkIikKICAgICAgICAgICAgICAgIGlmIHVzZXJfZmllbGRzIGFuZCBwYXNzX2ZpZWxkczoKICAgICAgICAgICAgICAgICAgICB3aW5kb3cuc2V0X2ZvY3VzKCkKICAgICAgICAgICAgICAgICAgICB0aW1lLnNsZWVwKDAuNSkKICAgICAgICAgICAgICAgICAgICB1c2VyX2ZpZWxkc1swXS5jbGlja19pbnB1dCgpCiAgICAgICAgICAgICAgICAgICAgdXNlcl9maWVsZHNbMF0udHlwZV9rZXlzKHVzZXJuYW1lLCB3aXRoX3NwYWNlcz1UcnVlLCBwYXVzZT0wLjAyKQogICAgICAgICAgICAgICAgICAgIHBhc3NfZmllbGRzWzBdLmNsaWNrX2lucHV0KCkKICAgICAgICAgICAgICAgICAgICBwYXNzX2ZpZWxkc1swXS50eXBlX2tleXMocGFzc3dvcmQsIHdpdGhfc3BhY2VzPVRydWUsIHBhdXNlPTAuMDIpCiAgICAgICAgICAgICAgICAgICAgYnRuID0gd2luZG93LmRlc2NlbmRhbnRzKGNvbnRyb2xfdHlwZT0iQnV0dG9uIiwgdGl0bGU9IlNpZ24gaW4iKQogICAgICAgICAgICAgICAgICAgIGlmIGJ0bjoKICAgICAgICAgICAgICAgICAgICAgICAgYnRuWzBdLmNsaWNrX2lucHV0KCkKICAgICAgICAgICAgICAgICAgICBlbHNlOgogICAgICAgICAgICAgICAgICAgICAgICBwYXNzX2ZpZWxkc1swXS50eXBlX2tleXMoIntFTlRFUn0iKQogICAgICAgICAgICAgICAgICAgIHJldHVybiBUcnVlCiAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbjoKICAgICAgICAgICAgcGFzcwogICAgICAgIHRpbWUuc2xlZXAoMSkKICAgIHJldHVybiBGYWxzZQppZiBfX25hbWVfXyA9PSAiX19tYWluX18iOgogICAgaGFuZGxlX3Byb3h5X2F1dGgoc3lzLmFyZ3ZbMV0sIHN5cy5hcmd2WzJdKQ=="
-              $proxyPyCode = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64Proxy))
-              $proxyPyCode | Out-File -FilePath "$env:TEMP\proxy_ui.py" -Encoding utf8
-              Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\proxy_ui.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`"" -WindowStyle Hidden
+              Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`"" -WindowStyle Hidden
+          } else {
+              Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`"" -WindowStyle Hidden
           }
 
-          # 3. Setup the AVG UI Watcher/Clicker in the background
+          # 3. Setup the AVG Watcher/Installer in the background
           $dlFolder = "$env:USERPROFILE\Downloads"
           $timeoutSecs = 55 * 60
 
@@ -278,23 +289,28 @@ jobs:
                       $locked = $true
                       while ($locked) { Start-Sleep -Seconds 2; try { $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None'); $s.Close(); $locked = $false } catch { } }
 
-                      Write-Output "[AVG] Executing installer (attempting silent install)..."
-                      Start-Process -FilePath $file.FullName -ArgumentList "/silent", "/S", "/quiet"
-
-                      Write-Output "[AVG] Monitoring for GUI popup (fallback if not silent)..."
-                      $b64Avg = "aW1wb3J0IHB5YXV0b2d1aSwgcHlnZXR3aW5kb3cgYXMgZ3csIHRpbWUKZm9yIF8gaW4gcmFuZ2UoNjApOgogICAgd2lucyA9IFt3IGZvciB3IGluIGd3LmdldEFsbFdpbmRvd3MoKSBpZiAnQVZHJyBpbiB3LnRpdGxlXQogICAgaWYgd2luczoKICAgICAgICB0cnk6CiAgICAgICAgICAgIHdpbnNbMF0uYWN0aXZhdGUoKQogICAgICAgICAgICB0aW1lLnNsZWVwKDMpCiAgICAgICAgICAgIHB5YXV0b2d1aS5wcmVzcygnZW50ZXInKQogICAgICAgICAgICB0aW1lLnNsZWVwKDEpCiAgICAgICAgICAgIHB5YXV0b2d1aS5wcmVzcygnc3BhY2UnKQogICAgICAgICAgICBwcmludCgnW0FWRy1VSV0gS2V5cyBzZW50IHRvIGluc3RhbGxlci4nKQogICAgICAgIGV4Y2VwdCBFeGNlcHRpb24gYXMgZToKICAgICAgICAgICAgcHJpbnQoZidbQVZHLVVJXSBFcnI6IHtlfScpCiAgICAgICAgYnJlYWsKICAgIHRpbWUuc2xlZXAoMik="
-                      $avgPyCode = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64Avg))
-                      $avgPyCode | Out-File -FilePath "$env:TEMP\avg_ui.py" -Encoding utf8
-                      python -u "$env:TEMP\avg_ui.py"
+                      Write-Output "[AVG] Executing silent installer..."
+                      try {
+                          # FIX: Removed the failing /quiet /S arguments. Only using /silent as present in the user's stable script.
+                          Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
+                          Write-Output "[AVG] Installer process finished."
+                      } catch {
+                          Write-Output "[AVG] ERROR running installer: $_"
+                      }
                       
                       Write-Output "[AVG] Waiting for final application deployment..."
-                      $avgPaths = @("C:\Program Files\AVG\Antivirus\AVGUI.exe", "C:\Program Files (x86)\AVG\Antivirus\AVGUI.exe")
+                      $avgPaths = @(
+                          "C:\Program Files\AVG\Browser\Application\AVGBrowser.exe",
+                          "C:\Program Files (x86)\AVG\Browser\Application\AVGBrowser.exe",
+                          "C:\Program Files\AVG\Antivirus\AVGUI.exe", 
+                          "C:\Program Files (x86)\AVG\Antivirus\AVGUI.exe"
+                      )
                       $launched = $false
                       for ($i = 0; $i -lt 300; $i++) {
                           foreach ($p in $avgPaths) {
                               if (Test-Path $p) {
                                   Start-Sleep -Seconds 3
-                                  Write-Output "[AVG] Launching AVG..."
+                                  Write-Output "[AVG] Launching AVG Application..."
                                   Start-Process -FilePath $p
                                   $launched = $true; break
                               }
