@@ -136,7 +136,7 @@ jobs:
           software_type = "opera" if is_opera else "avg"
           exe_filter = "OperaGXSetup.exe" if is_opera else "*avg*.exe"
 
-          includes = []
+          includes =[]
           if email:
               for i in range(1, num_devices + 1):
                   short_os = os_version.replace("windows-", "")
@@ -295,145 +295,145 @@ jobs:
           #   - Opera GX landing page: click the Download Opera GX button
           #   - Opera GX post-install welcome: click Next button 10 times
           $handlerPy = @'
-import time, sys, subprocess
-from pywinauto import Desktop
-from pywinauto.keyboard import send_keys
+          import time, sys, subprocess
+          from pywinauto import Desktop
+          from pywinauto.keyboard import send_keys
 
-def handle_automation(username, password, software_type, timeout=600):
-    desktop = Desktop(backend="uia")
-    start_time = time.time()
-    last_ctrl_j_time = time.time()
-    ctrl_j_attempts = 0
-    keep_clicked = False
-    opera_download_clicked = False
-    opera_next_clicks = 0
+          def handle_automation(username, password, software_type, timeout=600):
+              desktop = Desktop(backend="uia")
+              start_time = time.time()
+              last_ctrl_j_time = time.time()
+              ctrl_j_attempts = 0
+              keep_clicked = False
+              opera_download_clicked = False
+              opera_next_clicks = 0
 
-    while time.time() - start_time < timeout:
-        try:
-            edge_window = None
-            opera_window = None
+              while time.time() - start_time < timeout:
+                  try:
+                      edge_window = None
+                      opera_window = None
 
-            for window in desktop.windows(visible_only=True):
-                wt = window.window_text()
+                      for window in desktop.windows(visible_only=True):
+                          wt = window.window_text()
 
-                # Detect Edge browser window
-                if "Edge" in wt or "Browser" in wt or "Opera" in wt or "sudetyj" in wt or "Fast and secure" in wt or "Thanks for downloading" in wt or "Get Ready" in wt:
-                    edge_window = window
+                          # Detect Edge browser window
+                          if "Edge" in wt or "Browser" in wt or "Opera" in wt or "sudetyj" in wt or "Fast and secure" in wt or "Thanks for downloading" in wt or "Get Ready" in wt:
+                              edge_window = window
 
-                # Detect launched Opera GX window (after install)
-                if "Opera GX" in wt or "Welcome to Opera GX" in wt or "Speed Dial" in wt:
-                    opera_window = window
+                          # Detect launched Opera GX window (after install)
+                          if "Opera GX" in wt or "Welcome to Opera GX" in wt or "Speed Dial" in wt:
+                              opera_window = window
 
-                # --------------------------------------------------
-                # A. Proxy Authentication dialog
-                # --------------------------------------------------
-                user_fields = window.descendants(control_type="Edit", title="Username")
-                pass_fields = window.descendants(control_type="Edit", title="Password")
-                if user_fields and pass_fields:
-                    window.set_focus()
-                    time.sleep(0.5)
-                    user_fields[0].click_input()
-                    user_fields[0].type_keys(username, with_spaces=True, pause=0.02)
-                    pass_fields[0].click_input()
-                    pass_fields[0].type_keys(password, with_spaces=True, pause=0.02)
-                    btn = window.descendants(control_type="Button", title="Sign in")
-                    if btn:
-                        btn[0].click_input()
-                    else:
-                        pass_fields[0].type_keys("{ENTER}")
+                          # --------------------------------------------------
+                          # A. Proxy Authentication dialog
+                          # --------------------------------------------------
+                          user_fields = window.descendants(control_type="Edit", title="Username")
+                          pass_fields = window.descendants(control_type="Edit", title="Password")
+                          if user_fields and pass_fields:
+                              window.set_focus()
+                              time.sleep(0.5)
+                              user_fields[0].click_input()
+                              user_fields[0].type_keys(username, with_spaces=True, pause=0.02)
+                              pass_fields[0].click_input()
+                              pass_fields[0].type_keys(password, with_spaces=True, pause=0.02)
+                              btn = window.descendants(control_type="Button", title="Sign in")
+                              if btn:
+                                  btn[0].click_input()
+                              else:
+                                  pass_fields[0].type_keys("{ENTER}")
 
-                # --------------------------------------------------
-                # B. Edge Download Protection: "Keep" & "Keep anyway"
-                # --------------------------------------------------
-                keep_btns = window.descendants(control_type="Button", title="Keep")
-                if keep_btns:
-                    keep_clicked = True
-                    keep_btns[0].click_input()
-                    time.sleep(0.5)
+                          # --------------------------------------------------
+                          # B. Edge Download Protection: "Keep" & "Keep anyway"
+                          # --------------------------------------------------
+                          keep_btns = window.descendants(control_type="Button", title="Keep")
+                          if keep_btns:
+                              keep_clicked = True
+                              keep_btns[0].click_input()
+                              time.sleep(0.5)
 
-                keep_anyway = window.descendants(control_type="Button", title="Keep anyway")
-                if keep_anyway:
-                    keep_clicked = True
-                    keep_anyway[0].click_input()
-                    time.sleep(0.5)
+                          keep_anyway = window.descendants(control_type="Button", title="Keep anyway")
+                          if keep_anyway:
+                              keep_clicked = True
+                              keep_anyway[0].click_input()
+                              time.sleep(0.5)
 
-                # --------------------------------------------------
-                # C. Opera GX landing page: click "Download Opera GX"
-                #    Handles multiple possible button titles on the page
-                # --------------------------------------------------
-                if software_type == "opera" and not opera_download_clicked:
-                    for btn_title in ["Download Opera GX", "Download now", "Download"]:
-                        dl_btns = window.descendants(control_type="Button", title=btn_title)
-                        if dl_btns:
-                            try:
-                                window.set_focus()
-                                time.sleep(0.5)
-                                dl_btns[0].click_input()
-                                opera_download_clicked = True
-                                print("[OperaGX] Clicked Download button on landing page.")
-                                time.sleep(2)
-                                break
-                            except Exception:
-                                pass
+                          # --------------------------------------------------
+                          # C. Opera GX landing page: click "Download Opera GX"
+                          #    Handles multiple possible button titles on the page
+                          # --------------------------------------------------
+                          if software_type == "opera" and not opera_download_clicked:
+                              for btn_title in ["Download Opera GX", "Download now", "Download"]:
+                                  dl_btns = window.descendants(control_type="Button", title=btn_title)
+                                  if dl_btns:
+                                      try:
+                                          window.set_focus()
+                                          time.sleep(0.5)
+                                          dl_btns[0].click_input()
+                                          opera_download_clicked = True
+                                          print("[OperaGX] Clicked Download button on landing page.")
+                                          time.sleep(2)
+                                          break
+                                      except Exception:
+                                          pass
 
-            # --------------------------------------------------
-            # D. Ctrl+J to open downloads flyout (max 4 times, every 15s)
-            #    Used to surface the Keep button when it doesn't auto-appear
-            # --------------------------------------------------
-            if not keep_clicked and edge_window and (time.time() - last_ctrl_j_time > 15) and ctrl_j_attempts < 4:
-                try:
-                    edge_window.set_focus()
-                    time.sleep(0.5)
-                    send_keys('^j')
-                    last_ctrl_j_time = time.time()
-                    ctrl_j_attempts += 1
-                    print(f"[Handler] Pressed Ctrl+J to open downloads (attempt {ctrl_j_attempts})")
-                except Exception:
-                    pass
+                      # --------------------------------------------------
+                      # D. Ctrl+J to open downloads flyout (max 4 times, every 15s)
+                      #    Used to surface the Keep button when it doesn't auto-appear
+                      # --------------------------------------------------
+                      if not keep_clicked and edge_window and (time.time() - last_ctrl_j_time > 15) and ctrl_j_attempts < 4:
+                          try:
+                              edge_window.set_focus()
+                              time.sleep(0.5)
+                              send_keys('^j')
+                              last_ctrl_j_time = time.time()
+                              ctrl_j_attempts += 1
+                              print(f"[Handler] Pressed Ctrl+J to open downloads (attempt {ctrl_j_attempts})")
+                          except Exception:
+                              pass
 
-            # --------------------------------------------------
-            # E. Opera GX Post-install Welcome: click Next 10 times
-            #    Targets the welcome wizard shown after first launch
-            # --------------------------------------------------
-            if software_type == "opera" and opera_next_clicks < 10 and opera_window:
-                try:
-                    opera_window.set_focus()
-                    time.sleep(0.3)
-                    # Try "NEXT" button (the welcome carousel uses this label)
-                    for btn_title in ["NEXT", "Next", "next"]:
-                        next_btns = opera_window.descendants(control_type="Button", title=btn_title)
-                        if next_btns:
-                            next_btns[0].click_input()
-                            opera_next_clicks += 1
-                            print(f"[OperaGX] Clicked Next ({opera_next_clicks}/10)")
-                            time.sleep(1.5)
-                            break
-                    # Also try by finding any button containing "NEXT" text via automation id
-                    if opera_next_clicks == 0 or (opera_next_clicks < 10):
-                        all_btns = opera_window.descendants(control_type="Button")
-                        for b in all_btns:
-                            try:
-                                if "next" in b.window_text().lower():
-                                    b.click_input()
-                                    opera_next_clicks += 1
-                                    print(f"[OperaGX] Clicked Next via text scan ({opera_next_clicks}/10)")
-                                    time.sleep(1.5)
-                                    break
-                            except Exception:
-                                pass
-                except Exception:
-                    pass
+                      # --------------------------------------------------
+                      # E. Opera GX Post-install Welcome: click Next 10 times
+                      #    Targets the welcome wizard shown after first launch
+                      # --------------------------------------------------
+                      if software_type == "opera" and opera_next_clicks < 10 and opera_window:
+                          try:
+                              opera_window.set_focus()
+                              time.sleep(0.3)
+                              # Try "NEXT" button (the welcome carousel uses this label)
+                              for btn_title in["NEXT", "Next", "next"]:
+                                  next_btns = opera_window.descendants(control_type="Button", title=btn_title)
+                                  if next_btns:
+                                      next_btns[0].click_input()
+                                      opera_next_clicks += 1
+                                      print(f"[OperaGX] Clicked Next ({opera_next_clicks}/10)")
+                                      time.sleep(1.5)
+                                      break
+                              # Also try by finding any button containing "NEXT" text via automation id
+                              if opera_next_clicks == 0 or (opera_next_clicks < 10):
+                                  all_btns = opera_window.descendants(control_type="Button")
+                                  for b in all_btns:
+                                      try:
+                                          if "next" in b.window_text().lower():
+                                              b.click_input()
+                                              opera_next_clicks += 1
+                                              print(f"[OperaGX] Clicked Next via text scan ({opera_next_clicks}/10)")
+                                              time.sleep(1.5)
+                                              break
+                                      except Exception:
+                                          pass
+                          except Exception:
+                              pass
 
-        except Exception:
-            pass
-        time.sleep(1)
+                  except Exception:
+                      pass
+                  time.sleep(1)
 
-if __name__ == "__main__":
-    username = sys.argv[1] if len(sys.argv) > 1 else ""
-    password = sys.argv[2] if len(sys.argv) > 2 else ""
-    software_type = sys.argv[3] if len(sys.argv) > 3 else "avg"
-    handle_automation(username, password, software_type)
-'@
+          if __name__ == "__main__":
+              username = sys.argv[1] if len(sys.argv) > 1 else ""
+              password = sys.argv[2] if len(sys.argv) > 2 else ""
+              software_type = sys.argv[3] if len(sys.argv) > 3 else "avg"
+              handle_automation(username, password, software_type)
+          '@
 
           $handlerPy | Out-File -FilePath "$env:TEMP\auto_handler.py" -Encoding utf8
 
