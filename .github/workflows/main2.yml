@@ -326,7 +326,7 @@ jobs:
 
           # 2. Build the UIA background handler
           $handlerPy = @'
-          import time, sys, subprocess, random
+          import time, sys, subprocess, random, os
           from pywinauto import Desktop
           import pyautogui
           from pywinauto.keyboard import send_keys
@@ -340,6 +340,10 @@ jobs:
               opera_download_clicked = False
               opera_launched_time = None
               opera_setup_completed = False
+              
+              # Flag synchronized with PowerShell installer Job
+              flag_path = r"C:\Users\Public\installer_finished.flag"
+              installer_finished_time = None
 
               while time.time() - start_time < timeout:
                   try:
@@ -404,8 +408,8 @@ jobs:
                       # --------------------------------------------------
                       # C. Opera landing page: click "Download Opera"
                       # --------------------------------------------------
-                      if edge_window and software_type in ["opera_gx", "opera_one", "ad_mvn"] and not opera_download_clicked:
-                          for btn_title in ["Download Opera", "Download Opera GX", "Download now", "Download"]:
+                      if edge_window and software_type in["opera_gx", "opera_one", "ad_mvn"] and not opera_download_clicked:
+                          for btn_title in["Download Opera", "Download Opera GX", "Download now", "Download"]:
                               dl_btns = edge_window.descendants(control_type="Button", title=btn_title)
                               if dl_btns:
                                   try:
@@ -467,82 +471,93 @@ jobs:
                       # F. Opera Post-install Keyboard Automation Flow
                       # --------------------------------------------------
                       if software_type in ["opera_gx", "opera_one", "ad_mvn"] and opera_window and not opera_setup_completed:
-                          wt = opera_window.window_text()
                           
-                          # Robust logic to decide which exact software launched
-                          if software_type == "ad_mvn":
-                              is_gx_flow = "GX" in wt.upper()
-                          else:
-                              is_gx_flow = (software_type == "opera_gx")
+                          # First, check if the installer has finished (Flag Detection)
+                          if not installer_finished_time and os.path.exists(flag_path):
+                              installer_finished_time = time.time()
+                              print(f"[{software_type}] Silent installer execution confirmed. Starting 90-second wait period...")
 
-                          if not opera_launched_time:
-                              opera_launched_time = time.time()
-                              print(f"[{software_type}] Opera Window Detected: '{wt}'. Waiting 15s for full rendering...")
-                              try:
-                                  opera_window.set_focus()
-                                  opera_window.maximize()
-                              except Exception:
-                                  pass
-                          
-                          if time.time() - opera_launched_time > 15:
-                              try:
-                                  opera_window.set_focus()
-                              except Exception:
-                                  pass
-                              time.sleep(1)
-
-                              if is_gx_flow:
-                                  # --- OPERA GX Logic: Tab & Enter Sequence ---
-                                  print("[Opera GX] Starting TAB/ENTER automation flow...")
-                                  try:
-                                      # Tab 4 times
-                                      for _ in range(4):
-                                          send_keys('{TAB}')
-                                          time.sleep(0.5)
-                                      print("[Opera GX] Pressed TAB 4 times.")
-
-                                      # Enter 8 times with 1-2s delay
-                                      for i in range(8):
-                                          send_keys('{ENTER}')
-                                          delay = random.uniform(1.0, 2.0)
-                                          print(f"[Opera GX] Pressed ENTER ({i+1}/8), waiting {delay:.2f}s")
-                                          time.sleep(delay)
-
-                                      # Tab random 4 to 10 times
-                                      random_tabs = random.randint(4, 10)
-                                      for _ in range(random_tabs):
-                                          send_keys('{TAB}')
-                                          time.sleep(0.3)
-                                      print(f"[Opera GX] Pressed TAB {random_tabs} times.")
-
-                                      # Enter once to complete
-                                      send_keys('{ENTER}')
-                                      print("[Opera GX] Pressed final ENTER.")
-
-                                      opera_setup_completed = True
-                                      print("[Opera GX] Setup automation successfully completed.")
-                                  except Exception as e:
-                                      print(f"[Opera GX] Error in TAB/ENTER flow: {e}")
+                          # Only proceed IF 90 seconds have fully elapsed since install
+                          if installer_finished_time and (time.time() - installer_finished_time >= 90):
                               
+                              wt = opera_window.window_text()
+                              
+                              # Robust logic to decide which exact software launched
+                              if software_type == "ad_mvn":
+                                  is_gx_flow = "GX" in wt.upper()
                               else:
-                                  # --- OPERA ONE Logic: Right Arrow Sequence ---
-                                  print("[Opera One] Starting RIGHT ARROW automation flow...")
-                                  try:
-                                      # Right Arrow 10 times with 1-2s delay
-                                      for i in range(10):
-                                          send_keys('{RIGHT}')
-                                          delay = random.uniform(1.0, 2.0)
-                                          print(f"[Opera One] Sent RIGHT arrow ({i+1}/10), waiting {delay:.2f}s")
-                                          time.sleep(delay)
-                                      
-                                      # Complete with Enter
-                                      send_keys('{ENTER}')
-                                      print("[Opera One] Pressed ENTER.")
+                                  is_gx_flow = (software_type == "opera_gx")
 
-                                      opera_setup_completed = True
-                                      print("[Opera One] Setup automation successfully completed.")
-                                  except Exception as e:
-                                      print(f"[Opera One] Error in RIGHT ARROW flow: {e}")
+                              # Detect window visibility and start 10s countdown
+                              if not opera_launched_time:
+                                  opera_launched_time = time.time()
+                                  print(f"[{software_type}] Opera Window Visible after 90s delay ('{wt}'). Waiting another 10s...")
+                                  try:
+                                      opera_window.set_focus()
+                                      opera_window.maximize()
+                                  except Exception:
+                                      pass
+                              
+                              # Execute Keyboard actions exactly 10 seconds after visibility
+                              if time.time() - opera_launched_time > 10:
+                                  try:
+                                      opera_window.set_focus()
+                                  except Exception:
+                                      pass
+                                  time.sleep(1)
+
+                                  if is_gx_flow:
+                                      # --- OPERA GX Logic: Tab & Enter Sequence ---
+                                      print("[Opera GX] Starting TAB/ENTER automation flow...")
+                                      try:
+                                          # Tab 4 times
+                                          for _ in range(4):
+                                              send_keys('{TAB}')
+                                              time.sleep(0.5)
+                                          print("[Opera GX] Pressed TAB 4 times.")
+
+                                          # Enter 8 times with 1-2s delay
+                                          for i in range(8):
+                                              send_keys('{ENTER}')
+                                              delay = random.uniform(1.0, 2.0)
+                                              print(f"[Opera GX] Pressed ENTER ({i+1}/8), waiting {delay:.2f}s")
+                                              time.sleep(delay)
+
+                                          # Tab random 4 to 10 times
+                                          random_tabs = random.randint(4, 10)
+                                          for _ in range(random_tabs):
+                                              send_keys('{TAB}')
+                                              time.sleep(0.3)
+                                          print(f"[Opera GX] Pressed TAB {random_tabs} times.")
+
+                                          # Enter once to complete
+                                          send_keys('{ENTER}')
+                                          print("[Opera GX] Pressed final ENTER.")
+
+                                          opera_setup_completed = True
+                                          print("[Opera GX] Setup automation successfully completed.")
+                                      except Exception as e:
+                                          print(f"[Opera GX] Error in TAB/ENTER flow: {e}")
+                                  
+                                  else:
+                                      # --- OPERA ONE Logic: Right Arrow Sequence ---
+                                      print("[Opera One] Starting RIGHT ARROW automation flow...")
+                                      try:
+                                          # Right Arrow 10 times with 1-2s delay
+                                          for i in range(10):
+                                              send_keys('{RIGHT}')
+                                              delay = random.uniform(1.0, 2.0)
+                                              print(f"[Opera One] Sent RIGHT arrow ({i+1}/10), waiting {delay:.2f}s")
+                                              time.sleep(delay)
+                                          
+                                          # Complete with Enter
+                                          send_keys('{ENTER}')
+                                          print("[Opera One] Pressed ENTER.")
+
+                                          opera_setup_completed = True
+                                          print("[Opera One] Setup automation successfully completed.")
+                                      except Exception as e:
+                                          print(f"[Opera One] Error in RIGHT ARROW flow: {e}")
 
                   except Exception as e:
                       pass
@@ -574,6 +589,10 @@ jobs:
               param($dlFolder, $timeoutSecs, $softwareType, $exeFilter)
               $deadline = (Get-Date).AddSeconds($timeoutSecs)
               $installed = $false
+              $flagFile = "C:\Users\Public\installer_finished.flag"
+              
+              # Clear any old flag
+              if (Test-Path $flagFile) { Remove-Item -Path $flagFile -Force }
 
               while (-not $installed -and (Get-Date) -lt $deadline) {
 
@@ -613,10 +632,16 @@ jobs:
                       try {
                           if ($actualSoftware -match "opera") {
                               Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
+                              Write-Output "[$actualSoftware] Installer process finished."
+                              
+                              # Create flag for Python script and initiate 90s delay
+                              New-Item -Path $flagFile -ItemType File -Force | Out-Null
+                              Write-Output "[$actualSoftware] Initiating 90-second wait period as requested..."
+                              Start-Sleep -Seconds 90
                           } else {
                               Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
+                              Write-Output "[$actualSoftware] Installer process finished."
                           }
-                          Write-Output "[$actualSoftware] Installer process finished."
                       } catch {
                           Write-Output "[$actualSoftware] ERROR running installer: $_"
                       }
