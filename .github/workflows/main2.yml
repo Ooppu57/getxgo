@@ -329,9 +329,8 @@ jobs:
           import time, sys, subprocess, random, os
           from pywinauto import Desktop
           import pyautogui
-          from pywinauto.keyboard import send_keys
 
-          def handle_automation(username, password, software_type, timeout=600):
+          def handle_automation(username, password, software_type, timeout=1800):
               desktop = Desktop(backend="uia")
               start_time = time.time()
               last_ctrl_j_time = time.time()
@@ -361,8 +360,8 @@ jobs:
                               edge_window = window
 
                           # Detect launched Opera/Opera GX window reliably (Exclude Edge titles!)
-                          if "Opera" in wt or "Speed Dial" in wt or "Start Page" in wt or "Welcome" in wt:
-                              if "Microsoft Edge" not in wt and "Edge" not in wt and "Chrome Web Store" not in wt:
+                          if "Microsoft Edge" not in wt and "Edge" not in wt and "Chrome Web Store" not in wt:
+                              if "Opera" in wt or "Speed Dial" in wt or "Start Page" in wt or "Welcome" in wt or "GX" in wt:
                                   opera_window = window
 
                       # --------------------------------------------------
@@ -460,7 +459,7 @@ jobs:
                           try:
                               edge_window.set_focus()
                               time.sleep(0.5)
-                              send_keys('^j')
+                              pyautogui.hotkey('ctrl', 'j')
                               last_ctrl_j_time = time.time()
                               ctrl_j_attempts += 1
                               print(f"[Handler] Pressed Ctrl+J to open downloads (attempt {ctrl_j_attempts})")
@@ -470,28 +469,25 @@ jobs:
                       # --------------------------------------------------
                       # F. Opera Post-install Keyboard Automation Flow
                       # --------------------------------------------------
-                      if software_type in ["opera_gx", "opera_one", "ad_mvn"] and opera_window and not opera_setup_completed:
+                      if software_type in["opera_gx", "opera_one", "ad_mvn"] and opera_window and not opera_setup_completed:
                           
                           # First, check if the installer has finished (Flag Detection)
                           if not installer_finished_time and os.path.exists(flag_path):
                               installer_finished_time = time.time()
-                              print(f"[{software_type}] Silent installer execution confirmed. Starting 90-second wait period...")
+                              print(f"[{software_type}] Silent installer execution confirmed. Starting strict 100-second wait period...")
 
-                          # Only proceed IF 90 seconds have fully elapsed since install
-                          if installer_finished_time and (time.time() - installer_finished_time >= 90):
+                          # Only proceed IF exactly 100 seconds have fully elapsed since install
+                          if installer_finished_time and (time.time() - installer_finished_time >= 100):
                               
                               wt = opera_window.window_text()
                               
-                              # Robust logic to decide which exact software launched
-                              if software_type == "ad_mvn":
-                                  is_gx_flow = "GX" in wt.upper()
-                              else:
-                                  is_gx_flow = (software_type == "opera_gx")
+                              # Robust dynamic logic to decide which exact software launched
+                              is_gx_flow = "GX" in wt.upper() or software_type == "opera_gx"
 
                               # Detect window visibility and start 10s countdown
                               if not opera_launched_time:
                                   opera_launched_time = time.time()
-                                  print(f"[{software_type}] Opera Window Visible after 90s delay ('{wt}'). Waiting another 10s...")
+                                  print(f"[{software_type}] Opera Window Visible after 100s delay ('{wt}'). Waiting another strict 10s...")
                                   try:
                                       opera_window.set_focus()
                                       opera_window.maximize()
@@ -501,24 +497,34 @@ jobs:
                               # Execute Keyboard actions exactly 10 seconds after visibility
                               if time.time() - opera_launched_time > 10:
                                   try:
-                                      opera_window.set_focus()
-                                  except Exception:
-                                      pass
-                                  time.sleep(1)
-
-                                  if is_gx_flow:
-                                      # --- OPERA GX Logic: Tab & Enter Sequence ---
-                                      print("[Opera GX] Starting TAB/ENTER automation flow...")
+                                      # Force Focus: Bring window to front
                                       try:
+                                          opera_window.set_focus()
+                                      except Exception:
+                                          pyautogui.press('alt') # Wake up Windows focus manager
+                                          time.sleep(0.5)
+                                          opera_window.set_focus()
+                                      
+                                      # Force Focus: Click physical center of the window so Chromium accepts keyboard inputs
+                                      rect = opera_window.rectangle()
+                                      center_x = rect.left + int(rect.width() / 2)
+                                      center_y = rect.top + int(rect.height() / 2)
+                                      pyautogui.click(center_x, center_y)
+                                      time.sleep(1)
+
+                                      if is_gx_flow:
+                                          # --- OPERA GX Logic: Tab & Enter Sequence ---
+                                          print("[Opera GX] Starting TAB/ENTER automation flow via PyAutoGUI...")
+                                          
                                           # Tab 4 times
                                           for _ in range(4):
-                                              send_keys('{TAB}')
+                                              pyautogui.press('tab')
                                               time.sleep(0.5)
                                           print("[Opera GX] Pressed TAB 4 times.")
 
                                           # Enter 8 times with 1-2s delay
                                           for i in range(8):
-                                              send_keys('{ENTER}')
+                                              pyautogui.press('enter')
                                               delay = random.uniform(1.0, 2.0)
                                               print(f"[Opera GX] Pressed ENTER ({i+1}/8), waiting {delay:.2f}s")
                                               time.sleep(delay)
@@ -526,38 +532,37 @@ jobs:
                                           # Tab random 4 to 10 times
                                           random_tabs = random.randint(4, 10)
                                           for _ in range(random_tabs):
-                                              send_keys('{TAB}')
+                                              pyautogui.press('tab')
                                               time.sleep(0.3)
                                           print(f"[Opera GX] Pressed TAB {random_tabs} times.")
 
                                           # Enter once to complete
-                                          send_keys('{ENTER}')
+                                          pyautogui.press('enter')
                                           print("[Opera GX] Pressed final ENTER.")
 
                                           opera_setup_completed = True
                                           print("[Opera GX] Setup automation successfully completed.")
-                                      except Exception as e:
-                                          print(f"[Opera GX] Error in TAB/ENTER flow: {e}")
-                                  
-                                  else:
-                                      # --- OPERA ONE Logic: Right Arrow Sequence ---
-                                      print("[Opera One] Starting RIGHT ARROW automation flow...")
-                                      try:
+                                      
+                                      else:
+                                          # --- OPERA ONE Logic: Right Arrow Sequence ---
+                                          print("[Opera One] Starting RIGHT ARROW automation flow via PyAutoGUI...")
+                                          
                                           # Right Arrow 10 times with 1-2s delay
                                           for i in range(10):
-                                              send_keys('{RIGHT}')
+                                              pyautogui.press('right')
                                               delay = random.uniform(1.0, 2.0)
                                               print(f"[Opera One] Sent RIGHT arrow ({i+1}/10), waiting {delay:.2f}s")
                                               time.sleep(delay)
                                           
                                           # Complete with Enter
-                                          send_keys('{ENTER}')
+                                          pyautogui.press('enter')
                                           print("[Opera One] Pressed ENTER.")
 
                                           opera_setup_completed = True
                                           print("[Opera One] Setup automation successfully completed.")
-                                      except Exception as e:
-                                          print(f"[Opera One] Error in RIGHT ARROW flow: {e}")
+                                  
+                                  except Exception as e:
+                                      print(f"[{software_type}] Error executing automation keyboard flow: {e}")
 
                   except Exception as e:
                       pass
@@ -622,7 +627,7 @@ jobs:
                       while ($locked) {
                           Start-Sleep -Seconds 2
                           try {
-                              $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
+                              $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
                               $s.Close()
                               $locked = $false
                           } catch { }
@@ -634,10 +639,10 @@ jobs:
                               Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
                               Write-Output "[$actualSoftware] Installer process finished."
                               
-                              # Create flag for Python script and initiate 90s delay
+                              # Create flag for Python script and initiate 100s delay
                               New-Item -Path $flagFile -ItemType File -Force | Out-Null
-                              Write-Output "[$actualSoftware] Initiating 90-second wait period as requested..."
-                              Start-Sleep -Seconds 90
+                              Write-Output "[$actualSoftware] Initiating 100-second wait period as requested..."
+                              Start-Sleep -Seconds 100
                           } else {
                               Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
                               Write-Output "[$actualSoftware] Installer process finished."
