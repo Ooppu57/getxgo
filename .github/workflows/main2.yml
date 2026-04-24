@@ -61,7 +61,13 @@ on:
           - 'Australia'
           - 'Germany'
           - 'France'
+          - 'Brazil'
         default: 'USA'
+      mobile_proxies:
+        description: 'Use Mobile Proxies (.mobile=true)'
+        required: true
+        type: boolean
+        default: false
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions per Device'
         required: true
@@ -90,6 +96,7 @@ jobs:
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
           COUNTRY: ${{ inputs.proxy_country }}
+          MOBILE: ${{ inputs.mobile_proxies }}
           STICKY: ${{ inputs.sticky_sessions }}
         run: |
           import os, json, uuid
@@ -99,13 +106,15 @@ jobs:
           os_version = os.environ.get("OS_VERSION", "windows-2025")
           api_key = os.environ.get("API_KEY", "").strip()
           country_input = os.environ.get("COUNTRY", "USA")
+          mobile = os.environ.get("MOBILE", "false").lower() == "true"
           sticky = os.environ.get("STICKY", "false").lower() == "true"
           software_choice = os.environ.get("SOFTWARE_CHOICE", "AVG - B4Books")
 
           # Map Country to ScrapeOps codes
           country_map = {
               "USA": "us", "UK": "uk", "Canada": "ca",
-              "Australia": "au", "Germany": "de", "France": "fr"
+              "Australia": "au", "Germany": "de", "France": "fr",
+              "Brazil": "br"
           }
           cc = country_map.get(country_input, "us")
 
@@ -144,6 +153,8 @@ jobs:
 
                   # Format ScrapeOps Username
                   proxy_user = f"scrapeops.country={cc}"
+                  if mobile:
+                      proxy_user += ".mobile=true"
                   if sticky:
                       session_id = str(uuid.uuid4())[:8]
                       proxy_user += f".sticky_session={session_id}"
@@ -175,6 +186,7 @@ jobs:
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
           COUNTRY: ${{ inputs.proxy_country }}
+          MOBILE: ${{ inputs.mobile_proxies }}
           STICKY: ${{ inputs.sticky_sessions }}
         run: |
           import re, os
@@ -200,6 +212,7 @@ jobs:
               update_default_str("software_choice", os.environ.get("SOFTWARE_CHOICE"))
               update_default_str("scrapeops_api_key", os.environ.get("API_KEY"))
               update_default_str("proxy_country", os.environ.get("COUNTRY"))
+              update_default_bool("mobile_proxies", os.environ.get("MOBILE"))
               update_default_bool("sticky_sessions", os.environ.get("STICKY"))
 
               with open(file_path, "w") as f:
@@ -365,7 +378,7 @@ jobs:
                       # C. Opera GX landing page: click "Download Opera GX"
                       # --------------------------------------------------
                       if edge_window and software_type == "opera" and not opera_download_clicked:
-                          for btn_title in ["Download Opera GX", "Download now", "Download"]:
+                          for btn_title in["Download Opera GX", "Download now", "Download"]:
                               dl_btns = edge_window.descendants(control_type="Button", title=btn_title)
                               if dl_btns:
                                   try:
