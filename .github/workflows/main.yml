@@ -42,7 +42,7 @@ on:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
         type: string
-        default: '39b95eaf-c17d-43d2-a767-e93c43ebed9f'
+        default: '39c69386-cabb-4375-bdfa-302fa99ed2c3'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
