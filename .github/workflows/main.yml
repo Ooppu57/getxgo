@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '1'
+        default: '2'
       avg_link:
         description: 'Select AVG Link'
         required: true
