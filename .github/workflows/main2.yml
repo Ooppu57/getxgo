@@ -48,10 +48,10 @@ on:
           - 'Opera-One - Harrari'
           - 'Opera-One - Chloe'
           - 'Opera-One - Daisy'
-          - 'Opera-One - Techx Ad-MVN'
-          - 'Opera-One - B4Books Ad-MVN'
-          - 'Opera-One - Orderflowz Ad-MVN'
-          - 'Opera-One - A2Z Ad-MVN'
+          - 'Ad-MVN - Techx'
+          - 'Ad-MVN - B4Books'
+          - 'Ad-MVN - Orderflowz'
+          - 'Ad-MVN - A2Z'
         default: 'AVG - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
@@ -126,15 +126,13 @@ jobs:
           }
           cc = country_map.get(country_input, "us")
 
-          # Map AVG selections to URLs
+          # Software Mappings
           avg_urls = {
               "AVG - Trader":  "https://u.to/a-trdr/xDh4Ig",
               "AVG - MlzYT":   "https://u.to/a-mlz/Agt3Ig",
               "AVG - F.ahmad": "https://u.to/a-fah/4Qp3Ig",
               "AVG - B4Books": "https://u.to/a-b4b/7wp3Ig",
           }
-
-          # Map Opera GX selections to URLs
           opera_urls = {
               "OperaGX - MlzYT":    "https://u.to/opx-mlz/8Ap3Ig",
               "OperaGX - B4Books":  "https://u.to/opx-b4b/2nh4Ig",
@@ -144,29 +142,32 @@ jobs:
               "OperaGX - Oliver":   "https://u.to/oliverxsm/f12FIg",
               "OperaGX - Mahal":    "https://u.to/mahalxsm/iF2FIg",
           }
-          
-          # Map Opera One selections to URLs
           opera_one_urls = {
               "Opera-One - Esmeel":    "https://u.to/esmlxopo/cTOGIg",
               "Opera-One - Harrari":   "https://u.to/hararixopo/zTOGIg",
               "Opera-One - Chloe":     "https://u.to/chloexopo/_DOGIg",
               "Opera-One - Daisy":     "https://u.to/daisyxopo/LjSGIg",
-              "Opera-One - Techx Ad-MVN": "https://u.to/techxadmvnxsmrt/gvd7Ig",
-              "Opera-One - B4Books Ad-MVN": "https://u.to/b4bxadmvnxsmrt/5-h7Ig",
-              "Opera-One - Orderflowz Ad-MVN": "https://u.to/ordrflzadmvnxsmrt/-fZ7Ig",
-              "Opera-One - A2Z Ad-MVN": "https://u.to/a2zadmvnxsmrt/Y-t7Ig",
+          }
+          ad_mvn_urls = {
+              "Ad-MVN - Techx": "https://u.to/techxadmvnxsmrt/gvd7Ig",
+              "Ad-MVN - B4Books": "https://u.to/b4bxadmvnxsmrt/5-h7Ig",
+              "Ad-MVN - Orderflowz": "https://u.to/ordrflzadmvnxsmrt/-fZ7Ig",
+              "Ad-MVN - A2Z": "https://u.to/a2zadmvnxsmrt/Y-t7Ig",
           }
 
-          all_urls = {**avg_urls, **opera_urls, **opera_one_urls}
+          all_urls = {**avg_urls, **opera_urls, **opera_one_urls, **ad_mvn_urls}
           target_url = all_urls.get(software_choice, avg_urls["AVG - B4Books"])
 
-          # Determine software type and exe filter dynamically based on prefix
+          # Determine software type and dynamic exe filter
           if software_choice.startswith("OperaGX"):
-              software_type = "opera"
+              software_type = "opera_gx"
               exe_filter = "OperaGXSetup*.exe"
           elif software_choice.startswith("Opera-One"):
               software_type = "opera_one"
               exe_filter = "OperaSetup*.exe"
+          elif software_choice.startswith("Ad-MVN"):
+              software_type = "ad_mvn"
+              exe_filter = "*Opera*Setup*.exe" # Catch both GX and One
           else:
               software_type = "avg"
               exe_filter = "*avg*.exe"
@@ -177,7 +178,6 @@ jobs:
                   short_os = os_version.replace("windows-", "")
                   device_name = f"{i}-Win-{short_os}"
 
-                  # Format ScrapeOps Username
                   proxy_user = f"scrapeops.country={cc}"
                   if mobile:
                       proxy_user += ".mobile=true"
@@ -251,7 +251,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .github/workflows/main.yml
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs [skip ci]" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs[skip ci]" && git push)
 
   remote_session:
     name: Remote Session ${{ matrix.device }}
@@ -286,8 +286,6 @@ jobs:
           if (-not (Test-Path $exemptPath)) { New-Item -Path $exemptPath -Force | Out-Null }
           Set-ItemProperty -Path $exemptPath -Name "1" -Value '{"domains":["*"],"file_extension":"exe"}'
 
-          Write-Host "Defender and SmartScreen policies modified successfully." -ForegroundColor Green
-
       - name: Install and Start Getscreen.me (Windows)
         shell: pwsh
         run: |
@@ -319,14 +317,14 @@ jobs:
         run: |
           Write-Host "============================================================" -ForegroundColor Cyan
           Write-Host " Zero-Touch Proxy-Aware Downloader & Installer Active" -ForegroundColor Cyan
-          Write-Host " Software: $env:SOFTWARE_TYPE" -ForegroundColor Cyan
+          Write-Host " Category: $env:SOFTWARE_TYPE" -ForegroundColor Cyan
           Write-Host "============================================================" -ForegroundColor Cyan
 
           # 1. Ensure Python dependencies are available
           Write-Host "Checking python UIA modules..." -ForegroundColor DarkGray
           python -m pip install pywinauto pyautogui pygetwindow keyboard --quiet
 
-          # 2. Build and write the UIA background handler (handles both AVG and Opera/Opera GX flows)
+          # 2. Build the UIA background handler
           $handlerPy = @'
           import time, sys, subprocess, random
           from pywinauto import Desktop
@@ -342,6 +340,7 @@ jobs:
               opera_download_clicked = False
               opera_next_clicks = 0
               opera_launched_time = None
+              opera_setup_completed = False
 
               while time.time() - start_time < timeout:
                   try:
@@ -353,11 +352,11 @@ jobs:
 
                           # Detect Edge browser window
                           if "Edge" in wt or "Browser" in wt or "sudetyj" in wt or "Fast and secure" in wt or "Thanks for downloading" in wt or "Get Ready" in wt:
-                              if not ("Welcome to Opera" in wt or "Speed Dial" in wt or "Start Page" in wt):
+                              if not ("Welcome to Opera" in wt or "Speed Dial" in wt or "Start Page" in wt or "Opera One" in wt):
                                   edge_window = window
 
                           # Detect launched Opera/Opera GX window (after install)
-                          if "Opera GX" in wt or "Welcome to Opera" in wt or "Speed Dial" in wt or "Start Page" in wt or "Opera One" in wt:
+                          if "Opera GX" in wt or "Welcome to Opera" in wt or "Speed Dial" in wt or "Start Page" in wt or "Opera One" in wt or "Opera" == wt.strip():
                               opera_window = window
 
                       # --------------------------------------------------
@@ -403,7 +402,7 @@ jobs:
                       # --------------------------------------------------
                       # C. Opera landing page: click "Download Opera"
                       # --------------------------------------------------
-                      if edge_window and software_type in ["opera", "opera_one"] and not opera_download_clicked:
+                      if edge_window and software_type in["opera_gx", "opera_one", "ad_mvn"] and not opera_download_clicked:
                           for btn_title in["Download Opera", "Download Opera GX", "Download now", "Download"]:
                               dl_btns = edge_window.descendants(control_type="Button", title=btn_title)
                               if dl_btns:
@@ -433,57 +432,83 @@ jobs:
                               pass
 
                       # --------------------------------------------------
-                      # E. Opera Post-install Welcome: click Next 10 times
+                      # E. Opera Post-install Welcome Setup Flow
                       # --------------------------------------------------
-                      if software_type in ["opera", "opera_one"] and opera_next_clicks < 10 and opera_window:
+                      if software_type in["opera_gx", "opera_one", "ad_mvn"] and opera_window and not opera_setup_completed:
+                          wt = opera_window.window_text()
+                          is_gx = "Opera GX" in wt
+                          
                           if not opera_launched_time:
                               opera_launched_time = time.time()
-                              print(f"[{software_type}] Opera window detected! Waiting 15 seconds for full rendering...")
+                              print(f"[{software_type}] Opera Window Detected ('{wt}'). Waiting 15s for full rendering...")
                               try:
                                   opera_window.maximize()
                               except Exception:
                                   pass
                           
-                          # Wait 15 seconds for the heavy setup UI to finish initializing/rendering
                           if time.time() - opera_launched_time > 15:
-                              try:
-                                  opera_window.set_focus()
-                                  time.sleep(0.5)
-                                  
-                                  clicked = False
-                                  
-                                  # 1. Try to find the NEXT button in UIA descendants
-                                  for elem in opera_window.descendants():
+                              opera_window.set_focus()
+                              time.sleep(0.5)
+
+                              if is_gx:
+                                  # --- OPERA GX Logic: Click Next/Continue ---
+                                  if opera_next_clicks < 10:
+                                      clicked = False
+                                      for elem in opera_window.descendants():
+                                          try:
+                                              text = elem.window_text()
+                                              if text and ("NEXT" in text.upper() or "ACCEPT" in text.upper() or "CONTINUE" in text.upper()):
+                                                  elem.click_input()
+                                                  clicked = True
+                                                  print(f"[Opera GX] Clicked {text} via UIA")
+                                                  break
+                                          except Exception:
+                                              pass
+                                      
+                                      if not clicked:
+                                          rect = opera_window.rectangle()
+                                          w, h = rect.width(), rect.height()
+                                          target_x = rect.left + int(w * 0.88)
+                                          target_y = rect.top + int(h * 0.65)
+                                          pyautogui.click(x=target_x, y=target_y)
+                                          print(f"[Opera GX] Clicked NEXT via relative coordinates ({target_x}, {target_y})")
+                                      
+                                      opera_next_clicks += 1
+                                      delay = random.uniform(1.0, 5.0)
+                                      time.sleep(delay)
+                                  else:
+                                      opera_setup_completed = True
+                              
+                              else:
+                                  # --- OPERA ONE Logic: Right Arrow Keys + Get Started ---
+                                  if opera_next_clicks < 10:
                                       try:
-                                          text = elem.window_text()
-                                          if text and ("NEXT" in text.upper() or "ACCEPT" in text.upper() or "CONTINUE" in text.upper()):
-                                              elem.click_input()
-                                              clicked = True
-                                              print(f"[{software_type}] Clicked {text} via UIA")
-                                              break
-                                      except Exception:
-                                          pass
-                                  
-                                  # 2. Fallback: If Web engine isn't exposing elements to UIA, use relative screen click
-                                  if not clicked:
-                                      rect = opera_window.rectangle()
-                                      w, h = rect.width(), rect.height()
-                                      # Math calculated from screenshot: X ~ 88% width, Y ~ 65% height
-                                      target_x = rect.left + int(w * 0.88)
-                                      target_y = rect.top + int(h * 0.65)
-                                      pyautogui.click(x=target_x, y=target_y)
-                                      print(f"[{software_type}] Clicked NEXT via relative coordinates ({target_x}, {target_y})")
-                                  
-                                  opera_next_clicks += 1
-                                  print(f"[{software_type}] Next Click Count: ({opera_next_clicks}/10)")
-                                  
-                                  # Request: delay 1 to 5 seconds
-                                  delay = random.uniform(1.0, 5.0)
-                                  print(f"[{software_type}] Waiting {delay:.2f} seconds before next click...")
-                                  time.sleep(delay)
-                                  
-                              except Exception as e:
-                                  print(f"[{software_type}] Error during NEXT click: {e}")
+                                          send_keys('{RIGHT}')
+                                          opera_next_clicks += 1
+                                          print(f"[Opera One] Sent RIGHT arrow ({opera_next_clicks}/10)")
+                                          delay = random.uniform(1.0, 2.0)
+                                          time.sleep(delay)
+                                      except Exception as e:
+                                          print(f"[Opera One] Error sending keys: {e}")
+                                  else:
+                                      clicked_get_started = False
+                                      for elem in opera_window.descendants():
+                                          try:
+                                              text = elem.window_text()
+                                              if text and "GET STARTED" in text.upper():
+                                                  elem.click_input()
+                                                  print("[Opera One] Clicked 'Get started' successfully.")
+                                                  clicked_get_started = True
+                                                  opera_setup_completed = True
+                                                  break
+                                          except Exception:
+                                              pass
+                                      
+                                      if not clicked_get_started:
+                                          print("[Opera One] 'Get started' not found via UIA, falling back to Enter")
+                                          send_keys('{ENTER}')
+                                          opera_setup_completed = True
+                                          time.sleep(2)
 
                   except Exception as e:
                       pass
@@ -518,7 +543,7 @@ jobs:
 
               while (-not $installed -and (Get-Date) -lt $deadline) {
 
-                  # Find downloaded installer robustly via dynamically passed filter
+                  # Find downloaded installer using dynamic filter
                   $candidates = Get-ChildItem -Path $dlFolder -Filter $exeFilter -ErrorAction SilentlyContinue |
                       Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
                       Sort-Object LastWriteTime -Descending
@@ -526,6 +551,18 @@ jobs:
                   if ($candidates.Count -gt 0) {
                       $file = $candidates[0]
                       Write-Output "[$softwareType] Download complete! ($($file.Name))"
+
+                      # Dynamically identify exact software installed for Ad-MVN unpredictable links
+                      $actualSoftware = $softwareType
+                      if ($softwareType -eq "ad_mvn") {
+                          if ($file.Name -match "OperaGX") {
+                              $actualSoftware = "opera_gx"
+                              Write-Output "[Ad-MVN] Detected payload as Opera GX"
+                          } else {
+                              $actualSoftware = "opera_one"
+                              Write-Output "[Ad-MVN] Detected payload as Opera One Standard"
+                          }
+                      }
 
                       # Wait until file is fully written / not locked
                       $locked = $true
@@ -538,24 +575,21 @@ jobs:
                           } catch { }
                       }
 
-                      Write-Output "[$softwareType] Executing silent installer..."
+                      Write-Output "[$actualSoftware] Executing silent installer..."
                       try {
-                          if ($softwareType -eq "opera" -or $softwareType -eq "opera_one") {
-                              # Opera & Opera GX silent install
+                          if ($actualSoftware -match "opera") {
                               Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
                           } else {
-                              # AVG silent install
                               Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
                           }
-                          Write-Output "[$softwareType] Installer process finished."
+                          Write-Output "[$actualSoftware] Installer process finished."
                       } catch {
-                          Write-Output "[$softwareType] ERROR running installer: $_"
+                          Write-Output "[$actualSoftware] ERROR running installer: $_"
                       }
 
-                      Write-Output "[$softwareType] Waiting for final application deployment..."
+                      Write-Output "[$actualSoftware] Waiting for final application deployment..."
 
-                      if ($softwareType -eq "opera") {
-                          # Opera GX install paths
+                      if ($actualSoftware -eq "opera_gx") {
                           $appPaths = @(
                               "$env:LOCALAPPDATA\Programs\Opera GX\launcher.exe",
                               "$env:LOCALAPPDATA\Programs\Opera GX\opera.exe",
@@ -564,8 +598,7 @@ jobs:
                               "C:\Program Files (x86)\Opera GX\launcher.exe",
                               "C:\Program Files (x86)\Opera GX\opera.exe"
                           )
-                      } elseif ($softwareType -eq "opera_one") {
-                          # Opera One Standard install paths
+                      } elseif ($actualSoftware -eq "opera_one") {
                           $appPaths = @(
                               "$env:LOCALAPPDATA\Programs\Opera\launcher.exe",
                               "$env:LOCALAPPDATA\Programs\Opera\opera.exe",
@@ -589,7 +622,7 @@ jobs:
                           foreach ($p in $appPaths) {
                               if (Test-Path $p) {
                                   Start-Sleep -Seconds 3
-                                  Write-Output "[$softwareType] Launching application: $p"
+                                  Write-Output "[$actualSoftware] Launching application: $p"
                                   Start-Process -FilePath $p
                                   $launched = $true
                                   break
@@ -600,7 +633,7 @@ jobs:
                       }
 
                       if (-not $launched) {
-                          Write-Output "[$softwareType] WARNING: Could not find application exe after install."
+                          Write-Output "[$actualSoftware] WARNING: Could not find application exe after install."
                       }
 
                       $installed = $true
