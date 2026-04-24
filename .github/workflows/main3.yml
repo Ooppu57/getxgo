@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '5'
+        default: '2'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -52,12 +52,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - James'
+        default: 'AVG - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
         type: string
-        default: 'aa45bf56-82fa-4af5-9c92-33d8910d9607 '
+        default: '003130d3-87e5-44f3-89de-466c0696b3f0'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -70,7 +70,7 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'Australia'
+        default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies (.mobile=true)'
         required: true
@@ -331,7 +331,6 @@ jobs:
           import pyautogui
           from pywinauto.keyboard import send_keys
 
-          # ---------------------------------------------------------------
           # Helper: robustly check if an Opera One setup wizard page is
           # actually rendered and interactive by looking for known text
           # anchors that appear on each slide of the onboarding wizard.
@@ -859,7 +858,7 @@ jobs:
               $edgeExe = "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
           }
 
-          $proxyServer = "residential-proxy.scrapeops.io:8181"
+          $proxyHost = "residential-proxy.scrapeops.io:8181"
 
           $edgeArgs = @(
               "--no-first-run",
@@ -870,11 +869,30 @@ jobs:
           )
 
           if ($env:PROXY_PASS -ne "") {
-              $edgeArgs += "--proxy-server=`"http://$proxyServer`""
+              # Embed credentials directly in the proxy URL so Edge pre-authenticates
+              # the CONNECT tunnel for EVERY request including short-links (u.to etc.).
+              # This is the correct fix for ERR_TUNNEL_CONNECTION_FAILED — the error
+              # occurs because Edge sends unauthenticated CONNECT which the ScrapeOps
+              # proxy rejects. With creds in the URL, the tunnel is authorised upfront
+              # and all URLs — short-links, redirects, CDN downloads — go through the
+              # proxy without any error or bypass needed.
+              $encodedUser = [Uri]::EscapeDataString($env:PROXY_USER)
+              $encodedPass = [Uri]::EscapeDataString($env:PROXY_PASS)
+              $proxyWithCreds = "http://${encodedUser}:${encodedPass}@${proxyHost}"
+              $edgeArgs += "--proxy-server=`"$proxyWithCreds`""
+
+              # Also set proxy via registry (WinInet) so that any process spawned by
+              # Edge (e.g. the installer self-updater) also routes through the proxy.
+              $regProxy = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+              Set-ItemProperty -Path $regProxy -Name "ProxyEnable"  -Value 1
+              Set-ItemProperty -Path $regProxy -Name "ProxyServer"  -Value $proxyHost
+              Set-ItemProperty -Path $regProxy -Name "ProxyOverride" -Value "localhost;127.0.0.1;<local>"
+              Write-Host "WinInet proxy set: $proxyHost" -ForegroundColor DarkGray
           }
           $edgeArgs += "`"$env:TARGET_URL`""
 
-          Write-Host "Launching Edge with Proxy -> $env:TARGET_URL" -ForegroundColor Cyan
+          Write-Host "Launching Edge -> $env:TARGET_URL" -ForegroundColor Cyan
+          Write-Host "All traffic (short-links + downloads) tunneled via proxy." -ForegroundColor DarkGray
           Start-Process -FilePath $edgeExe -ArgumentList ($edgeArgs -join " ")
 
           # 5. Monitor Output of Background Job
