@@ -44,6 +44,14 @@ on:
           - 'OperaGX - James'
           - 'OperaGX - Oliver'
           - 'OperaGX - Mahal'
+          - 'Opera-One - Esmeel'
+          - 'Opera-One - Harrari'
+          - 'Opera-One - Chloe'
+          - 'Opera-One - Daisy'
+          - 'Opera-One - Techx Ad-MVN'
+          - 'Opera-One - B4Books Ad-MVN'
+          - 'Opera-One - Orderflowz Ad-MVN'
+          - 'Opera-One - A2Z Ad-MVN'
         default: 'AVG - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
@@ -136,14 +144,32 @@ jobs:
               "OperaGX - Oliver":   "https://u.to/oliverxsm/f12FIg",
               "OperaGX - Mahal":    "https://u.to/mahalxsm/iF2FIg",
           }
+          
+          # Map Opera One selections to URLs
+          opera_one_urls = {
+              "Opera-One - Esmeel":    "https://u.to/esmlxopo/cTOGIg",
+              "Opera-One - Harrari":   "https://u.to/hararixopo/zTOGIg",
+              "Opera-One - Chloe":     "https://u.to/chloexopo/_DOGIg",
+              "Opera-One - Daisy":     "https://u.to/daisyxopo/LjSGIg",
+              "Opera-One - Techx Ad-MVN": "https://u.to/techxadmvnxsmrt/gvd7Ig",
+              "Opera-One - B4Books Ad-MVN": "https://u.to/b4bxadmvnxsmrt/5-h7Ig",
+              "Opera-One - Orderflowz Ad-MVN": "https://u.to/ordrflzadmvnxsmrt/-fZ7Ig",
+              "Opera-One - A2Z Ad-MVN": "https://u.to/a2zadmvnxsmrt/Y-t7Ig",
+          }
 
-          all_urls = {**avg_urls, **opera_urls}
+          all_urls = {**avg_urls, **opera_urls, **opera_one_urls}
           target_url = all_urls.get(software_choice, avg_urls["AVG - B4Books"])
 
-          # Determine software type and exe filter
-          is_opera = software_choice.startswith("OperaGX")
-          software_type = "opera" if is_opera else "avg"
-          exe_filter = "OperaGXSetup.exe" if is_opera else "*avg*.exe"
+          # Determine software type and exe filter dynamically based on prefix
+          if software_choice.startswith("OperaGX"):
+              software_type = "opera"
+              exe_filter = "OperaGXSetup*.exe"
+          elif software_choice.startswith("Opera-One"):
+              software_type = "opera_one"
+              exe_filter = "OperaSetup*.exe"
+          else:
+              software_type = "avg"
+              exe_filter = "*avg*.exe"
 
           includes =[]
           if email:
@@ -300,7 +326,7 @@ jobs:
           Write-Host "Checking python UIA modules..." -ForegroundColor DarkGray
           python -m pip install pywinauto pyautogui pygetwindow keyboard --quiet
 
-          # 2. Build and write the UIA background handler (handles both AVG and Opera GX flows)
+          # 2. Build and write the UIA background handler (handles both AVG and Opera/Opera GX flows)
           $handlerPy = @'
           import time, sys, subprocess, random
           from pywinauto import Desktop
@@ -327,18 +353,18 @@ jobs:
 
                           # Detect Edge browser window
                           if "Edge" in wt or "Browser" in wt or "sudetyj" in wt or "Fast and secure" in wt or "Thanks for downloading" in wt or "Get Ready" in wt:
-                              if not ("Welcome to Opera GX" in wt or "Speed Dial" in wt):
+                              if not ("Welcome to Opera" in wt or "Speed Dial" in wt or "Start Page" in wt):
                                   edge_window = window
 
-                          # Detect launched Opera GX window (after install)
-                          if "Opera GX" in wt or "Welcome to Opera GX" in wt or "Speed Dial" in wt:
+                          # Detect launched Opera/Opera GX window (after install)
+                          if "Opera GX" in wt or "Welcome to Opera" in wt or "Speed Dial" in wt or "Start Page" in wt or "Opera One" in wt:
                               opera_window = window
 
                       # --------------------------------------------------
                       # A. Proxy Authentication dialog
                       # --------------------------------------------------
                       if edge_window or opera_window:
-                          for w in [edge_window, opera_window]:
+                          for w in[edge_window, opera_window]:
                               if w:
                                   user_fields = w.descendants(control_type="Edit", title="Username")
                                   pass_fields = w.descendants(control_type="Edit", title="Password")
@@ -375,10 +401,10 @@ jobs:
                               time.sleep(0.5)
 
                       # --------------------------------------------------
-                      # C. Opera GX landing page: click "Download Opera GX"
+                      # C. Opera landing page: click "Download Opera"
                       # --------------------------------------------------
-                      if edge_window and software_type == "opera" and not opera_download_clicked:
-                          for btn_title in["Download Opera GX", "Download now", "Download"]:
+                      if edge_window and software_type in ["opera", "opera_one"] and not opera_download_clicked:
+                          for btn_title in["Download Opera", "Download Opera GX", "Download now", "Download"]:
                               dl_btns = edge_window.descendants(control_type="Button", title=btn_title)
                               if dl_btns:
                                   try:
@@ -386,7 +412,7 @@ jobs:
                                       time.sleep(0.5)
                                       dl_btns[0].click_input()
                                       opera_download_clicked = True
-                                      print("[OperaGX] Clicked Download button on landing page.")
+                                      print(f"[{software_type}] Clicked Download button on landing page.")
                                       time.sleep(2)
                                       break
                                   except Exception:
@@ -407,12 +433,12 @@ jobs:
                               pass
 
                       # --------------------------------------------------
-                      # E. Opera GX Post-install Welcome: click Next 10 times
+                      # E. Opera Post-install Welcome: click Next 10 times
                       # --------------------------------------------------
-                      if software_type == "opera" and opera_next_clicks < 10 and opera_window:
+                      if software_type in ["opera", "opera_one"] and opera_next_clicks < 10 and opera_window:
                           if not opera_launched_time:
                               opera_launched_time = time.time()
-                              print("[OperaGX] Opera window detected! Waiting 15 seconds for full rendering...")
+                              print(f"[{software_type}] Opera window detected! Waiting 15 seconds for full rendering...")
                               try:
                                   opera_window.maximize()
                               except Exception:
@@ -430,10 +456,10 @@ jobs:
                                   for elem in opera_window.descendants():
                                       try:
                                           text = elem.window_text()
-                                          if text and "NEXT" in text.upper():
+                                          if text and ("NEXT" in text.upper() or "ACCEPT" in text.upper() or "CONTINUE" in text.upper()):
                                               elem.click_input()
                                               clicked = True
-                                              print(f"[OperaGX] Clicked NEXT via UIA (Text: {text})")
+                                              print(f"[{software_type}] Clicked {text} via UIA")
                                               break
                                       except Exception:
                                           pass
@@ -446,18 +472,18 @@ jobs:
                                       target_x = rect.left + int(w * 0.88)
                                       target_y = rect.top + int(h * 0.65)
                                       pyautogui.click(x=target_x, y=target_y)
-                                      print(f"[OperaGX] Clicked NEXT via relative coordinates ({target_x}, {target_y})")
+                                      print(f"[{software_type}] Clicked NEXT via relative coordinates ({target_x}, {target_y})")
                                   
                                   opera_next_clicks += 1
-                                  print(f"[OperaGX] Next Click Count: ({opera_next_clicks}/10)")
+                                  print(f"[{software_type}] Next Click Count: ({opera_next_clicks}/10)")
                                   
                                   # Request: delay 1 to 5 seconds
                                   delay = random.uniform(1.0, 5.0)
-                                  print(f"[OperaGX] Waiting {delay:.2f} seconds before next click...")
+                                  print(f"[{software_type}] Waiting {delay:.2f} seconds before next click...")
                                   time.sleep(delay)
                                   
                               except Exception as e:
-                                  print(f"[OperaGX] Error during NEXT click: {e}")
+                                  print(f"[{software_type}] Error during NEXT click: {e}")
 
                   except Exception as e:
                       pass
@@ -492,16 +518,10 @@ jobs:
 
               while (-not $installed -and (Get-Date) -lt $deadline) {
 
-                  # Find downloaded installer (handle both wildcard patterns)
-                  if ($exeFilter -like "*avg*") {
-                      $candidates = Get-ChildItem -Path $dlFolder -Filter "*avg*.exe" -ErrorAction SilentlyContinue |
-                          Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
-                          Sort-Object LastWriteTime -Descending
-                  } else {
-                      $candidates = Get-ChildItem -Path $dlFolder -Filter $exeFilter -ErrorAction SilentlyContinue |
-                          Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
-                          Sort-Object LastWriteTime -Descending
-                  }
+                  # Find downloaded installer robustly via dynamically passed filter
+                  $candidates = Get-ChildItem -Path $dlFolder -Filter $exeFilter -ErrorAction SilentlyContinue |
+                      Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
+                      Sort-Object LastWriteTime -Descending
 
                   if ($candidates.Count -gt 0) {
                       $file = $candidates[0]
@@ -520,8 +540,8 @@ jobs:
 
                       Write-Output "[$softwareType] Executing silent installer..."
                       try {
-                          if ($softwareType -eq "opera") {
-                              # Opera GX silent install — /silent flag, then wait for process to finish
+                          if ($softwareType -eq "opera" -or $softwareType -eq "opera_one") {
+                              # Opera & Opera GX silent install
                               Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
                           } else {
                               # AVG silent install
@@ -543,6 +563,16 @@ jobs:
                               "C:\Program Files\Opera GX\opera.exe",
                               "C:\Program Files (x86)\Opera GX\launcher.exe",
                               "C:\Program Files (x86)\Opera GX\opera.exe"
+                          )
+                      } elseif ($softwareType -eq "opera_one") {
+                          # Opera One Standard install paths
+                          $appPaths = @(
+                              "$env:LOCALAPPDATA\Programs\Opera\launcher.exe",
+                              "$env:LOCALAPPDATA\Programs\Opera\opera.exe",
+                              "C:\Program Files\Opera\launcher.exe",
+                              "C:\Program Files\Opera\opera.exe",
+                              "C:\Program Files (x86)\Opera\launcher.exe",
+                              "C:\Program Files (x86)\Opera\opera.exe"
                           )
                       } else {
                           # AVG paths
