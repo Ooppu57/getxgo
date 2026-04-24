@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '5'
+        default: '2'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -52,12 +52,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - James'
+        default: 'AVG - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
         type: string
-        default: 'fc437c30-174d-4e18-a66e-0ac022d06b71'
+        default: '003130d3-87e5-44f3-89de-466c0696b3f0'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -257,7 +257,7 @@ jobs:
     name: Remote Session ${{ matrix.device }}
     needs: prepare_matrix
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 10
 
     strategy:
       fail-fast: false
@@ -730,7 +730,7 @@ jobs:
 
           # 3. Setup the Software Watcher/Installer background job
           $dlFolder     = "$env:USERPROFILE\Downloads"
-          $timeoutSecs  = 55 * 60
+          $timeoutSecs  = 9 * 60
           $softwareType = $env:SOFTWARE_TYPE
           $exeFilter    = $env:EXE_FILTER
           $proxyUser    = $env:PROXY_USER
@@ -893,4 +893,4 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Session is active. Runner stays online until job timeout."
-          Start-Sleep -Seconds 3600
+          Start-Sleep -Seconds 600
