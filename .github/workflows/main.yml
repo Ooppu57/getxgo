@@ -37,7 +37,7 @@ on:
           - 'MlzYT'
           - 'F.ahmad'
           - 'B4Books'
-        default: 'MlzYT'
+        default: 'F.ahmad'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
