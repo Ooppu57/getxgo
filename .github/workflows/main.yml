@@ -11,7 +11,7 @@ on:
           - 'windows-2025'
           - 'windows-2022'
           - 'windows-11-arm'
-        default: 'windows-2025'
+        default: 'windows-2022'
       getscreen_email:
         description: 'Getscreen.me Account Email'
         required: true
@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '1'
+        default: '2'
       avg_link:
         description: 'Select AVG Link'
         required: true
