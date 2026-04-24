@@ -351,7 +351,7 @@ jobs:
                           wt = window.window_text()
 
                           # Detect Edge browser window
-                          if "Edge" in wt or "Browser" in wt or "sudetyj" in wt or "Fast and secure" in wt or "Thanks for downloading" in wt or "Get Ready" in wt:
+                          if "Edge" in wt or "Browser" in wt or "sudetyj" in wt or "Fast and secure" in wt or "Thanks for downloading" in wt or "Get Ready" in wt or "Chrome Web Store" in wt:
                               if not ("Welcome to Opera" in wt or "Speed Dial" in wt or "Start Page" in wt or "Opera One" in wt):
                                   edge_window = window
 
@@ -363,7 +363,7 @@ jobs:
                       # A. Proxy Authentication dialog
                       # --------------------------------------------------
                       if edge_window or opera_window:
-                          for w in[edge_window, opera_window]:
+                          for w in [edge_window, opera_window]:
                               if w:
                                   user_fields = w.descendants(control_type="Edit", title="Username")
                                   pass_fields = w.descendants(control_type="Edit", title="Password")
@@ -403,7 +403,7 @@ jobs:
                       # C. Opera landing page: click "Download Opera"
                       # --------------------------------------------------
                       if edge_window and software_type in["opera_gx", "opera_one", "ad_mvn"] and not opera_download_clicked:
-                          for btn_title in["Download Opera", "Download Opera GX", "Download now", "Download"]:
+                          for btn_title in ["Download Opera", "Download Opera GX", "Download now", "Download"]:
                               dl_btns = edge_window.descendants(control_type="Button", title=btn_title)
                               if dl_btns:
                                   try:
@@ -418,7 +418,37 @@ jobs:
                                       pass
 
                       # --------------------------------------------------
-                      # D. Ctrl+J to open downloads flyout
+                      # D. Browser Extensions Handling (Add to Chrome / Edge)
+                      # --------------------------------------------------
+                      if edge_window:
+                          # 1. Check for the confirmation popup first (Add extension)
+                          add_ext_btns = edge_window.descendants(control_type="Button", title="Add extension")
+                          if add_ext_btns:
+                              try:
+                                  edge_window.set_focus()
+                                  time.sleep(0.5)
+                                  add_ext_btns[0].click_input()
+                                  print("[Extension] Clicked 'Add extension' confirmation.")
+                                  time.sleep(2)
+                              except Exception:
+                                  pass
+                          else:
+                              # 2. Check for 'Add to Chrome' or 'Get' on the Web Store page
+                              for btn_name in["Add to Chrome", "Get"]:
+                                  install_btns = edge_window.descendants(control_type="Button", title=btn_name)
+                                  if install_btns:
+                                      try:
+                                          edge_window.set_focus()
+                                          time.sleep(0.5)
+                                          install_btns[0].click_input()
+                                          print(f"[Extension] Clicked '{btn_name}' on web store.")
+                                          time.sleep(2)
+                                          break
+                                      except Exception:
+                                          pass
+
+                      # --------------------------------------------------
+                      # E. Ctrl+J to open downloads flyout
                       # --------------------------------------------------
                       if not keep_clicked and edge_window and (time.time() - last_ctrl_j_time > 15) and ctrl_j_attempts < 4:
                           try:
@@ -432,7 +462,7 @@ jobs:
                               pass
 
                       # --------------------------------------------------
-                      # E. Opera Post-install Welcome Setup Flow
+                      # F. Opera Post-install Welcome Setup Flow
                       # --------------------------------------------------
                       if software_type in["opera_gx", "opera_one", "ad_mvn"] and opera_window and not opera_setup_completed:
                           wt = opera_window.window_text()
@@ -451,10 +481,12 @@ jobs:
                               time.sleep(0.5)
 
                               if is_gx:
-                                  # --- OPERA GX Logic: Click Next/Continue ---
+                                  # --- OPERA GX Logic: Click Next/Continue 10 times ---
                                   if opera_next_clicks < 10:
                                       clicked = False
-                                      for elem in opera_window.descendants():
+                                      
+                                      # 1. Search for clickable UI buttons
+                                      for elem in opera_window.descendants(control_type="Button"):
                                           try:
                                               text = elem.window_text()
                                               if text and ("NEXT" in text.upper() or "ACCEPT" in text.upper() or "CONTINUE" in text.upper()):
@@ -465,16 +497,22 @@ jobs:
                                           except Exception:
                                               pass
                                       
+                                      # 2. Fallback: Coordinate click (X: 88%, Y: 65%)
                                       if not clicked:
-                                          rect = opera_window.rectangle()
-                                          w, h = rect.width(), rect.height()
-                                          target_x = rect.left + int(w * 0.88)
-                                          target_y = rect.top + int(h * 0.65)
-                                          pyautogui.click(x=target_x, y=target_y)
-                                          print(f"[Opera GX] Clicked NEXT via relative coordinates ({target_x}, {target_y})")
+                                          try:
+                                              rect = opera_window.rectangle()
+                                              w, h = rect.width(), rect.height()
+                                              target_x = rect.left + int(w * 0.88)
+                                              target_y = rect.top + int(h * 0.65)
+                                              pyautogui.click(x=target_x, y=target_y)
+                                              print(f"[Opera GX] Clicked NEXT via relative coordinates ({target_x}, {target_y})")
+                                          except Exception as e:
+                                              print(f"[Opera GX] Error in coordinate click: {e}")
                                       
                                       opera_next_clicks += 1
-                                      delay = random.uniform(1.0, 5.0)
+                                      # Enforced 1 to 2 seconds delay as requested
+                                      delay = random.uniform(1.0, 2.0)
+                                      print(f"[Opera GX] Next Click Count: ({opera_next_clicks}/10) - Waiting {delay:.2f}s")
                                       time.sleep(delay)
                                   else:
                                       opera_setup_completed = True
@@ -569,7 +607,7 @@ jobs:
                       while ($locked) {
                           Start-Sleep -Seconds 2
                           try {
-                              $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
+                              $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
                               $s.Close()
                               $locked = $false
                           } catch { }
