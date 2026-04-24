@@ -28,28 +28,28 @@ on:
           - '4'
           - '5'
         default: '2'
-      software_link:
-        description: 'Select Software Link'
+      software_choice:
+        description: 'Select Software & Link'
         required: true
         type: choice
         options:
-          - 'AVG-Trader'
-          - 'AVG-MlzYT'
-          - 'AVG-F.ahmad'
-          - 'AVG-B4Books'
-          - 'OperaGX-MlzYT'
-          - 'OperaGX-B4Books'
-          - 'OperaGX-Techx'
-          - 'OperaGX-Fatradez'
-          - 'OperaGX-James'
-          - 'OperaGX-Oliver'
-          - 'OperaGX-Mahal'
-        default: 'OperaGX-MlzYT'
+          - 'AVG - Trader'
+          - 'AVG - MlzYT'
+          - 'AVG - F.ahmad'
+          - 'AVG - B4Books'
+          - 'OperaGX - MlzYT'
+          - 'OperaGX - B4Books'
+          - 'OperaGX - Techx'
+          - 'OperaGX - Fatradez'
+          - 'OperaGX - James'
+          - 'OperaGX - Oliver'
+          - 'OperaGX - Mahal'
+        default: 'AVG - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
         type: string
-        default: '6408ddb9-d4f4-4ae9-9529-bace9a8247cc'
+        default: '003130d3-87e5-44f3-89de-466c0696b3f0'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -87,55 +87,65 @@ jobs:
           EMAIL: ${{ inputs.getscreen_email }}
           NUM_DEVICES: ${{ inputs.num_devices }}
           OS_VERSION: ${{ inputs.os_version }}
-          SOFTWARE_LINK: ${{ inputs.software_link }}
+          SOFTWARE_CHOICE: ${{ inputs.software_choice }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
           COUNTRY: ${{ inputs.proxy_country }}
           STICKY: ${{ inputs.sticky_sessions }}
         run: |
           import os, json, uuid
-          
+
           email = os.environ.get("EMAIL", "").strip()
           num_devices = int(os.environ.get("NUM_DEVICES", "1"))
           os_version = os.environ.get("OS_VERSION", "windows-2025")
           api_key = os.environ.get("API_KEY", "").strip()
           country_input = os.environ.get("COUNTRY", "USA")
           sticky = os.environ.get("STICKY", "false").lower() == "true"
-          software_choice = os.environ.get("SOFTWARE_LINK", "AVG-Trader")
-          
+          software_choice = os.environ.get("SOFTWARE_CHOICE", "AVG - B4Books")
+
           # Map Country to ScrapeOps codes
           country_map = {
               "USA": "us", "UK": "uk", "Canada": "ca",
               "Australia": "au", "Germany": "de", "France": "fr"
           }
           cc = country_map.get(country_input, "us")
-          
-          # Map selections to URLs and Software Types
-          urls = {
-              "AVG-Trader":       {"url": "https://u.to/a-trdr/xDh4Ig",     "type": "AVG",     "filter": "*avg*.exe"},
-              "AVG-MlzYT":        {"url": "https://u.to/a-mlz/Agt3Ig",      "type": "AVG",     "filter": "*avg*.exe"},
-              "AVG-F.ahmad":      {"url": "https://u.to/a-fah/4Qp3Ig",      "type": "AVG",     "filter": "*avg*.exe"},
-              "AVG-B4Books":      {"url": "https://u.to/a-b4b/7wp3Ig",      "type": "AVG",     "filter": "*avg*.exe"},
-              "OperaGX-MlzYT":    {"url": "https://u.to/opx-mlz/8Ap3Ig",    "type": "OperaGX", "filter": "OperaGXSetup.exe"},
-              "OperaGX-B4Books":  {"url": "https://u.to/opx-b4b/2nh4Ig",    "type": "OperaGX", "filter": "OperaGXSetup.exe"},
-              "OperaGX-Techx":    {"url": "https://u.to/techxsm/xVyFIg",    "type": "OperaGX", "filter": "OperaGXSetup.exe"},
-              "OperaGX-Fatradez": {"url": "https://u.to/fatradezsm/cF2FIg", "type": "OperaGX", "filter": "OperaGXSetup.exe"},
-              "OperaGX-James":    {"url": "https://u.to/jamesxsm/eV2FIg",   "type": "OperaGX", "filter": "OperaGXSetup.exe"},
-              "OperaGX-Oliver":   {"url": "https://u.to/oliverxsm/f12FIg",  "type": "OperaGX", "filter": "OperaGXSetup.exe"},
-              "OperaGX-Mahal":    {"url": "https://u.to/mahalxsm/iF2FIg",   "type": "OperaGX", "filter": "OperaGXSetup.exe"}
-          }
-          
-          target_soft = urls.get(software_choice, urls["AVG-Trader"])
 
-          includes =[]
+          # Map AVG selections to URLs
+          avg_urls = {
+              "AVG - Trader":  "https://u.to/a-trdr/xDh4Ig",
+              "AVG - MlzYT":   "https://u.to/a-mlz/Agt3Ig",
+              "AVG - F.ahmad": "https://u.to/a-fah/4Qp3Ig",
+              "AVG - B4Books": "https://u.to/a-b4b/7wp3Ig",
+          }
+
+          # Map Opera GX selections to URLs
+          opera_urls = {
+              "OperaGX - MlzYT":    "https://u.to/opx-mlz/8Ap3Ig",
+              "OperaGX - B4Books":  "https://u.to/opx-b4b/2nh4Ig",
+              "OperaGX - Techx":    "https://u.to/techxsm/xVyFIg",
+              "OperaGX - Fatradez": "https://u.to/fatradezsm/cF2FIg",
+              "OperaGX - James":    "https://u.to/jamesxsm/eV2FIg",
+              "OperaGX - Oliver":   "https://u.to/oliverxsm/f12FIg",
+              "OperaGX - Mahal":    "https://u.to/mahalxsm/iF2FIg",
+          }
+
+          all_urls = {**avg_urls, **opera_urls}
+          target_url = all_urls.get(software_choice, avg_urls["AVG - B4Books"])
+
+          # Determine software type and exe filter
+          is_opera = software_choice.startswith("OperaGX")
+          software_type = "opera" if is_opera else "avg"
+          exe_filter = "OperaGXSetup.exe" if is_opera else "*avg*.exe"
+
+          includes = []
           if email:
               for i in range(1, num_devices + 1):
                   short_os = os_version.replace("windows-", "")
                   device_name = f"{i}-Win-{short_os}"
-                  
+
                   # Format ScrapeOps Username
                   proxy_user = f"scrapeops.country={cc}"
                   if sticky:
-                      session_id = str(uuid.uuid4())[:8] # Unique 8-char string per parallel runner
+                      session_id = str(uuid.uuid4())[:8]
                       proxy_user += f".sticky_session={session_id}"
 
                   includes.append({
@@ -144,9 +154,9 @@ jobs:
                       "os": os_version,
                       "proxy_user": proxy_user,
                       "proxy_pass": api_key,
-                      "soft_url": target_soft["url"],
-                      "soft_type": target_soft["type"],
-                      "soft_filter": target_soft["filter"]
+                      "target_url": target_url,
+                      "software_type": software_type,
+                      "exe_filter": exe_filter,
                   })
 
           if not includes:
@@ -162,14 +172,14 @@ jobs:
           OS_VERSION: ${{ inputs.os_version }}
           GETSCREEN_EMAIL: ${{ inputs.getscreen_email }}
           NUM_DEVICES: ${{ inputs.num_devices }}
-          SOFTWARE_LINK: ${{ inputs.software_link }}
+          SOFTWARE_CHOICE: ${{ inputs.software_choice }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
           COUNTRY: ${{ inputs.proxy_country }}
           STICKY: ${{ inputs.sticky_sessions }}
         run: |
           import re, os
           file_path = ".github/workflows/main.yml"
-          
+
           if os.path.exists(file_path):
               with open(file_path, "r") as f:
                   content = f.read()
@@ -178,7 +188,7 @@ jobs:
                   global content
                   pattern = r"(" + input_name + r":[\s\S]*?default:\s*')[^']*(')"
                   content = re.sub(pattern, rf"\g<1>{new_val}\g<2>", content, count=1)
-              
+
               def update_default_bool(input_name, new_val):
                   global content
                   pattern = r"(" + input_name + r":[\s\S]*?default:\s*)(true|false)"
@@ -187,7 +197,7 @@ jobs:
               update_default_str("os_version", os.environ.get("OS_VERSION"))
               update_default_str("getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
               update_default_str("num_devices", os.environ.get("NUM_DEVICES"))
-              update_default_str("software_link", os.environ.get("SOFTWARE_LINK"))
+              update_default_str("software_choice", os.environ.get("SOFTWARE_CHOICE"))
               update_default_str("scrapeops_api_key", os.environ.get("API_KEY"))
               update_default_str("proxy_country", os.environ.get("COUNTRY"))
               update_default_bool("sticky_sessions", os.environ.get("STICKY"))
@@ -223,7 +233,7 @@ jobs:
           Set-MpPreference -PUAProtection 0 -ErrorAction SilentlyContinue
           Set-MpPreference -DisableBlockAtFirstSeen $true -ErrorAction SilentlyContinue
           Set-MpPreference -DisableIOAVProtection $true -ErrorAction SilentlyContinue
-          
+
           # Complete Edge policy override to prevent exe block popups
           $edgePolicy = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
           if (-not (Test-Path $edgePolicy)) { New-Item -Path $edgePolicy -Force | Out-Null }
@@ -232,11 +242,11 @@ jobs:
           Set-ItemProperty -Path $edgePolicy -Name "DownloadRestrictions" -Value 0
           Set-ItemProperty -Path $edgePolicy -Name "PreventSmartScreenPromptOverride" -Value 0
           Set-ItemProperty -Path $edgePolicy -Name "PreventSmartScreenPromptOverrideForFiles" -Value 0
-          
+
           $exemptPath = "$edgePolicy\ExemptDomainFileTypePairsFromFileTypeDownloadWarnings"
           if (-not (Test-Path $exemptPath)) { New-Item -Path $exemptPath -Force | Out-Null }
           Set-ItemProperty -Path $exemptPath -Name "1" -Value '{"domains":["*"],"file_extension":"exe"}'
-          
+
           Write-Host "Defender and SmartScreen policies modified successfully." -ForegroundColor Green
 
       - name: Install and Start Getscreen.me (Windows)
@@ -264,93 +274,276 @@ jobs:
         env:
           PROXY_USER: ${{ matrix.proxy_user }}
           PROXY_PASS: ${{ matrix.proxy_pass }}
-          SOFT_URL: ${{ matrix.soft_url }}
-          SOFT_TYPE: ${{ matrix.soft_type }}
-          SOFT_FILTER: ${{ matrix.soft_filter }}
+          TARGET_URL: ${{ matrix.target_url }}
+          SOFTWARE_TYPE: ${{ matrix.software_type }}
+          EXE_FILTER: ${{ matrix.exe_filter }}
         run: |
           Write-Host "============================================================" -ForegroundColor Cyan
           Write-Host " Zero-Touch Proxy-Aware Downloader & Installer Active" -ForegroundColor Cyan
-          Write-Host " Targeting: $env:SOFT_TYPE" -ForegroundColor Green
+          Write-Host " Software: $env:SOFTWARE_TYPE" -ForegroundColor Cyan
           Write-Host "============================================================" -ForegroundColor Cyan
 
           # 1. Ensure Python dependencies are available
           Write-Host "Checking python UIA modules..." -ForegroundColor DarkGray
           python -m pip install pywinauto pyautogui pygetwindow keyboard --quiet
 
-          # 2. Start Fileless Background loop (Proxy, SmartScreen, and Web Downloads)
-          Write-Host "Starting UIA Background Automation Handler..." -ForegroundColor Cyan
-          $b64Proxy = "aW1wb3J0IHRpbWUsIHN5cwpmcm9tIHB5d2luYXV0byBpbXBvcnQgRGVza3RvcApmcm9tIHB5d2luYXV0by5rZXlib2FyZCBpbXBvcnQgc2VuZF9rZXlzCgpkZWYgaGFuZGxlX2F1dG9tYXRpb24odXNlcm5hbWUsIHBhc3N3b3JkLCB0aW1lb3V0PTYwMCk6CiAgICBkZXNrdG9wID0gRGVza3RvcChiYWNrZW5kPSJ1aWEiKQogICAgc3RhcnRfdGltZSA9IHRpbWUudGltZSgpCiAgICBsYXN0X2N0cmxfal90aW1lID0gdGltZS50aW1lKCkKICAgIGN0cmxfal9hdHRlbXB0cyA9IDAKICAgIGtlZXBfY2xpY2tlZCA9IEZhbHNlCiAgICBvcGVyYV9kbF9jbGlja2VkID0gRmFsc2UKCiAgICB3aGlsZSB0aW1lLnRpbWUoKSAtIHN0YXJ0X3RpbWUgPCB0aW1lb3V0OgogICAgICAgIHRyeToKICAgICAgICAgICAgZWRnZV93aW5kb3cgPSBOb25lCiAgICAgICAgICAgIGZvciB3aW5kb3cgaW4gZGVza3RvcC53aW5kb3dzKHZpc2libGVfb25seT1UcnVlKToKICAgICAgICAgICAgICAgIHdpbl90ZXh0ID0gd2luZG93LndpbmRvd190ZXh0KCkKICAgICAgICAgICAgICAgIGlmICJFZGdlIiBpbiB3aW5fdGV4dCBvciAiQnJvd3NlciIgaW4gd2luX3RleHQgb3IgIk9wZXJhIiBpbiB3aW5fdGV4dCBvciAic3VkZXR5aiIgaW4gd2luX3RleHQgb3IgInUudG8iIGluIHdpbl90ZXh0OgogICAgICAgICAgICAgICAgICAgIGVkZ2Vfd2luZG93ID0gd2luZG93CiAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAjIDEuIFByb3h5IEF1dGgKICAgICAgICAgICAgICAgIHRyeToKICAgICAgICAgICAgICAgICAgICBzaWduX2luX2J0biA9IHdpbmRvdy5jaGlsZF93aW5kb3codGl0bGU9IlNpZ24gaW4iLCBjb250cm9sX3R5cGU9IkJ1dHRvbiIpCiAgICAgICAgICAgICAgICAgICAgY2FuY2VsX2J0biA9IHdpbmRvdy5jaGlsZF93aW5kb3codGl0bGU9IkNhbmNlbCIsIGNvbnRyb2xfdHlwZT0iQnV0dG9uIikKICAgICAgICAgICAgICAgICAgICBpZiBzaWduX2luX2J0bi5leGlzdHModGltZW91dD0wKSBhbmQgY2FuY2VsX2J0bi5leGlzdHModGltZW91dD0wKToKICAgICAgICAgICAgICAgICAgICAgICAgZWRpdHMgPSB3aW5kb3cuZGVzY2VuZGFudHMoY29udHJvbF90eXBlPSJFZGl0IikKICAgICAgICAgICAgICAgICAgICAgICAgaWYgbGVuKGVkaXRzKSA+PSAyOgogICAgICAgICAgICAgICAgICAgICAgICAgICAgd2luZG93LnNldF9mb2N1cygpCiAgICAgICAgICAgICAgICAgICAgICAgICAgICB0aW1lLnNsZWVwKDAuNSkKICAgICAgICAgICAgICAgICAgICAgICAgICAgIGVkaXRzWy0yXS5jbGlja19pbnB1dCgpCiAgICAgICAgICAgICAgICAgICAgICAgICAgICBlZGl0c1stMl0udHlwZV9rZXlzKCJeYXtCQUNLU1BBQ0V9IiArIHVzZXJuYW1lLCB3aXRoX3NwYWNlcz1UcnVlLCBwYXVzZT0wLjAxKQogICAgICAgICAgICAgICAgICAgICAgICAgICAgZWRpdHNbLTFdLmNsaWNrX2lucHV0KCkKICAgICAgICAgICAgICAgICAgICAgICAgICAgIGVkaXRzWy0xXS50eXBlX2tleXMoIl5he0JBQ0tTUEFDRX0iICsgcGFzc3dvcmQsIHdpdGhfc3BhY2VzPVRydWUsIHBhdXNlPTAuMDEpCiAgICAgICAgICAgICAgICAgICAgICAgICAgICBzaWduX2luX2J0bi5jbGlja19pbnB1dCgpCiAgICAgICAgICAgICAgICAgICAgICAgICAgICB0aW1lLnNsZWVwKDEpCiAgICAgICAgICAgICAgICAgICAgICAgICAgICBjb250aW51ZQogICAgICAgICAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbjoKICAgICAgICAgICAgICAgICAgICBwYXNzCiAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICMgMi4gRG93bmxvYWQgUHJvdGVjdGlvbgogICAgICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAgICAgICAgIGtlZXBfYnRuID0gd2luZG93LmNoaWxkX3dpbmRvdyh0aXRsZT0iS2VlcCIsIGNvbnRyb2xfdHlwZT0iQnV0dG9uIikKICAgICAgICAgICAgICAgICAgICBpZiBrZWVwX2J0bi5leGlzdHModGltZW91dD0wKToKICAgICAgICAgICAgICAgICAgICAgICAga2VlcF9jbGlja2VkID0gVHJ1ZQogICAgICAgICAgICAgICAgICAgICAgICBrZWVwX2J0bi5jbGlja19pbnB1dCgpCiAgICAgICAgICAgICAgICAgICAgICAgIHRpbWUuc2xlZXAoMC41KQogICAgICAgICAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbjoKICAgICAgICAgICAgICAgICAgICBwYXNzCiAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgIHRyeToKICAgICAgICAgICAgICAgICAgICBrZWVwX2FueXdheSA9IHdpbmRvdy5jaGlsZF93aW5kb3codGl0bGU9IktlZXAgYW55d2F5IiwgY29udHJvbF90eXBlPSJCdXR0b24iKQogICAgICAgICAgICAgICAgICAgIGlmIGtlZXBfYW55d2F5LmV4aXN0cyh0aW1lb3V0PTApOgogICAgICAgICAgICAgICAgICAgICAgICBrZWVwX2NsaWNrZWQgPSBUcnVlCiAgICAgICAgICAgICAgICAgICAgICAgIGtlZXBfYW55d2F5LmNsaWNrX2lucHV0KCkKICAgICAgICAgICAgICAgICAgICAgICAgdGltZS5zbGVlcCgwLjUpCiAgICAgICAgICAgICAgICBleGNlcHQgRXhjZXB0aW9uOgogICAgICAgICAgICAgICAgICAgIHBhc3MKCiAgICAgICAgICAgICAgICAjIDMuIE9wZXJhIEdYIFdlYiBEb3dubG9hZCBCdXR0b24KICAgICAgICAgICAgICAgIGlmIG5vdCBvcGVyYV9kbF9jbGlja2VkOgogICAgICAgICAgICAgICAgICAgIHRyeToKICAgICAgICAgICAgICAgICAgICAgICAgb3BlcmFfYnRucyA9IHdpbmRvdy5kZXNjZW5kYW50cyh0aXRsZV9yZT0iLipEb3dubG9hZCBPcGVyYSBHWC4qIikKICAgICAgICAgICAgICAgICAgICAgICAgaWYgb3BlcmFfYnRuczoKICAgICAgICAgICAgICAgICAgICAgICAgICAgIGZvciBidG4gaW4gb3BlcmFfYnRuczoKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBpZiBidG4uY29udHJvbF90eXBlKCkgaW4gWyJCdXR0b24iLCAiSHlwZXJsaW5rIiwgIkdyb3VwIiwgIlRleHQiXToKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgYnRuLmNsaWNrX2lucHV0KCkKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgb3BlcmFfZGxfY2xpY2tlZCA9IFRydWUKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgdGltZS5zbGVlcCgwLjUpCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGJyZWFrCiAgICAgICAgICAgICAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbjoKICAgICAgICAgICAgICAgICAgICAgICAgcGFzcwogICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgIyA0LiBGYWxsYmFjayBDdHJsK0oKICAgICAgICAgICAgaWYgbm90IGtlZXBfY2xpY2tlZCBhbmQgZWRnZV93aW5kb3cgYW5kICh0aW1lLnRpbWUoKSAtIGxhc3RfY3RybF9qX3RpbWUgPiAxNSkgYW5kIGN0cmxfal9hdHRlbXB0cyA8IDQ6CiAgICAgICAgICAgICAgICB0cnk6CiAgICAgICAgICAgICAgICAgICAgZWRnZV93aW5kb3cuc2V0X2ZvY3VzKCkKICAgICAgICAgICAgICAgICAgICB0aW1lLnNsZWVwKDAuNSkKICAgICAgICAgICAgICAgICAgICBzZW5kX2tleXMoJ15qJykKICAgICAgICAgICAgICAgICAgICBsYXN0X2N0cmxfal90aW1lID0gdGltZS50aW1lKCkKICAgICAgICAgICAgICAgICAgICBjdHJsX2pfYXR0ZW1wdHMgKz0gMQogICAgICAgICAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbjoKICAgICAgICAgICAgICAgICAgICBwYXNzCgogICAgICAgIGV4Y2VwdCBFeGNlcHRpb246CiAgICAgICAgICAgIHBhc3MKICAgICAgICB0aW1lLnNsZWVwKDEpCgppZiBfX25hbWVfXyA9PSAiX19tYWluX18iOgogICAgaWYgbGVuKHN5cy5hcmd2KSA+IDI6CiAgICAgICAgaGFuZGxlX2F1dG9tYXRpb24oc3lzLmFyZ3ZbMV0sIHN5cy5hcmd2WzJdKQogICAgZWxzZToKICAgICAgICBoYW5kbGVfYXV0b21hdGlvbigiIiwgIiIpCg=="
-          $proxyPyCode =[System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64Proxy))
-          $proxyPyCode | Out-File -FilePath "$env:TEMP\auto_handler.py" -Encoding utf8
-          
+          # 2. Build and write the UIA background handler (handles both AVG and Opera GX flows)
+          # This Python script handles:
+          #   - Proxy auth dialog (username/password fill + Sign in)
+          #   - Edge "Keep" / "Keep anyway" download protection buttons
+          #   - Ctrl+J to open downloads flyout if Keep button not found yet
+          #   - Opera GX landing page: click the Download Opera GX button
+          #   - Opera GX post-install welcome: click Next button 10 times
+          $handlerPy = @'
+import time, sys, subprocess
+from pywinauto import Desktop
+from pywinauto.keyboard import send_keys
+
+def handle_automation(username, password, software_type, timeout=600):
+    desktop = Desktop(backend="uia")
+    start_time = time.time()
+    last_ctrl_j_time = time.time()
+    ctrl_j_attempts = 0
+    keep_clicked = False
+    opera_download_clicked = False
+    opera_next_clicks = 0
+
+    while time.time() - start_time < timeout:
+        try:
+            edge_window = None
+            opera_window = None
+
+            for window in desktop.windows(visible_only=True):
+                wt = window.window_text()
+
+                # Detect Edge browser window
+                if "Edge" in wt or "Browser" in wt or "Opera" in wt or "sudetyj" in wt or "Fast and secure" in wt or "Thanks for downloading" in wt or "Get Ready" in wt:
+                    edge_window = window
+
+                # Detect launched Opera GX window (after install)
+                if "Opera GX" in wt or "Welcome to Opera GX" in wt or "Speed Dial" in wt:
+                    opera_window = window
+
+                # --------------------------------------------------
+                # A. Proxy Authentication dialog
+                # --------------------------------------------------
+                user_fields = window.descendants(control_type="Edit", title="Username")
+                pass_fields = window.descendants(control_type="Edit", title="Password")
+                if user_fields and pass_fields:
+                    window.set_focus()
+                    time.sleep(0.5)
+                    user_fields[0].click_input()
+                    user_fields[0].type_keys(username, with_spaces=True, pause=0.02)
+                    pass_fields[0].click_input()
+                    pass_fields[0].type_keys(password, with_spaces=True, pause=0.02)
+                    btn = window.descendants(control_type="Button", title="Sign in")
+                    if btn:
+                        btn[0].click_input()
+                    else:
+                        pass_fields[0].type_keys("{ENTER}")
+
+                # --------------------------------------------------
+                # B. Edge Download Protection: "Keep" & "Keep anyway"
+                # --------------------------------------------------
+                keep_btns = window.descendants(control_type="Button", title="Keep")
+                if keep_btns:
+                    keep_clicked = True
+                    keep_btns[0].click_input()
+                    time.sleep(0.5)
+
+                keep_anyway = window.descendants(control_type="Button", title="Keep anyway")
+                if keep_anyway:
+                    keep_clicked = True
+                    keep_anyway[0].click_input()
+                    time.sleep(0.5)
+
+                # --------------------------------------------------
+                # C. Opera GX landing page: click "Download Opera GX"
+                #    Handles multiple possible button titles on the page
+                # --------------------------------------------------
+                if software_type == "opera" and not opera_download_clicked:
+                    for btn_title in ["Download Opera GX", "Download now", "Download"]:
+                        dl_btns = window.descendants(control_type="Button", title=btn_title)
+                        if dl_btns:
+                            try:
+                                window.set_focus()
+                                time.sleep(0.5)
+                                dl_btns[0].click_input()
+                                opera_download_clicked = True
+                                print("[OperaGX] Clicked Download button on landing page.")
+                                time.sleep(2)
+                                break
+                            except Exception:
+                                pass
+
+            # --------------------------------------------------
+            # D. Ctrl+J to open downloads flyout (max 4 times, every 15s)
+            #    Used to surface the Keep button when it doesn't auto-appear
+            # --------------------------------------------------
+            if not keep_clicked and edge_window and (time.time() - last_ctrl_j_time > 15) and ctrl_j_attempts < 4:
+                try:
+                    edge_window.set_focus()
+                    time.sleep(0.5)
+                    send_keys('^j')
+                    last_ctrl_j_time = time.time()
+                    ctrl_j_attempts += 1
+                    print(f"[Handler] Pressed Ctrl+J to open downloads (attempt {ctrl_j_attempts})")
+                except Exception:
+                    pass
+
+            # --------------------------------------------------
+            # E. Opera GX Post-install Welcome: click Next 10 times
+            #    Targets the welcome wizard shown after first launch
+            # --------------------------------------------------
+            if software_type == "opera" and opera_next_clicks < 10 and opera_window:
+                try:
+                    opera_window.set_focus()
+                    time.sleep(0.3)
+                    # Try "NEXT" button (the welcome carousel uses this label)
+                    for btn_title in ["NEXT", "Next", "next"]:
+                        next_btns = opera_window.descendants(control_type="Button", title=btn_title)
+                        if next_btns:
+                            next_btns[0].click_input()
+                            opera_next_clicks += 1
+                            print(f"[OperaGX] Clicked Next ({opera_next_clicks}/10)")
+                            time.sleep(1.5)
+                            break
+                    # Also try by finding any button containing "NEXT" text via automation id
+                    if opera_next_clicks == 0 or (opera_next_clicks < 10):
+                        all_btns = opera_window.descendants(control_type="Button")
+                        for b in all_btns:
+                            try:
+                                if "next" in b.window_text().lower():
+                                    b.click_input()
+                                    opera_next_clicks += 1
+                                    print(f"[OperaGX] Clicked Next via text scan ({opera_next_clicks}/10)")
+                                    time.sleep(1.5)
+                                    break
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
+        except Exception:
+            pass
+        time.sleep(1)
+
+if __name__ == "__main__":
+    username = sys.argv[1] if len(sys.argv) > 1 else ""
+    password = sys.argv[2] if len(sys.argv) > 2 else ""
+    software_type = sys.argv[3] if len(sys.argv) > 3 else "avg"
+    handle_automation(username, password, software_type)
+'@
+
+          $handlerPy | Out-File -FilePath "$env:TEMP\auto_handler.py" -Encoding utf8
+
           # Start the handler concurrently
           if ($env:PROXY_PASS -ne "") {
-              Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`"" -WindowStyle Hidden
+              Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`" `"$env:SOFTWARE_TYPE`"" -WindowStyle Hidden
           } else {
-              Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`"" -WindowStyle Hidden
+              Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"`" `"`" `"$env:SOFTWARE_TYPE`"" -WindowStyle Hidden
           }
 
-          # 3. Setup the Watcher/Installer in the background mapping to Dynamic App Selection
+          # 3. Setup the Software Watcher/Installer background job
           $dlFolder = "$env:USERPROFILE\Downloads"
           $timeoutSecs = 55 * 60
+          $softwareType = $env:SOFTWARE_TYPE
+          $exeFilter = $env:EXE_FILTER
 
-          $job = Start-Job -ScriptBlock {
-              param($dlFolder, $timeoutSecs, $filter, $type)
+          $installJob = Start-Job -ScriptBlock {
+              param($dlFolder, $timeoutSecs, $softwareType, $exeFilter)
               $deadline = (Get-Date).AddSeconds($timeoutSecs)
               $installed = $false
 
               while (-not $installed -and (Get-Date) -lt $deadline) {
-                  $candidates = Get-ChildItem -Path $dlFolder -Filter $filter -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } | Sort-Object LastWriteTime -Descending
+
+                  # Find downloaded installer (handle both wildcard patterns)
+                  if ($exeFilter -like "*avg*") {
+                      $candidates = Get-ChildItem -Path $dlFolder -Filter "*avg*.exe" -ErrorAction SilentlyContinue |
+                          Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
+                          Sort-Object LastWriteTime -Descending
+                  } else {
+                      $candidates = Get-ChildItem -Path $dlFolder -Filter $exeFilter -ErrorAction SilentlyContinue |
+                          Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
+                          Sort-Object LastWriteTime -Descending
+                  }
 
                   if ($candidates.Count -gt 0) {
                       $file = $candidates[0]
-                      Write-Output "[$type] Download complete! ($($file.Name))"
+                      Write-Output "[$softwareType] Download complete! ($($file.Name))"
 
+                      # Wait until file is fully written / not locked
                       $locked = $true
-                      while ($locked) { Start-Sleep -Seconds 2; try { $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None'); $s.Close(); $locked = $false } catch { } }
-
-                      Write-Output "[$type] Executing silent installer..."
-                      try {
-                          # Running silently using /silent
-                          Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
-                          Write-Output "[$type] Installer process finished."
-                      } catch {
-                          Write-Output "[$type] ERROR running installer: $_"
+                      while ($locked) {
+                          Start-Sleep -Seconds 2
+                          try {
+                              $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
+                              $s.Close()
+                              $locked = $false
+                          } catch { }
                       }
-                      
-                      Write-Output "[$type] Waiting for final application deployment..."
-                      if ($type -eq "OperaGX") {
+
+                      Write-Output "[$softwareType] Executing silent installer..."
+                      try {
+                          if ($softwareType -eq "opera") {
+                              # Opera GX silent install — /silent flag, then wait for process to finish
+                              Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
+                          } else {
+                              # AVG silent install
+                              Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
+                          }
+                          Write-Output "[$softwareType] Installer process finished."
+                      } catch {
+                          Write-Output "[$softwareType] ERROR running installer: $_"
+                      }
+
+                      Write-Output "[$softwareType] Waiting for final application deployment..."
+
+                      if ($softwareType -eq "opera") {
+                          # Opera GX install paths
                           $appPaths = @(
                               "$env:LOCALAPPDATA\Programs\Opera GX\launcher.exe",
+                              "$env:LOCALAPPDATA\Programs\Opera GX\opera.exe",
                               "C:\Program Files\Opera GX\launcher.exe",
-                              "C:\Program Files (x86)\Opera GX\launcher.exe"
+                              "C:\Program Files\Opera GX\opera.exe",
+                              "C:\Program Files (x86)\Opera GX\launcher.exe",
+                              "C:\Program Files (x86)\Opera GX\opera.exe"
                           )
                       } else {
+                          # AVG paths
                           $appPaths = @(
                               "C:\Program Files\AVG\Browser\Application\AVGBrowser.exe",
                               "C:\Program Files (x86)\AVG\Browser\Application\AVGBrowser.exe",
-                              "C:\Program Files\AVG\Antivirus\AVGUI.exe", 
+                              "C:\Program Files\AVG\Antivirus\AVGUI.exe",
                               "C:\Program Files (x86)\AVG\Antivirus\AVGUI.exe"
                           )
                       }
-                      
+
                       $launched = $false
                       for ($i = 0; $i -lt 300; $i++) {
                           foreach ($p in $appPaths) {
                               if (Test-Path $p) {
                                   Start-Sleep -Seconds 3
-                                  Write-Output "[$type] Launching Application..."
+                                  Write-Output "[$softwareType] Launching application: $p"
                                   Start-Process -FilePath $p
-                                  $launched = $true; break
+                                  $launched = $true
+                                  break
                               }
                           }
                           if ($launched) { break }
                           Start-Sleep -Seconds 2
                       }
+
+                      if (-not $launched) {
+                          Write-Output "[$softwareType] WARNING: Could not find application exe after install."
+                      }
+
                       $installed = $true
-                  } else { Start-Sleep -Seconds 5 }
+                  } else {
+                      Start-Sleep -Seconds 5
+                  }
               }
-          } -ArgumentList $dlFolder, $timeoutSecs, $env:SOFT_FILTER, $env:SOFT_TYPE
+          } -ArgumentList $dlFolder, $timeoutSecs, $softwareType, $exeFilter
 
           # 4. Find Edge Path & Launch it
           $edgeExe = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
@@ -359,30 +552,30 @@ jobs:
           }
 
           $proxyServer = "residential-proxy.scrapeops.io:8181"
-          
-          # Pass CLI flags to ensure SmartScreen/Download protection doesn't interfere
+
+          # CLI flags to suppress SmartScreen/download protection
           $edgeArgs = @(
-              "--no-first-run", 
-              "--no-default-browser-check", 
+              "--no-first-run",
+              "--no-default-browser-check",
               "--disable-sync",
               "--safebrowsing-disable-download-protection",
               "--disable-features=msSmartScreenProtection,SmartScreenPuaEnabled"
           )
-          
+
           if ($env:PROXY_PASS -ne "") {
               $edgeArgs += "--proxy-server=`"http://$proxyServer`""
           }
-          $edgeArgs += "`"$env:SOFT_URL`""
+          $edgeArgs += "`"$env:TARGET_URL`""
 
-          Write-Host "Launching Edge with Proxy -> $env:SOFT_URL" -ForegroundColor Cyan
+          Write-Host "Launching Edge with Proxy -> $env:TARGET_URL" -ForegroundColor Cyan
           Start-Process -FilePath $edgeExe -ArgumentList ($edgeArgs -join " ")
 
           # 5. Monitor Output of Background Job
           $deadline = (Get-Date).AddSeconds($timeoutSecs)
           while ($true) {
-              $output = Receive-Job -Job $job -ErrorAction SilentlyContinue
+              $output = Receive-Job -Job $installJob -ErrorAction SilentlyContinue
               if ($output) { foreach ($line in $output) { Write-Host $line } }
-              if ($job.State -eq 'Completed' -or $job.State -eq 'Failed' -or (Get-Date) -gt $deadline) { break }
+              if ($installJob.State -eq 'Completed' -or $installJob.State -eq 'Failed' -or (Get-Date) -gt $deadline) { break }
               Start-Sleep -Seconds 5
           }
 
