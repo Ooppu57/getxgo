@@ -37,12 +37,12 @@ on:
           - 'MlzYT'
           - 'F.ahmad'
           - 'B4Books'
-        default: 'F.ahmad'
+        default: 'B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
         type: string
-        default: '39c69386-cabb-4375-bdfa-302fa99ed2c3'
+        default: 'add3c7b1-9832-4265-a635-0c160f2d1694'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
