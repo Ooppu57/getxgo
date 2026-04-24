@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '3'
+        default: '2'
       avg_link:
         description: 'Select AVG Link'
         required: true
@@ -37,7 +37,7 @@ on:
           - 'MlzYT'
           - 'F.ahmad'
           - 'B4Books'
-        default: 'F.ahmad'
+        default: 'B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
