@@ -394,11 +394,12 @@ jobs:
               opera_download_clicked = False
 
               # --- Opera One state machine ---
-              opera_one_window_first_seen = None   # wall-clock time window was first detected
-              opera_one_wizard_ready      = False   # True once wizard confirmed interactive
-              opera_one_setup_completed   = False   # True once full key sequence sent
-              opera_one_slide_index       = 0       # tracks how many RIGHT presses sent
-              opera_one_last_key_time     = 0       # throttle: min 2 s between key groups
+              opera_one_window_first_seen  = None   # wall-clock time window was first detected
+              opera_one_wizard_ready       = False   # True once wizard confirmed interactive
+              opera_one_center_clicks_done = False   # True once 3 center clicks have been sent
+              opera_one_setup_completed    = False   # True once full key sequence sent
+              opera_one_slide_index        = 0       # tracks how many RIGHT presses sent
+              opera_one_last_key_time      = 0       # throttle: min 2 s between key groups
 
               # --- Opera GX state machine (unchanged) ---
               opera_gx_launched_time      = None
@@ -621,7 +622,7 @@ jobs:
                                   time.sleep(3)
                                   continue
 
-                          # ---- Step 4: bring window to foreground & maximise ----
+                          # ---- Step 4: bring window to foreground ----
                           try:
                               opera_window.set_focus()
                               time.sleep(0.8)
@@ -634,7 +635,34 @@ jobs:
                           except Exception as fe:
                               print(f"[Opera One] Focus error: {fe}")
 
-                          # ---- Step 5: throttled RIGHT + ENTER sequence ----
+                          # ---- Step 5: 3 center clicks (2 s apart) to activate wizard ----
+                          # Only done once, right after the wizard is confirmed ready.
+                          # Clicking the center of the Opera One window ensures the
+                          # onboarding dialog has keyboard focus before any key is sent,
+                          # preventing accidental fullscreen or missed navigation.
+                          if not opera_one_center_clicks_done:
+                              try:
+                                  rect = opera_window.rectangle()
+                                  center_x = (rect.left + rect.right)  // 2
+                                  center_y = (rect.top  + rect.bottom) // 2
+                                  print(f"[Opera One] Clicking window center "
+                                        f"({center_x}, {center_y}) x3 with 2 s delay...")
+                                  for click_num in range(1, 4):
+                                      opera_window.set_focus()
+                                      time.sleep(0.3)
+                                      pyautogui.click(center_x, center_y)
+                                      print(f"[Opera One] Center click {click_num}/3 done.")
+                                      if click_num < 3:
+                                          time.sleep(2)   # 2-second gap between clicks
+                                  opera_one_center_clicks_done = True
+                                  print("[Opera One] Center clicks complete. "
+                                        "Waiting 2 s before key sequence...")
+                                  time.sleep(2)
+                              except Exception as ce:
+                                  print(f"[Opera One] Center click error: {ce}")
+                                  opera_one_center_clicks_done = True  # don't loop forever
+
+                          # ---- Step 6: throttled RIGHT + ENTER sequence ----
                           # We send ONE right-arrow per iteration (every ~2 s).
                           # After 10 rights we send a final ENTER to finish.
                           # This avoids a burst that could mis-trigger fullscreen.
