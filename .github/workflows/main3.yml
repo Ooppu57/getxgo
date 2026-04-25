@@ -52,7 +52,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - B4Books'
+        default: 'AVG - Trader'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
