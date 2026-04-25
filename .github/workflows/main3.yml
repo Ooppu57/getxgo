@@ -80,7 +80,7 @@ on:
         description: 'Enable Unique Sticky Sessions per Device'
         required: true
         type: boolean
-        default: true
+        default: false
 
 jobs:
   prepare_matrix:
