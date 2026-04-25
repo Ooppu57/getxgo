@@ -77,7 +77,7 @@ on:
         type: boolean
         default: false
       sticky_sessions:
-        description: 'Enable Unique Sticky Sessions per Device'
+        description: 'Enable Unique Sticky Sessions'
         required: true
         type: boolean
         default: false
