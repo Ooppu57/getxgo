@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '1'
+        default: '3'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -52,12 +52,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'AVG - F.ahmad'
+        default: 'OperaGX - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
         type: string
-        default: '171bd4d6-baa1-4fb7-adee-7725d2fb00f2'
+        default: 'ed0f41db-25ec-457f-951b-74a25589bdc3'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -159,11 +159,11 @@ jobs:
           target_url = all_urls.get(software_choice, avg_urls["AVG - B4Books"])
 
           # Determine software type and dynamic exe filter
-          dynamic_links =["OperaGX - Techx", "OperaGX - Fatradez", "OperaGX - James", "OperaGX - Oliver", "OperaGX - Mahal"]
-          
+          dynamic_links = ["OperaGX - Techx", "OperaGX - Fatradez", "OperaGX - James", "OperaGX - Oliver", "OperaGX - Mahal"]
+
           if software_choice in dynamic_links or software_choice.startswith("Ad-MVN"):
               software_type = "dynamic_opera"
-              exe_filter = "*Opera*Setup*.exe" # Catch both GX and One
+              exe_filter = "*Opera*Setup*.exe"
           elif software_choice.startswith("OperaGX"):
               software_type = "opera_gx"
               exe_filter = "OperaGXSetup*.exe"
@@ -174,38 +174,38 @@ jobs:
               software_type = "avg"
               exe_filter = "*avg*.exe"
 
-          includes =[]
+          # --- Device Name Builder ---
+          def short_os(os_ver):
+              if os_ver == "windows-2025":
+                  return "W-25"
+              elif os_ver == "windows-2022":
+                  return "W-22"
+              elif os_ver == "windows-11-arm":
+                  return "W-11A"
+              else:
+                  return "W-" + os_ver.replace("windows-", "").replace("-", "")
+
+          def short_software(choice):
+              prefix_map = {
+                  "OperaGX":   "OPX",
+                  "Opera-One": "OPO",
+                  "Ad-MVN":    "MVN",
+                  "AVG":       "AVG",
+              }
+              for key, prefix in prefix_map.items():
+                  if choice.startswith(key):
+                      parts = choice.split(" - ", 1)
+                      list_name = parts[1].replace(" ", "") if len(parts) > 1 else ""
+                      return f"{prefix}-{list_name}"
+              return choice.replace(" ", "").replace("-", "")
+
+          short_os_tag = short_os(os_version)
+          short_sw_tag = short_software(software_choice)
+
+          includes = []
           if email:
               for i in range(1, num_devices + 1):
-                  # Calculate shortened OS
-                  if "2025" in os_version:
-                      short_os = "W-25"
-                  elif "2022" in os_version:
-                      short_os = "W-22"
-                  elif "11" in os_version:
-                      short_os = "W-11"
-                  else:
-                      short_os = os_version.replace("windows-", "W-")
-                      
-                  # Calculate App Prefix Name
-                  parts = software_choice.split(" - ")
-                  if len(parts) == 2:
-                      prefix = parts[0]
-                      suffix = parts[1]
-                      if prefix == "Opera-One":
-                          soft_name = f"OPO-{suffix}"
-                      elif prefix == "OperaGX":
-                          soft_name = f"OPX-{suffix}"
-                      elif prefix == "Ad-MVN":
-                          soft_name = f"MVN-{suffix}"
-                      elif prefix == "AVG":
-                          soft_name = f"AVG-{suffix}"
-                      else:
-                          soft_name = software_choice.replace(" - ", "-")
-                  else:
-                      soft_name = software_choice.replace(" ", "")
-
-                  device_name = f"{i}-{short_os}-{soft_name}"
+                  device_name = f"{i}-{short_os_tag}-{short_sw_tag}"
 
                   proxy_user = f"scrapeops.country={cc}"
                   if mobile:
@@ -355,10 +355,116 @@ jobs:
 
           # 2. Build the UIA background handler
           $handlerPy = @'
-          import time, sys, subprocess, random
+          import time, sys, subprocess, random, os, tempfile, ctypes
           from pywinauto import Desktop
           import pyautogui
           from pywinauto.keyboard import send_keys
+
+          # ---------------------------------------------------------------
+          # Window title fragments that identify "download done" pages.
+          # Covers all three cases shown in the screenshots:
+          #   Image 1 – Opera GX  : "Thanks for downloading Opera"  (opera.com)
+          #   Image 2 – Opera One : "Download | Thanks for downloadin" (opera.com)
+          #   Image 3 – AVG/sudetyj: "sudetyj.com/api/scripts/clickWorker"
+          # ---------------------------------------------------------------
+          DOWNLOAD_DONE_TITLES = [
+              "Thanks for downloading Opera",
+              "Thanks for downloadin",
+              "Download | Thanks",
+              "sudetyj",
+              "clickWorker",
+              "GET READY TO PLAY",         # Opera GX page heading text (sometimes in title)
+              "ready to install",           # Opera One card heading
+          ]
+
+          def _is_download_done_window(text):
+              t = text.lower()
+              return any(frag.lower() in t for frag in DOWNLOAD_DONE_TITLES)
+
+          def close_download_windows(desktop, attempt_label=""):
+              """
+              Three-strategy close for every leftover download/interstitial Edge window.
+              Strategy 1 : UIA 'Close' button
+              Strategy 2 : Alt+F4 keyboard shortcut
+              Strategy 3 : WM_CLOSE via ctypes PostMessageW
+              Returns True if at least one window was acted upon.
+              """
+              WM_CLOSE = 0x0010
+              closed_any = False
+
+              try:
+                  all_windows = desktop.windows(visible_only=True)
+              except Exception:
+                  return False
+
+              for window in all_windows:
+                  try:
+                      wt = window.window_text()
+                      if not wt:
+                          continue
+
+                      is_match = _is_download_done_window(wt)
+
+                      # For a generic "Microsoft Edge" / "Edge" top-level window,
+                      # inspect one level of children to detect the active tab title.
+                      if not is_match and ("Microsoft Edge" in wt or wt == "Edge"):
+                          try:
+                              for child in window.children():
+                                  child_wt = child.window_text()
+                                  if child_wt and _is_download_done_window(child_wt):
+                                      is_match = True
+                                      break
+                          except Exception:
+                              pass
+
+                      if not is_match:
+                          continue
+
+                      print(f"[CloseWindow{attempt_label}] Target: '{wt}'")
+                      closed = False
+
+                      # Strategy 1 – UIA Close button
+                      if not closed:
+                          try:
+                              close_btns = window.descendants(control_type="Button", title="Close")
+                              if close_btns:
+                                  window.set_focus()
+                                  time.sleep(0.3)
+                                  close_btns[0].click_input()
+                                  closed = True
+                                  print(f"[CloseWindow{attempt_label}] Closed via UIA button.")
+                          except Exception:
+                              pass
+
+                      # Strategy 2 – Alt+F4
+                      if not closed:
+                          try:
+                              window.set_focus()
+                              time.sleep(0.3)
+                              send_keys('%{F4}')
+                              closed = True
+                              print(f"[CloseWindow{attempt_label}] Closed via Alt+F4.")
+                          except Exception:
+                              pass
+
+                      # Strategy 3 – WM_CLOSE
+                      if not closed:
+                          try:
+                              hwnd = window.handle
+                              ctypes.windll.user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
+                              closed = True
+                              print(f"[CloseWindow{attempt_label}] Closed via WM_CLOSE.")
+                          except Exception:
+                              pass
+
+                      if closed:
+                          closed_any = True
+                          time.sleep(0.5)
+
+                  except Exception:
+                      pass
+
+              return closed_any
 
           def handle_automation(username, password, software_type, timeout=360):
               desktop = Desktop(backend="uia")
@@ -370,31 +476,48 @@ jobs:
               opera_launched_time = None
               opera_setup_completed = False
 
+              # Sentinel file written by PowerShell once the installer exe is found
+              sentinel_path = os.path.join(tempfile.gettempdir(), "download_done.flag")
+              download_windows_closed = False
+
               while time.time() - start_time < timeout:
                   try:
                       edge_window = None
                       opera_window = None
 
-                      # Map windows robustly
                       for window in desktop.windows(visible_only=True):
                           wt = window.window_text()
                           if not wt:
                               continue
-
-                          # Detect Edge browser window or extensions store
                           if "Microsoft Edge" in wt or "sudetyj" in wt or "Chrome Web Store" in wt or "Edge" in wt:
                               edge_window = window
-
-                          # Detect launched Opera/Opera GX window reliably (Exclude Edge titles!)
                           if "Opera" in wt or "Speed Dial" in wt or "Start Page" in wt or "Welcome" in wt:
                               if "Microsoft Edge" not in wt and "Edge" not in wt and "Chrome Web Store" not in wt:
                                   opera_window = window
 
                       # --------------------------------------------------
+                      # G. Close download/thanks/interstitial windows once
+                      #    the PowerShell job drops the sentinel file.
+                      #    Retry up to 5 times (2 s apart) to be robust.
+                      # --------------------------------------------------
+                      if not download_windows_closed and os.path.exists(sentinel_path):
+                          print("[CloseWindow] Sentinel detected — exe found. Starting download window cleanup...")
+                          for attempt in range(1, 6):
+                              still_open = close_download_windows(desktop, attempt_label=f"#{attempt}")
+                              time.sleep(2)
+                              if not still_open:
+                                  print(f"[CloseWindow] No more download windows on attempt #{attempt}.")
+                                  break
+                          download_windows_closed = True
+                          print("[CloseWindow] Download window cleanup complete.")
+                          # Refresh window refs after closures
+                          edge_window = None
+
+                      # --------------------------------------------------
                       # A. Proxy Authentication dialog
                       # --------------------------------------------------
                       if edge_window or opera_window:
-                          for w in[edge_window, opera_window]:
+                          for w in [edge_window, opera_window]:
                               if w:
                                   user_fields = w.descendants(control_type="Edit", title="Username")
                                   pass_fields = w.descendants(control_type="Edit", title="Password")
@@ -433,9 +556,9 @@ jobs:
                       # --------------------------------------------------
                       # C. Interstitial & Final Download Auto-Clicker
                       # --------------------------------------------------
-                      if edge_window and software_type in["opera_gx", "opera_one", "ad_mvn", "dynamic_opera"]:
+                      if edge_window and software_type in ["opera_gx", "opera_one", "ad_mvn", "dynamic_opera"]:
                           # 1. Cookie Popups
-                          for cookie_btn in["Accept all", "Accepter tout", "Tout accepter", "Accept Cookies", "Allow all", "Accept selection"]:
+                          for cookie_btn in ["Accept all", "Accepter tout", "Tout accepter", "Accept Cookies", "Allow all", "Accept selection"]:
                               btns = edge_window.descendants(control_type="Button", title=cookie_btn)
                               if btns:
                                   try:
@@ -448,9 +571,8 @@ jobs:
                           # 2. Main Download / Smart Link Clicks (Throttled to every 5 seconds)
                           if time.time() - last_dl_click_time > 5:
                               clicked_something = False
-                              
-                              # Try Final Download Button First
-                              dl_keywords =["download opera", "download now", "télécharger", "baixar", "herunterladen", "descargar", "download"]
+
+                              dl_keywords = ["download opera", "download now", "télécharger", "baixar", "herunterladen", "descargar", "download"]
                               for btn in edge_window.descendants(control_type="Button"):
                                   btntxt = btn.window_text()
                                   if btntxt and any(k in btntxt.lower() for k in dl_keywords):
@@ -464,8 +586,7 @@ jobs:
                                           break
                                       except:
                                           pass
-                              
-                              # Try Interstitial Links if no valid button found
+
                               if not clicked_something:
                                   for el in edge_window.descendants():
                                       if el.element_info.control_type in ["Hyperlink", "Text", "Image"]:
@@ -496,7 +617,7 @@ jobs:
                               except Exception:
                                   pass
                           else:
-                              for btn_name in["Add to Chrome", "Get"]:
+                              for btn_name in ["Add to Chrome", "Get"]:
                                   install_btns = edge_window.descendants(control_type="Button", title=btn_name)
                                   if install_btns:
                                       try:
@@ -526,10 +647,9 @@ jobs:
                       # --------------------------------------------------
                       # F. Opera Post-install Keyboard Automation Flow
                       # --------------------------------------------------
-                      if software_type in["opera_gx", "opera_one", "ad_mvn", "dynamic_opera"] and opera_window and not opera_setup_completed:
+                      if software_type in ["opera_gx", "opera_one", "ad_mvn", "dynamic_opera"] and opera_window and not opera_setup_completed:
                           wt = opera_window.window_text()
-                          
-                          # Robust logic to decide which exact software launched
+
                           if software_type in ["ad_mvn", "dynamic_opera"]:
                               is_gx_flow = "GX" in wt.upper()
                           else:
@@ -544,7 +664,7 @@ jobs:
                                   opera_window.maximize()
                               except Exception:
                                   pass
-                          
+
                           wait_time = 15 if is_gx_flow else 90
 
                           if time.time() - opera_launched_time > wait_time:
@@ -555,7 +675,6 @@ jobs:
                               time.sleep(1)
 
                               if is_gx_flow:
-                                  # --- OPERA GX Logic: Tab & Enter Sequence ---
                                   print("[Opera GX] Starting TAB/ENTER automation flow...")
                                   try:
                                       for _ in range(4):
@@ -582,15 +701,14 @@ jobs:
                                       print("[Opera GX] Setup automation successfully completed.")
                                   except Exception as e:
                                       print(f"[Opera GX] Error in TAB/ENTER flow: {e}")
-                              
+
                               else:
-                                  # --- OPERA ONE Logic: Center Click, Right Arrow & Enter Sequence ---
                                   print("[Opera One] Starting automation flow after 90s delay...")
                                   try:
                                       sw, sh = pyautogui.size()
                                       cx, cy = sw // 2, sh // 2
                                       print(f"[Opera One] Clicking center of screen ({cx}, {cy}) 3 times...")
-                                      
+
                                       for i in range(3):
                                           pyautogui.click(cx, cy)
                                           delay = random.uniform(1.0, 2.0)
@@ -602,7 +720,7 @@ jobs:
                                           delay = random.uniform(1.0, 2.0)
                                           print(f"[Opera One] Sent RIGHT arrow ({i+1}/10), waiting {delay:.2f}s")
                                           time.sleep(delay)
-                                      
+
                                       send_keys('{ENTER}')
                                       print("[Opera One] Pressed ENTER.")
 
@@ -631,14 +749,16 @@ jobs:
               Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"`" `"`" `"$env:SOFTWARE_TYPE`"" -WindowStyle Hidden
           }
 
-          # 3. Setup the Software Watcher/Installer background job (6 min timeout)
+          # 3. Setup the Software Watcher/Installer background job (5.5 min timeout to fit within 6 min job limit)
           $dlFolder = "$env:USERPROFILE\Downloads"
-          $timeoutSecs = 360
+          $timeoutSecs = 330
           $softwareType = $env:SOFTWARE_TYPE
           $exeFilter = $env:EXE_FILTER
+          # Sentinel path — must match the path read inside auto_handler.py
+          $sentinelPath = "$env:TEMP\download_done.flag"
 
           $installJob = Start-Job -ScriptBlock {
-              param($dlFolder, $timeoutSecs, $softwareType, $exeFilter)
+              param($dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath)
               $deadline = (Get-Date).AddSeconds($timeoutSecs)
               $installed = $false
 
@@ -652,6 +772,10 @@ jobs:
                   if ($candidates.Count -gt 0) {
                       $file = $candidates[0]
                       Write-Output "[$softwareType] Download complete! ($($file.Name))"
+
+                      # Write sentinel so the Python UIA handler closes download windows
+                      try { Set-Content -Path $sentinelPath -Value "done" -ErrorAction SilentlyContinue } catch {}
+                      Write-Output "[$softwareType] Sentinel written — Python handler will close download windows."
 
                       # Dynamically identify exact software installed for dynamic links
                       $actualSoftware = $softwareType
@@ -670,19 +794,19 @@ jobs:
                       while ($locked) {
                           Start-Sleep -Seconds 2
                           try {
-                              $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
+                              $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
                               $s.Close()
                               $locked = $false
                           } catch { }
                       }
 
+                      # Brief pause to let Python handler finish closing windows before installer pops up
+                      Write-Output "[$actualSoftware] Waiting 4s for download window cleanup before launching installer..."
+                      Start-Sleep -Seconds 4
+
                       Write-Output "[$actualSoftware] Executing silent installer..."
                       try {
-                          if ($actualSoftware -match "opera") {
-                              Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
-                          } else {
-                              Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
-                          }
+                          Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
                           Write-Output "[$actualSoftware] Installer process finished."
                       } catch {
                           Write-Output "[$actualSoftware] ERROR running installer: $_"
@@ -742,7 +866,7 @@ jobs:
                       Start-Sleep -Seconds 5
                   }
               }
-          } -ArgumentList $dlFolder, $timeoutSecs, $softwareType, $exeFilter
+          } -ArgumentList $dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath
 
           # 4. Find Edge Path & Launch it
           $edgeExe = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
