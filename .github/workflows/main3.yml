@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '2'
+        default: '1'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -57,7 +57,7 @@ on:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
         type: string
-        default: 'fc437c30-174d-4e18-a66e-0ac022d06b71'
+        default: 'dbd994c5-3fd5-4a60-a9dc-a00a51ddcbbf'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
