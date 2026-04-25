@@ -52,12 +52,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - B4Books'
+        default: 'AVG - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
         type: string
-        default: 'aa45bf56-82fa-4af5-9c92-33d8910d9607'
+        default: '003130d3-87e5-44f3-89de-466c0696b3f0'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -167,12 +167,12 @@ jobs:
               exe_filter = "OperaSetup*.exe"
           elif software_choice.startswith("Ad-MVN"):
               software_type = "ad_mvn"
-              exe_filter = "*Opera*Setup*.exe"
+              exe_filter = "*Opera*Setup*.exe" # Catch both GX and One
           else:
               software_type = "avg"
               exe_filter = "*avg*.exe"
 
-          includes = []
+          includes =[]
           if email:
               for i in range(1, num_devices + 1):
                   short_os = os_version.replace("windows-", "")
@@ -216,6 +216,7 @@ jobs:
           STICKY: ${{ inputs.sticky_sessions }}
         run: |
           import re, os
+          # Updated file path to main3.yml as requested
           file_path = ".github/workflows/main3.yml"
 
           if os.path.exists(file_path):
@@ -257,6 +258,7 @@ jobs:
     name: Remote Session ${{ matrix.device }}
     needs: prepare_matrix
     runs-on: ${{ matrix.os }}
+    # Reduced timeout from 60 minutes to 10 minutes
     timeout-minutes: 10
 
     strategy:
@@ -357,7 +359,7 @@ jobs:
                               edge_window = window
 
                           # Detect launched Opera/Opera GX window reliably (Exclude Edge titles!)
-                          if "Opera" in wt or "Speed Dial" in wt or "Start Page" in wt or "Welcome" in wt or "first time" in wt.lower() or "installing" in wt.lower():
+                          if "Opera" in wt or "Speed Dial" in wt or "Start Page" in wt or "Welcome" in wt:
                               if "Microsoft Edge" not in wt and "Edge" not in wt and "Chrome Web Store" not in wt:
                                   opera_window = window
 
@@ -405,7 +407,7 @@ jobs:
                       # C. Opera landing page: click "Download Opera"
                       # --------------------------------------------------
                       if edge_window and software_type in ["opera_gx", "opera_one", "ad_mvn"] and not opera_download_clicked:
-                          for btn_title in ["Download Opera", "Download Opera GX", "Download now", "Download"]:
+                          for btn_title in["Download Opera", "Download Opera GX", "Download now", "Download"]:
                               dl_btns = edge_window.descendants(control_type="Button", title=btn_title)
                               if dl_btns:
                                   try:
@@ -466,9 +468,9 @@ jobs:
                       # --------------------------------------------------
                       # F. Opera Post-install Keyboard Automation Flow
                       # --------------------------------------------------
-                      if software_type in ["opera_gx", "opera_one", "ad_mvn"] and opera_window and not opera_setup_completed:
+                      if software_type in["opera_gx", "opera_one", "ad_mvn"] and opera_window and not opera_setup_completed:
                           wt = opera_window.window_text()
-
+                          
                           # Robust logic to decide which exact software launched
                           if software_type == "ad_mvn":
                               is_gx_flow = "GX" in wt.upper()
@@ -477,27 +479,23 @@ jobs:
 
                           if not opera_launched_time:
                               opera_launched_time = time.time()
-                              print(f"[{software_type}] Opera Window Detected: '{wt}'.")
-                              if is_gx_flow:
-                                  print("[Opera GX] Waiting 15s for full rendering before automation...")
-                              else:
-                                  print("[Opera One] Waiting 90s for full rendering and stabilization before automation...")
+                              wait_msg = "15s" if is_gx_flow else "90s"
+                              print(f"[{software_type}] Opera Window Detected: '{wt}'. Waiting {wait_msg} for full rendering...")
                               try:
                                   opera_window.set_focus()
                                   opera_window.maximize()
                               except Exception:
                                   pass
+                          
+                          # Increased wait time to 90 seconds for Opera One to properly launch & render
+                          wait_time = 15 if is_gx_flow else 90
 
-                          # Different wait times: GX = 15s, Opera One = 90s
-                          wait_seconds = 15 if is_gx_flow else 90
-
-                          if time.time() - opera_launched_time > wait_seconds:
-                              # Re-focus the opera window firmly before any key/mouse automation
+                          if time.time() - opera_launched_time > wait_time:
                               try:
                                   opera_window.set_focus()
                               except Exception:
                                   pass
-                              time.sleep(2)
+                              time.sleep(1)
 
                               if is_gx_flow:
                                   # --- OPERA GX Logic: Tab & Enter Sequence ---
@@ -531,66 +529,37 @@ jobs:
                                       print("[Opera GX] Setup automation successfully completed.")
                                   except Exception as e:
                                       print(f"[Opera GX] Error in TAB/ENTER flow: {e}")
-
+                              
                               else:
-                                  # --- OPERA ONE Logic ---
-                                  # Step 1: Click center of window 3 times (1-2s delays)
-                                  # Step 2: RIGHT arrow 10 times (1-2s delays)
-                                  # Step 3: ENTER once
-                                  print("[Opera One] Starting Click Center + RIGHT ARROW + ENTER automation flow...")
+                                  # --- OPERA ONE Logic: Center Click, Right Arrow & Enter Sequence ---
+                                  print("[Opera One] Starting automation flow after 90s delay...")
                                   try:
-                                      # Get window rectangle to compute center
-                                      try:
-                                          rect = opera_window.rectangle()
-                                          center_x = (rect.left + rect.right) // 2
-                                          center_y = (rect.top + rect.bottom) // 2
-                                          print(f"[Opera One] Window rect: {rect}. Center: ({center_x}, {center_y})")
-                                      except Exception as rect_err:
-                                          print(f"[Opera One] Could not get window rect ({rect_err}), using screen center fallback.")
-                                          screen_w, screen_h = pyautogui.size()
-                                          center_x = screen_w // 2
-                                          center_y = screen_h // 2
-
-                                      # STEP 1: Click center 3 times with 1-2s delays between each
-                                      print("[Opera One] Step 1: Clicking window center 3 times...")
+                                      sw, sh = pyautogui.size()
+                                      cx, cy = sw // 2, sh // 2
+                                      print(f"[Opera One] Clicking center of screen ({cx}, {cy}) 3 times...")
+                                      
+                                      # Click center 3 times with 1-2s delay
                                       for i in range(3):
-                                          pyautogui.click(center_x, center_y)
+                                          pyautogui.click(cx, cy)
                                           delay = random.uniform(1.0, 2.0)
-                                          print(f"[Opera One] Center click ({i+1}/3) done. Waiting {delay:.2f}s...")
+                                          print(f"[Opera One] Center click {i+1}/3 done, waiting {delay:.2f}s")
                                           time.sleep(delay)
 
-                                      print("[Opera One] 3 center clicks completed.")
-                                      time.sleep(1)
-
-                                      # Re-focus the opera window after mouse clicks
-                                      # so keyboard events land on the correct window
-                                      try:
-                                          opera_window.set_focus()
-                                          print("[Opera One] Re-focused Opera One window before key presses.")
-                                      except Exception:
-                                          pass
-                                      time.sleep(0.5)
-
-                                      # STEP 2: Press RIGHT arrow key 10 times with 1-2s delays
-                                      print("[Opera One] Step 2: Pressing RIGHT arrow 10 times...")
+                                      # Right Arrow 10 times with 1-2s delay
                                       for i in range(10):
                                           send_keys('{RIGHT}')
                                           delay = random.uniform(1.0, 2.0)
-                                          print(f"[Opera One] RIGHT arrow ({i+1}/10) sent. Waiting {delay:.2f}s...")
+                                          print(f"[Opera One] Sent RIGHT arrow ({i+1}/10), waiting {delay:.2f}s")
                                           time.sleep(delay)
-
-                                      print("[Opera One] 10 RIGHT arrows completed.")
-                                      time.sleep(0.5)
-
-                                      # STEP 3: Press ENTER once to finish
-                                      print("[Opera One] Step 3: Pressing ENTER...")
+                                      
+                                      # Complete with Enter
                                       send_keys('{ENTER}')
-                                      print("[Opera One] ENTER pressed.")
+                                      print("[Opera One] Pressed ENTER.")
 
                                       opera_setup_completed = True
                                       print("[Opera One] Setup automation successfully completed.")
                                   except Exception as e:
-                                      print(f"[Opera One] Error in automation flow: {e}")
+                                      print(f"[Opera One] Error in Opera One flow: {e}")
 
                   except Exception as e:
                       pass
@@ -612,7 +581,7 @@ jobs:
               Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"`" `"`" `"$env:SOFTWARE_TYPE`"" -WindowStyle Hidden
           }
 
-          # 3. Setup the Software Watcher/Installer background job
+          # 3. Setup the Software Watcher/Installer background job (9 min timeout to fit within 10 min job limit)
           $dlFolder = "$env:USERPROFILE\Downloads"
           $timeoutSecs = 9 * 60
           $softwareType = $env:SOFTWARE_TYPE
@@ -659,7 +628,11 @@ jobs:
 
                       Write-Output "[$actualSoftware] Executing silent installer..."
                       try {
-                          Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
+                          if ($actualSoftware -match "opera") {
+                              Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
+                          } else {
+                              Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
+                          }
                           Write-Output "[$actualSoftware] Installer process finished."
                       } catch {
                           Write-Output "[$actualSoftware] ERROR running installer: $_"
@@ -760,4 +733,4 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Session is active. This runner will remain online until the job timeout is reached."
-          Start-Sleep -Seconds 3600
+          Start-Sleep -Seconds 600
