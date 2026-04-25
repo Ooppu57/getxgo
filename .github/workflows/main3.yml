@@ -11,7 +11,7 @@ on:
           - 'windows-2025'
           - 'windows-2022'
           - 'windows-11-arm'
-        default: 'windows-2022'
+        default: 'windows-2025'
       getscreen_email:
         description: 'Getscreen.me Account Email'
         required: true
@@ -52,7 +52,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'AVG - MlzYT'
+        default: 'AVG - F.ahmad'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
