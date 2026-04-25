@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '5'
+        default: '2'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -52,12 +52,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Ad-MVN - Orderflowz'
+        default: 'AVG - Trader'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
         type: string
-        default: 'a3723444-e032-420c-9a45-4bf8745b5807'
+        default: '689aaa76-7b41-4eda-8aa2-2d89c9fa07f4'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
