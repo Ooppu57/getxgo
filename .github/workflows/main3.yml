@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '3'
+        default: '5'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -52,7 +52,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - B4Books'
+        default: 'Ad-MVN - A2Z'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
