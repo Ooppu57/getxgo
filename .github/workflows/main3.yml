@@ -75,7 +75,7 @@ on:
         description: 'Use Mobile Proxies (.mobile=true)'
         required: true
         type: boolean
-        default: false
+        default: true
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions per Device'
         required: true
