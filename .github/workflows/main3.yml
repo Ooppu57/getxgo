@@ -11,7 +11,7 @@ on:
           - 'windows-2025'
           - 'windows-2022'
           - 'windows-11-arm'
-        default: 'windows-2022'
+        default: 'windows-2025'
       getscreen_email:
         description: 'Getscreen.me Account Email'
         required: true
@@ -52,12 +52,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Ad-MVN - B4Books'
+        default: 'OperaGX - Fatradez'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: ''
+        default: 'd16751cf-af6a-44d4-ac61-599aa5844bd0'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -70,7 +70,7 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'USA'
+        default: 'Australia'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
@@ -80,7 +80,7 @@ on:
         description: 'Enable Unique Sticky Sessions'
         required: true
         type: boolean
-        default: false
+        default: true
 
 jobs:
   prepare_matrix:
