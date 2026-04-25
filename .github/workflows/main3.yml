@@ -52,12 +52,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - Oliver'
+        default: 'OperaGX - James'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: 'c7d8a1f1-2cde-4463-8e0f-7dff098d4af8'
+        default: '589109d6-21c7-4f1c-b369-6557eca63d01'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
