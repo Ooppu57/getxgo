@@ -1,0 +1,14 @@
+{
+  "run_number":      "3",
+  "run_id":          "24923963909",
+  "timestamp_utc":   "2026-04-25T05:49:22Z",
+  "target_url":      "https://opx.ucoz.site/",
+  "country":         "fr — France",
+  "num_requests":    "5",
+  "proxy_type":      "residential",
+  "premium_level":   "none — Standard (1 credit/req)",
+  "take_screenshot": "true",
+  "passed":          "5",
+  "failed":          "0",
+  "screenshots_taken": "5"
+}
