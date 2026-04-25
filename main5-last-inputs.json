@@ -1,17 +1,17 @@
 {
-  "run_number":        "6",
-  "run_id":            "24924709338",
+  "run_number":        "7",
+  "run_id":            "24924811526",
   "workflow":          "main5.yml",
-  "timestamp_utc":     "2026-04-25T06:35:46Z",
-  "software_category": "AVG",
-  "affiliate_link":    "AVG » Trader",
-  "target_url":        "https://u.to/a-trdr/xDh4Ig",
+  "timestamp_utc":     "2026-04-25T06:36:44Z",
+  "software_category": "Ad-Maven",
+  "affiliate_link":    "Ad-Maven » Techx",
+  "target_url":        "https://u.to/techxadmvnxsmrt/gvd7Ig",
   "country":           "us — United States",
-  "num_requests":      "5",
+  "num_requests":      "1",
   "proxy_type":        "residential",
   "premium_level":     "none — Standard (1 credit/req)",
   "take_screenshot":   "true",
-  "passed":            "",
-  "failed":            "",
-  "screenshots_taken": ""
+  "passed":            "1",
+  "failed":            "0",
+  "screenshots_taken": "1"
 }
