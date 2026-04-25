@@ -1,191 +1,336 @@
-name: ScrapeOps Proxy Aggregator Scraper
+name: ScrapeOps Proxy API Scraper
 
 on:
   workflow_dispatch:
     inputs:
       target_url:
-        description: 'Target URL to scrape (e.g., https://quotes.toscrape.com)'
+        description: "URL to scrape"
         required: true
         type: string
-      api_key:
-        description: 'ScrapeOps Proxy API Key'
+
+      scrapeops_api_key:
+        description: "ScrapeOps Proxy API Key"
         required: true
         type: string
+
       country:
-        description: 'Country Geotargeting (Optional, e.g., us, gb, de)'
+        description: "Country for geotargeting (e.g. us, gb, de, pk — leave blank for auto)"
         required: false
+        default: ""
         type: string
+
       num_requests:
-        description: 'Number of Requests (1 to 100)'
+        description: "Number of requests to send (1–100)"
         required: true
-        default: 1
-        type: number
-      residential:
-        description: 'Use Residential Proxies'
+        default: "1"
+        type: string
+
+      proxy_type:
+        description: "Proxy type to use"
+        required: true
+        default: "residential"
+        type: choice
+        options:
+          - residential
+          - mobile
+          - both
+
+      premium_level_1:
+        description: "Enable Premium Level 1 proxies (1.5 credits/request)"
         required: false
+        default: "false"
         type: boolean
-        default: false
-      mobile:
-        description: 'Use Mobile Proxies'
+
+      premium_level_2:
+        description: "Enable Premium Level 2 proxies (3 credits/request)"
         required: false
+        default: "false"
         type: boolean
-        default: false
-      premium_1:
-        description: 'Premium Level 1'
+
+      take_screenshot:
+        description: "Take a screenshot of each page (requires JS rendering)"
         required: false
+        default: "false"
         type: boolean
-        default: false
-      premium_2:
-        description: 'Premium Level 2'
-        required: false
-        type: boolean
-        default: false
-      screenshot:
-        description: 'Capture Screenshot (Requires JS Rendering)'
-        required: false
-        type: boolean
-        default: false
 
 jobs:
   scrape:
+    name: Run ScrapeOps Proxy Requests
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+
     steps:
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      # ── 1. Checkout (needed so the runner has a workspace) ──────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Install Python dependencies ──────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-          
-      - name: Install Dependencies
+          python-version: "3.11"
+
+      - name: Install dependencies
         run: pip install requests
-        
-      - name: Run Scraper Script
-        env:
-          INPUT_TARGET_URL: ${{ inputs.target_url }}
-          INPUT_API_KEY: ${{ inputs.api_key }}
-          INPUT_COUNTRY: ${{ inputs.country }}
-          INPUT_NUM_REQUESTS: ${{ inputs.num_requests }}
-          INPUT_RESIDENTIAL: ${{ inputs.residential }}
-          INPUT_MOBILE: ${{ inputs.mobile }}
-          INPUT_PREMIUM_1: ${{ inputs.premium_1 }}
-          INPUT_PREMIUM_2: ${{ inputs.premium_2 }}
-          INPUT_SCREENSHOT: ${{ inputs.screenshot }}
+
+      # ── 3. Validate inputs ───────────────────────────────────────────────────
+      - name: Validate inputs
         run: |
-          cat << 'EOF' > scraper.py
-          import os
-          import requests
-          import json
-          import base64
-          import time
+          NUM="${{ inputs.num_requests }}"
+          if ! [[ "$NUM" =~ ^[0-9]+$ ]] || [ "$NUM" -lt 1 ] || [ "$NUM" -gt 100 ]; then
+            echo "ERROR: num_requests must be an integer between 1 and 100. Got: $NUM"
+            exit 1
+          fi
+          echo "✅ Inputs validated — sending $NUM request(s)"
 
-          def run():
-              target_url = os.environ.get('INPUT_TARGET_URL')
-              api_key = os.environ.get('INPUT_API_KEY')
-              country = os.environ.get('INPUT_COUNTRY', '').strip()
-              
-              # Clamp requests limit
-              try:
-                  num_requests = int(os.environ.get('INPUT_NUM_REQUESTS', 1))
-              except ValueError:
-                  num_requests = 1
-              num_requests = max(1, min(100, num_requests))
-              
-              residential = os.environ.get('INPUT_RESIDENTIAL') == 'true'
-              mobile = os.environ.get('INPUT_MOBILE') == 'true'
-              premium_1 = os.environ.get('INPUT_PREMIUM_1') == 'true'
-              premium_2 = os.environ.get('INPUT_PREMIUM_2') == 'true'
-              screenshot = os.environ.get('INPUT_SCREENSHOT') == 'true'
+      # ── 4. Run the scraper ───────────────────────────────────────────────────
+      - name: Run ScrapeOps scraper
+        env:
+          TARGET_URL:         "${{ inputs.target_url }}"
+          SCRAPEOPS_API_KEY:  "${{ inputs.scrapeops_api_key }}"
+          COUNTRY:            "${{ inputs.country }}"
+          NUM_REQUESTS:       "${{ inputs.num_requests }}"
+          PROXY_TYPE:         "${{ inputs.proxy_type }}"
+          PREMIUM_LEVEL_1:    "${{ inputs.premium_level_1 }}"
+          PREMIUM_LEVEL_2:    "${{ inputs.premium_level_2 }}"
+          TAKE_SCREENSHOT:    "${{ inputs.take_screenshot }}"
+        run: |
+          python - <<'PYEOF'
+          import os, sys, json, time, base64, requests
+          from urllib.parse import urlencode, quote
 
-              base_url = "https://proxy.scrapeops.io/v1/"
-              
-              # Construct base query parameters
-              base_params = {
-                  'api_key': api_key,
-                  'url': target_url
+          # ── Config from env ──────────────────────────────────────────────────
+          TARGET_URL        = os.environ["TARGET_URL"]
+          API_KEY           = os.environ["SCRAPEOPS_API_KEY"]
+          COUNTRY           = os.environ.get("COUNTRY", "").strip()
+          NUM_REQUESTS      = int(os.environ["NUM_REQUESTS"])
+          PROXY_TYPE        = os.environ["PROXY_TYPE"]          # residential | mobile | both
+          PREMIUM_LEVEL_1   = os.environ["PREMIUM_LEVEL_1"].lower() == "true"
+          PREMIUM_LEVEL_2   = os.environ["PREMIUM_LEVEL_2"].lower() == "true"
+          TAKE_SCREENSHOT   = os.environ["TAKE_SCREENSHOT"].lower() == "true"
+
+          SCRAPEOPS_ENDPOINT = "https://proxy.scrapeops.io/v1/"
+
+          os.makedirs("results", exist_ok=True)
+          os.makedirs("screenshots", exist_ok=True)
+
+          summary = []
+
+          print(f"\n{'='*60}")
+          print(f"  ScrapeOps Proxy API Scraper")
+          print(f"{'='*60}")
+          print(f"  Target URL   : {TARGET_URL}")
+          print(f"  Requests     : {NUM_REQUESTS}")
+          print(f"  Country      : {COUNTRY or '(auto)'}")
+          print(f"  Proxy type   : {PROXY_TYPE}")
+          print(f"  Premium L1   : {PREMIUM_LEVEL_1}")
+          print(f"  Premium L2   : {PREMIUM_LEVEL_2}")
+          print(f"  Screenshot   : {TAKE_SCREENSHOT}")
+          print(f"{'='*60}\n")
+
+          # ── Build base params ────────────────────────────────────────────────
+          def build_params(request_index):
+              params = {
+                  "api_key": API_KEY,
+                  "url": TARGET_URL,
               }
-              
-              if country:
-                  base_params['country'] = country
-              if residential:
-                  base_params['residential'] = 'true'
-              if mobile:
-                  base_params['mobile'] = 'true'
-                  
-              # Use highest premium level if both are ticked
-              if premium_2:
-                  base_params['premium'] = 'level_2'
-              elif premium_1:
-                  base_params['premium'] = 'level_1'
-                  
-              # Enable screenshot rendering
-              if screenshot:
-                  base_params['screenshot'] = 'true'
-                  base_params['render_js'] = 'true'
-                  base_params['json_response'] = 'true'
 
-              print(f"🚀 Starting {num_requests} sequential requests to {target_url}...")
-              
-              # Generate random base session to ensure fresh sessions in new action runs
-              session_base = int(time.time()) % 100000
-              os.makedirs("screenshots", exist_ok=True)
+              # Country geotargeting
+              if COUNTRY:
+                  params["country"] = COUNTRY
 
-              # Execute sequentially to respect Concurrency Limit of 1
-              for i in range(num_requests):
-                  print(f"\n--- Request {i+1} of {num_requests} ---")
-                  params = base_params.copy()
-                  
-                  # Assign completely unique session per iteration to guarantee unique proxy IPs
-                  params['session_number'] = session_base + i
-                  print(f"Assigned Unique Session ID: {params['session_number']}")
-                  
+              # Proxy type — each request gets its own unique session number
+              # so all sessions are independent (rotating IPs per request)
+              # session_number ensures stickiness WITHIN a single logical session;
+              # using request_index as session id gives a UNIQUE proxy per request.
+              params["session_number"] = request_index  # 0 … NUM_REQUESTS-1
+
+              if PROXY_TYPE == "residential":
+                  params["residential"] = "true"
+              elif PROXY_TYPE == "mobile":
+                  params["mobile"] = "true"
+              elif PROXY_TYPE == "both":
+                  # Alternate: odd → residential, even → mobile
+                  if request_index % 2 == 0:
+                      params["residential"] = "true"
+                  else:
+                      params["mobile"] = "true"
+
+              # Premium proxies (level_2 takes precedence over level_1)
+              if PREMIUM_LEVEL_2:
+                  params["premium"] = "level_2"
+              elif PREMIUM_LEVEL_1:
+                  params["premium"] = "level_1"
+
+              # Screenshot requires JS rendering + json_response
+              if TAKE_SCREENSHOT:
+                  params["screenshot"]    = "true"
+                  params["render_js"]     = "true"
+                  params["json_response"] = "true"
+
+              return params
+
+          # ── Per-request logic ────────────────────────────────────────────────
+          for i in range(NUM_REQUESTS):
+              req_num = i + 1
+              print(f"── Request {req_num}/{NUM_REQUESTS} ──────────────────────────")
+
+              params  = build_params(i)
+              attempt = 0
+              success = False
+
+              while attempt < 3 and not success:
+                  attempt += 1
                   try:
-                      # Added a generous timeout (Scrapeops retries take up to 2 mins)
-                      response = requests.get(base_url, params=params, timeout=150)
-                      print(f"Status Code: {response.status_code}")
-                      
-                      if response.status_code == 200:
-                          if screenshot:
-                              try:
-                                  data = response.json()
-                                  if 'screenshot' in data:
-                                      img_data = base64.b64decode(data['screenshot'])
-                                      filename = f"screenshots/screenshot_req_{i+1}.png"
-                                      with open(filename, 'wb') as f:
-                                          f.write(img_data)
-                                      print(f"✅ Screenshot generated & saved as {filename}!")
-                                  else:
-                                      print("⚠️ Screenshot key not found in JSON response.")
-                              except json.JSONDecodeError:
-                                  print("⚠️ Failed to parse JSON. Check if your API params are correct.")
-                          else:
-                              # Just print HTML preview
-                              content_snippet = response.text[:200].replace('\n', ' ')
-                              print(f"✅ Response Snippet: {content_snippet}...")
-                      else:
-                          print(f"❌ Request failed with response: {response.text[:200]}")
-                  except Exception as e:
-                      print(f"❌ Error during request {i+1}: {e}")
-                  
-                  # Sequential delay block
-                  if i < num_requests - 1:
-                      print("Sleeping briefly before next request (Concurrency = 1)...")
-                      time.sleep(1)
+                      resp = requests.get(
+                          SCRAPEOPS_ENDPOINT,
+                          params=params,
+                          timeout=120,   # ScrapeOps retries for up to 2 min internally
+                      )
 
-          if __name__ == "__main__":
-              run()
-          EOF
-          python scraper.py
-          
-      - name: Upload Screenshots as Artifact
-        if: ${{ inputs.screenshot == 'true' }}
+                      # ScrapeOps returns 200 (success) or 404 (page not found —
+                      # also counted as a successful proxy request).
+                      if resp.status_code in (200, 404):
+                          print(f"  ✅ HTTP {resp.status_code} — success on attempt {attempt}")
+                          success = True
+
+                          # ── Screenshot handling ──────────────────────────────
+                          if TAKE_SCREENSHOT:
+                              try:
+                                  data = resp.json()
+                                  b64  = data.get("screenshot", "")
+                                  if b64:
+                                      png_path = f"screenshots/screenshot_{req_num:03d}.png"
+                                      with open(png_path, "wb") as f:
+                                          f.write(base64.b64decode(b64))
+                                      print(f"  📸 Screenshot saved → {png_path}")
+                                  else:
+                                      print("  ⚠️  Screenshot flag set but no screenshot in response")
+                              except Exception as e:
+                                  print(f"  ⚠️  Screenshot decode error: {e}")
+
+                          # ── Save HTML body ───────────────────────────────────
+                          html_path = f"results/response_{req_num:03d}.html"
+                          if TAKE_SCREENSHOT and resp.headers.get("Content-Type","").startswith("application/json"):
+                              body = resp.json().get("body", resp.text)
+                          else:
+                              body = resp.text
+
+                          with open(html_path, "w", encoding="utf-8") as f:
+                              f.write(body)
+                          print(f"  💾 Body saved     → {html_path}")
+
+                          summary.append({
+                              "request": req_num,
+                              "status":  resp.status_code,
+                              "session": i,
+                              "proxy_type": PROXY_TYPE if PROXY_TYPE != "both" else ("residential" if i%2==0 else "mobile"),
+                              "country": COUNTRY or "auto",
+                              "html_file": html_path,
+                          })
+
+                      else:
+                          print(f"  ❌ HTTP {resp.status_code} on attempt {attempt} — {'retrying…' if attempt < 3 else 'giving up'}")
+                          if attempt < 3:
+                              time.sleep(5 * attempt)
+
+                  except requests.exceptions.Timeout:
+                      print(f"  ⏱  Timeout on attempt {attempt} — {'retrying…' if attempt < 3 else 'giving up'}")
+                      if attempt < 3:
+                          time.sleep(5 * attempt)
+
+                  except Exception as e:
+                      print(f"  ⚠️  Error on attempt {attempt}: {e} — {'retrying…' if attempt < 3 else 'giving up'}")
+                      if attempt < 3:
+                          time.sleep(5 * attempt)
+
+              if not success:
+                  summary.append({
+                      "request": req_num,
+                      "status":  "FAILED",
+                      "session": i,
+                  })
+
+              # ── Sequential: concurrency limit is 1, so no sleep needed ──────
+              # Small courtesy delay between sequential requests
+              if req_num < NUM_REQUESTS:
+                  time.sleep(1)
+
+          # ── Write summary JSON ───────────────────────────────────────────────
+          with open("results/summary.json", "w") as f:
+              json.dump(summary, f, indent=2)
+
+          total  = len(summary)
+          passed = sum(1 for r in summary if str(r["status"]) in ("200","404"))
+          failed = total - passed
+
+          print(f"\n{'='*60}")
+          print(f"  Done!  ✅ {passed} succeeded  |  ❌ {failed} failed  |  Total: {total}")
+          print(f"  Results written to results/")
+          if TAKE_SCREENSHOT:
+              print(f"  Screenshots written to screenshots/")
+          print(f"{'='*60}\n")
+
+          if failed > 0:
+              sys.exit(1)
+          PYEOF
+
+      # ── 5. Upload HTML results as artifact ───────────────────────────────────
+      - name: Upload HTML results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: scrapeops-screenshots
+          name: scrape-results
+          path: results/
+          retention-days: 7
+
+      # ── 6. Upload screenshots as artifact (if taken) ─────────────────────────
+      - name: Upload screenshots
+        if: ${{ inputs.take_screenshot == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
           path: screenshots/
           retention-days: 7
-          
-      - name: Screenshot URLs Summary
-        if: ${{ inputs.screenshot == 'true' }}
+
+      # ── 7. Print shareable artifact URL in the job summary ──────────────────
+      - name: Print artifact download info
+        if: always()
         run: |
-          echo "### 📸 Scraping Completed!" >> $GITHUB_STEP_SUMMARY
-          echo "Your screenshot files have been saved as artifacts." >> $GITHUB_STEP_SUMMARY
-          echo "👉 **[Click Here to Download Screenshots](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})** (Scroll down to the 'Artifacts' section)." >> $GITHUB_STEP_SUMMARY
+          echo "## 📦 Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Your scraped HTML files and screenshots (if taken) have been uploaded" >> $GITHUB_STEP_SUMMARY
+          echo "as GitHub Actions **Artifacts** and are available for **7 days**." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### How to access" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to the **Actions** tab of your repository" >> $GITHUB_STEP_SUMMARY
+          echo "2. Click this workflow run" >> $GITHUB_STEP_SUMMARY
+          echo "3. Scroll to the **Artifacts** section at the bottom" >> $GITHUB_STEP_SUMMARY
+          echo "4. Download **scrape-results** (HTML) and/or **screenshots** (PNG)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Screenshot sharing" >> $GITHUB_STEP_SUMMARY
+          echo "To get a public URL for a screenshot, download the ZIP, then upload" >> $GITHUB_STEP_SUMMARY
+          echo "any PNG to [imgur.com](https://imgur.com/upload) or [postimages.org](https://postimages.org)" >> $GITHUB_STEP_SUMMARY
+          echo "for an instant shareable link — no account required." >> $GITHUB_STEP_SUMMARY
+
+      # ── 8. Print run summary table ───────────────────────────────────────────
+      - name: Print run summary
+        if: always()
+        run: |
+          echo "## 🕷️ ScrapeOps Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Target URL | \`${{ inputs.target_url }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Requests | ${{ inputs.num_requests }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Country | ${{ inputs.country || 'auto' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Proxy Type | ${{ inputs.proxy_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Premium L1 | ${{ inputs.premium_level_1 }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Premium L2 | ${{ inputs.premium_level_2 }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Screenshot | ${{ inputs.take_screenshot }} |" >> $GITHUB_STEP_SUMMARY
+          if [ -f results/summary.json ]; then
+            PASSED=$(python3 -c "import json; d=json.load(open('results/summary.json')); print(sum(1 for r in d if str(r.get('status','')) in ('200','404')))")
+            FAILED=$(python3 -c "import json; d=json.load(open('results/summary.json')); print(sum(1 for r in d if str(r.get('status','')) not in ('200','404')))")
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**✅ Successful:** $PASSED &nbsp;|&nbsp; **❌ Failed:** $FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
