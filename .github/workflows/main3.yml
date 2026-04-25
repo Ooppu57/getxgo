@@ -54,7 +54,7 @@ on:
           - 'Ad-MVN - A2Z'
         default: 'Ad-MVN - Techx'
       scrapeops_api_key:
-        description: 'ScrapeOps API Key (Proxy Password) — leave blank to run without proxy'
+        description: 'ScrapeOps API Key'
         required: false
         type: string
         default: ''
@@ -72,7 +72,7 @@ on:
           - 'Brazil'
         default: 'USA'
       mobile_proxies:
-        description: 'Use Mobile Proxies (.mobile=true)'
+        description: 'Use Mobile Proxies'
         required: true
         type: boolean
         default: false
