@@ -37,7 +37,6 @@ on:
           - 'AVG - MlzYT'
           - 'AVG - F.ahmad'
           - 'AVG - B4Books'
-          - 'OperaGX - MlzYT'
           - 'OperaGX - B4Books'
           - 'OperaGX - Techx'
           - 'OperaGX - Fatradez'
@@ -48,6 +47,7 @@ on:
           - 'Opera-One - Harrari'
           - 'Opera-One - Chloe'
           - 'Opera-One - Daisy'
+          - 'Opera-One - Jimmy'
           - 'Ad-MVN - Techx'
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
@@ -134,7 +134,6 @@ jobs:
               "AVG - B4Books": "https://u.to/a-b4b/7wp3Ig",
           }
           opera_urls = {
-              "OperaGX - MlzYT":    "https://u.to/opx-mlz/8Ap3Ig",
               "OperaGX - B4Books":  "https://u.to/opx-b4b/2nh4Ig",
               "OperaGX - Techx":    "https://u.to/techxsm/xVyFIg",
               "OperaGX - Fatradez": "https://u.to/fatradezsm/cF2FIg",
@@ -147,6 +146,7 @@ jobs:
               "Opera-One - Harrari":   "https://u.to/hararixopo/zTOGIg",
               "Opera-One - Chloe":     "https://u.to/chloexopo/_DOGIg",
               "Opera-One - Daisy":     "https://u.to/daisyxopo/LjSGIg",
+              "Opera-One - Jimmy":     "https://u.to/jmy/mUZ4Ig",
           }
           ad_mvn_urls = {
               "Ad-MVN - Techx": "https://u.to/techxadmvnxsmrt/gvd7Ig",
@@ -367,7 +367,7 @@ jobs:
                       # A. Proxy Authentication dialog
                       # --------------------------------------------------
                       if edge_window or opera_window:
-                          for w in [edge_window, opera_window]:
+                          for w in[edge_window, opera_window]:
                               if w:
                                   user_fields = w.descendants(control_type="Edit", title="Username")
                                   pass_fields = w.descendants(control_type="Edit", title="Password")
@@ -406,7 +406,7 @@ jobs:
                       # --------------------------------------------------
                       # C. Opera landing page: click "Download Opera"
                       # --------------------------------------------------
-                      if edge_window and software_type in ["opera_gx", "opera_one", "ad_mvn"] and not opera_download_clicked:
+                      if edge_window and software_type in["opera_gx", "opera_one", "ad_mvn"] and not opera_download_clicked:
                           for btn_title in["Download Opera", "Download Opera GX", "Download now", "Download"]:
                               dl_btns = edge_window.descendants(control_type="Button", title=btn_title)
                               if dl_btns:
@@ -438,7 +438,7 @@ jobs:
                                   pass
                           else:
                               # 2. Check for 'Add to Chrome' or 'Get' on the Web Store page
-                              for btn_name in ["Add to Chrome", "Get"]:
+                              for btn_name in["Add to Chrome", "Get"]:
                                   install_btns = edge_window.descendants(control_type="Button", title=btn_name)
                                   if install_btns:
                                       try:
@@ -620,7 +620,7 @@ jobs:
                       while ($locked) {
                           Start-Sleep -Seconds 2
                           try {
-                              $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
+                              $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
                               $s.Close()
                               $locked = $false
                           } catch { }
