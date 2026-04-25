@@ -1,14 +1,16 @@
 {
-  "run_number":      "4",
-  "run_id":          "24924129257",
-  "timestamp_utc":   "2026-04-25T05:59:01Z",
-  "target_url":      "https://opx.ucoz.site/",
-  "country":         "fr — France",
-  "num_requests":    "5",
-  "proxy_type":      "residential",
-  "premium_level":   "none — Standard (1 credit/req)",
-  "take_screenshot": "true",
-  "passed":          "5",
-  "failed":          "0",
-  "screenshots_taken": "5"
+  "run_number":        "5",
+  "run_id":            "24924472458",
+  "timestamp_utc":     "2026-04-25T06:17:16Z",
+  "software_category": "Ad-Maven",
+  "affiliate_link":    "AVG - MlzYT",
+  "target_url":        "",
+  "country":           "us — United States",
+  "num_requests":      "5",
+  "proxy_type":        "residential",
+  "premium_level":     "none — Standard (1 credit/req)",
+  "take_screenshot":   "true",
+  "passed":            "",
+  "failed":            "",
+  "screenshots_taken": ""
 }
