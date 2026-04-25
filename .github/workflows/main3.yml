@@ -52,12 +52,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Daisy'
+        default: 'AVG - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
         type: string
-        default: 'aa45bf56-82fa-4af5-9c92-33d8910d9607 '
+        default: '003130d3-87e5-44f3-89de-466c0696b3f0'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -167,12 +167,12 @@ jobs:
               exe_filter = "OperaSetup*.exe"
           elif software_choice.startswith("Ad-MVN"):
               software_type = "ad_mvn"
-              exe_filter = "*Opera*Setup*.exe" # Catch both GX and One
+              exe_filter = "*Opera*Setup*.exe"
           else:
               software_type = "avg"
               exe_filter = "*avg*.exe"
 
-          includes =[]
+          includes = []
           if email:
               for i in range(1, num_devices + 1):
                   short_os = os_version.replace("windows-", "")
@@ -331,59 +331,6 @@ jobs:
           import pyautogui
           from pywinauto.keyboard import send_keys
 
-          # Helper: robustly check if an Opera One setup wizard page is
-          # actually rendered and interactive by looking for known text
-          # anchors that appear on each slide of the onboarding wizard.
-          # ---------------------------------------------------------------
-          OPERA_ONE_WIZARD_ANCHORS = [
-              "first time",        # "Is this your first time installing Opera?"
-              "reinstalling",      # option text
-              "new here",          # option text
-              "coming back",       # option text
-              "import",            # import bookmarks page
-              "default browser",   # set default page
-              "theme",             # theme selection page
-              "start",             # start page / finish page
-              "privacy",           # privacy page
-              "features",          # features page
-          ]
-
-          def opera_one_wizard_is_ready(window):
-              """
-              Return True only when:
-              1. The window is foreground and not minimised.
-              2. Its bounding rect is sane (width > 400, height > 300).
-              3. At least one known wizard anchor text is found in its
-                 descendants (confirming the slide is rendered).
-              4. A clickable / focusable child control exists (Button or
-                 ListItem) - meaning the UI thread is not still painting.
-              """
-              try:
-                  rect = window.rectangle()
-                  if rect.width() < 400 or rect.height() < 300:
-                      return False
-
-                  # Check for interactive children
-                  buttons  = window.descendants(control_type="Button")
-                  listitems = window.descendants(control_type="ListItem")
-                  if not buttons and not listitems:
-                      return False
-
-                  # Check for wizard text anchors (case-insensitive)
-                  all_text = " ".join(
-                      c.window_text().lower()
-                      for c in window.descendants()
-                      if c.window_text()
-                  )
-                  for anchor in OPERA_ONE_WIZARD_ANCHORS:
-                      if anchor in all_text:
-                          return True
-
-              except Exception:
-                  pass
-              return False
-
-
           def handle_automation(username, password, software_type, timeout=600):
               desktop = Desktop(backend="uia")
               start_time = time.time()
@@ -391,39 +338,27 @@ jobs:
               ctrl_j_attempts = 0
               keep_clicked = False
               opera_download_clicked = False
-
-              # --- Opera One state machine ---
-              opera_one_window_first_seen  = None   # wall-clock time window was first detected
-              opera_one_wizard_ready       = False   # True once wizard confirmed interactive
-              opera_one_center_clicks_done = False   # True once 3 center clicks have been sent
-              opera_one_setup_completed    = False   # True once full key sequence sent
-              opera_one_slide_index        = 0       # tracks how many RIGHT presses sent
-              opera_one_last_key_time      = 0       # throttle: min 2 s between key groups
-
-              # --- Opera GX state machine (unchanged) ---
-              opera_gx_launched_time      = None
-              opera_gx_setup_completed    = False
+              opera_launched_time = None
+              opera_setup_completed = False
 
               while time.time() - start_time < timeout:
                   try:
-                      edge_window  = None
+                      edge_window = None
                       opera_window = None
 
-                      # Map visible windows
+                      # Map windows robustly
                       for window in desktop.windows(visible_only=True):
                           wt = window.window_text()
                           if not wt:
                               continue
 
-                          if ("Microsoft Edge" in wt or "sudetyj" in wt or
-                                  "Chrome Web Store" in wt or "Edge" in wt):
+                          # Detect Edge browser window or extensions store
+                          if "Microsoft Edge" in wt or "sudetyj" in wt or "Chrome Web Store" in wt or "Edge" in wt:
                               edge_window = window
 
-                          if ("Opera" in wt or "Speed Dial" in wt or
-                                  "Start Page" in wt or "Welcome" in wt):
-                              if ("Microsoft Edge" not in wt and
-                                      "Edge" not in wt and
-                                      "Chrome Web Store" not in wt):
+                          # Detect launched Opera/Opera GX window reliably (Exclude Edge titles!)
+                          if "Opera" in wt or "Speed Dial" in wt or "Start Page" in wt or "Welcome" in wt or "first time" in wt.lower() or "installing" in wt.lower():
+                              if "Microsoft Edge" not in wt and "Edge" not in wt and "Chrome Web Store" not in wt:
                                   opera_window = window
 
                       # --------------------------------------------------
@@ -469,31 +404,27 @@ jobs:
                       # --------------------------------------------------
                       # C. Opera landing page: click "Download Opera"
                       # --------------------------------------------------
-                      if (edge_window and
-                              software_type in ["opera_gx", "opera_one", "ad_mvn"] and
-                              not opera_download_clicked):
-                          for btn_title in ["Download Opera", "Download Opera GX",
-                                            "Download now", "Download"]:
-                              dl_btns = edge_window.descendants(control_type="Button",
-                                                                title=btn_title)
+                      if edge_window and software_type in ["opera_gx", "opera_one", "ad_mvn"] and not opera_download_clicked:
+                          for btn_title in ["Download Opera", "Download Opera GX", "Download now", "Download"]:
+                              dl_btns = edge_window.descendants(control_type="Button", title=btn_title)
                               if dl_btns:
                                   try:
                                       edge_window.set_focus()
                                       time.sleep(0.5)
                                       dl_btns[0].click_input()
                                       opera_download_clicked = True
-                                      print(f"[{software_type}] Clicked Download button.")
+                                      print(f"[{software_type}] Clicked Download button on landing page.")
                                       time.sleep(2)
                                       break
                                   except Exception:
                                       pass
 
                       # --------------------------------------------------
-                      # D. Browser Extensions Handling
+                      # D. Browser Extensions Handling (Add to Chrome / Edge)
                       # --------------------------------------------------
                       if edge_window:
-                          add_ext_btns = edge_window.descendants(control_type="Button",
-                                                                  title="Add extension")
+                          # 1. Check for the confirmation popup first (Add extension)
+                          add_ext_btns = edge_window.descendants(control_type="Button", title="Add extension")
                           if add_ext_btns:
                               try:
                                   edge_window.set_focus()
@@ -504,15 +435,15 @@ jobs:
                               except Exception:
                                   pass
                           else:
+                              # 2. Check for 'Add to Chrome' or 'Get' on the Web Store page
                               for btn_name in ["Add to Chrome", "Get"]:
-                                  install_btns = edge_window.descendants(control_type="Button",
-                                                                          title=btn_name)
+                                  install_btns = edge_window.descendants(control_type="Button", title=btn_name)
                                   if install_btns:
                                       try:
                                           edge_window.set_focus()
                                           time.sleep(0.5)
                                           install_btns[0].click_input()
-                                          print(f"[Extension] Clicked '{btn_name}'.")
+                                          print(f"[Extension] Clicked '{btn_name}' on web store.")
                                           time.sleep(2)
                                           break
                                       except Exception:
@@ -521,199 +452,153 @@ jobs:
                       # --------------------------------------------------
                       # E. Ctrl+J to open downloads flyout
                       # --------------------------------------------------
-                      if (not keep_clicked and edge_window and
-                              (time.time() - last_ctrl_j_time > 15) and
-                              ctrl_j_attempts < 4):
+                      if not keep_clicked and edge_window and (time.time() - last_ctrl_j_time > 15) and ctrl_j_attempts < 4:
                           try:
                               edge_window.set_focus()
                               time.sleep(0.5)
                               send_keys('^j')
                               last_ctrl_j_time = time.time()
                               ctrl_j_attempts += 1
-                              print(f"[Handler] Ctrl+J attempt {ctrl_j_attempts}")
+                              print(f"[Handler] Pressed Ctrl+J to open downloads (attempt {ctrl_j_attempts})")
                           except Exception:
                               pass
 
-                      # ==================================================
-                      # F. Opera GX Post-install Automation (UNCHANGED)
-                      # ==================================================
-                      if (software_type in ["opera_gx"] and
-                              opera_window and not opera_gx_setup_completed):
+                      # --------------------------------------------------
+                      # F. Opera Post-install Keyboard Automation Flow
+                      # --------------------------------------------------
+                      if software_type in ["opera_gx", "opera_one", "ad_mvn"] and opera_window and not opera_setup_completed:
+                          wt = opera_window.window_text()
 
-                          if not opera_gx_launched_time:
-                              opera_gx_launched_time = time.time()
-                              print("[Opera GX] Window detected. Waiting 15s for render...")
+                          # Robust logic to decide which exact software launched
+                          if software_type == "ad_mvn":
+                              is_gx_flow = "GX" in wt.upper()
+                          else:
+                              is_gx_flow = (software_type == "opera_gx")
+
+                          if not opera_launched_time:
+                              opera_launched_time = time.time()
+                              print(f"[{software_type}] Opera Window Detected: '{wt}'.")
+                              if is_gx_flow:
+                                  print("[Opera GX] Waiting 15s for full rendering before automation...")
+                              else:
+                                  print("[Opera One] Waiting 90s for full rendering and stabilization before automation...")
                               try:
                                   opera_window.set_focus()
                                   opera_window.maximize()
                               except Exception:
                                   pass
 
-                          if time.time() - opera_gx_launched_time > 15:
+                          # Different wait times: GX = 15s, Opera One = 90s
+                          wait_seconds = 15 if is_gx_flow else 90
+
+                          if time.time() - opera_launched_time > wait_seconds:
+                              # Re-focus the opera window firmly before any key/mouse automation
                               try:
                                   opera_window.set_focus()
                               except Exception:
                                   pass
-                              time.sleep(1)
-
-                              print("[Opera GX] Starting TAB/ENTER automation flow...")
-                              try:
-                                  for _ in range(4):
-                                      send_keys('{TAB}')
-                                      time.sleep(0.5)
-                                  print("[Opera GX] Pressed TAB 4 times.")
-
-                                  for i in range(8):
-                                      send_keys('{ENTER}')
-                                      delay = random.uniform(1.0, 2.0)
-                                      print(f"[Opera GX] ENTER ({i+1}/8), wait {delay:.2f}s")
-                                      time.sleep(delay)
-
-                                  random_tabs = random.randint(4, 10)
-                                  for _ in range(random_tabs):
-                                      send_keys('{TAB}')
-                                      time.sleep(0.3)
-                                  print(f"[Opera GX] TAB x{random_tabs}")
-
-                                  send_keys('{ENTER}')
-                                  print("[Opera GX] Final ENTER sent.")
-                                  opera_gx_setup_completed = True
-                                  print("[Opera GX] Setup automation completed.")
-                              except Exception as e:
-                                  print(f"[Opera GX] TAB/ENTER error: {e}")
-
-                      # ==================================================
-                      # G. Opera ONE Post-install Automation  *** FIXED ***
-                      # ==================================================
-                      # For ad_mvn that resolved to opera_one, the caller
-                      # passes software_type="opera_one" already (set in
-                      # the PowerShell watcher job below).  We also handle
-                      # software_type="opera_one" directly here.
-                      if (software_type in ["opera_one"] and
-                              opera_window and not opera_one_setup_completed):
-
-                          wt = opera_window.window_text()
-
-                          # ---- Step 1: record first-seen timestamp ----
-                          if opera_one_window_first_seen is None:
-                              opera_one_window_first_seen = time.time()
-                              print(f"[Opera One] Window first seen: '{wt}'. "
-                                    f"Waiting for full render before touching keys...")
-
-                          # ---- Step 2: mandatory minimum wait (30 s) ----
-                          elapsed_since_first_seen = time.time() - opera_one_window_first_seen
-                          if elapsed_since_first_seen < 30:
-                              print(f"[Opera One] Render grace period: "
-                                    f"{elapsed_since_first_seen:.0f}/30 s elapsed. Skipping keys.")
                               time.sleep(2)
-                              continue   # go back to top of while loop
 
-                          # ---- Step 3: confirm wizard is truly ready ----
-                          if not opera_one_wizard_ready:
-                              if opera_one_wizard_is_ready(opera_window):
-                                  opera_one_wizard_ready = True
-                                  print("[Opera One] Wizard confirmed READY. "
-                                        "Starting key automation in 3 s...")
-                                  time.sleep(3)
+                              if is_gx_flow:
+                                  # --- OPERA GX Logic: Tab & Enter Sequence ---
+                                  print("[Opera GX] Starting TAB/ENTER automation flow...")
+                                  try:
+                                      # Tab 4 times
+                                      for _ in range(4):
+                                          send_keys('{TAB}')
+                                          time.sleep(0.5)
+                                      print("[Opera GX] Pressed TAB 4 times.")
+
+                                      # Enter 8 times with 1-2s delay
+                                      for i in range(8):
+                                          send_keys('{ENTER}')
+                                          delay = random.uniform(1.0, 2.0)
+                                          print(f"[Opera GX] Pressed ENTER ({i+1}/8), waiting {delay:.2f}s")
+                                          time.sleep(delay)
+
+                                      # Tab random 4 to 10 times
+                                      random_tabs = random.randint(4, 10)
+                                      for _ in range(random_tabs):
+                                          send_keys('{TAB}')
+                                          time.sleep(0.3)
+                                      print(f"[Opera GX] Pressed TAB {random_tabs} times.")
+
+                                      # Enter once to complete
+                                      send_keys('{ENTER}')
+                                      print("[Opera GX] Pressed final ENTER.")
+
+                                      opera_setup_completed = True
+                                      print("[Opera GX] Setup automation successfully completed.")
+                                  except Exception as e:
+                                      print(f"[Opera GX] Error in TAB/ENTER flow: {e}")
+
                               else:
-                                  print("[Opera One] Wizard not yet interactive. "
-                                        "Waiting 3 s more...")
-                                  time.sleep(3)
-                                  continue
+                                  # --- OPERA ONE Logic ---
+                                  # Step 1: Click center of window 3 times (1-2s delays)
+                                  # Step 2: RIGHT arrow 10 times (1-2s delays)
+                                  # Step 3: ENTER once
+                                  print("[Opera One] Starting Click Center + RIGHT ARROW + ENTER automation flow...")
+                                  try:
+                                      # Get window rectangle to compute center
+                                      try:
+                                          rect = opera_window.rectangle()
+                                          center_x = (rect.left + rect.right) // 2
+                                          center_y = (rect.top + rect.bottom) // 2
+                                          print(f"[Opera One] Window rect: {rect}. Center: ({center_x}, {center_y})")
+                                      except Exception as rect_err:
+                                          print(f"[Opera One] Could not get window rect ({rect_err}), using screen center fallback.")
+                                          screen_w, screen_h = pyautogui.size()
+                                          center_x = screen_w // 2
+                                          center_y = screen_h // 2
 
-                          # ---- Step 4: bring window to foreground ----
-                          try:
-                              opera_window.set_focus()
-                              time.sleep(0.8)
-                              # Restore if minimised but do NOT maximise — maximising
-                              # via keyboard can accidentally trigger fullscreen in Opera
-                              rect = opera_window.rectangle()
-                              if rect.width() < 100:   # clearly minimised / hidden
-                                  opera_window.restore()
-                                  time.sleep(1)
-                          except Exception as fe:
-                              print(f"[Opera One] Focus error: {fe}")
+                                      # STEP 1: Click center 3 times with 1-2s delays between each
+                                      print("[Opera One] Step 1: Clicking window center 3 times...")
+                                      for i in range(3):
+                                          pyautogui.click(center_x, center_y)
+                                          delay = random.uniform(1.0, 2.0)
+                                          print(f"[Opera One] Center click ({i+1}/3) done. Waiting {delay:.2f}s...")
+                                          time.sleep(delay)
 
-                          # ---- Step 5: 3 center clicks (2 s apart) to activate wizard ----
-                          # Only done once, right after the wizard is confirmed ready.
-                          # Clicking the center of the Opera One window ensures the
-                          # onboarding dialog has keyboard focus before any key is sent,
-                          # preventing accidental fullscreen or missed navigation.
-                          if not opera_one_center_clicks_done:
-                              try:
-                                  rect = opera_window.rectangle()
-                                  center_x = (rect.left + rect.right)  // 2
-                                  center_y = (rect.top  + rect.bottom) // 2
-                                  print(f"[Opera One] Clicking window center "
-                                        f"({center_x}, {center_y}) x3 with 2 s delay...")
-                                  for click_num in range(1, 4):
-                                      opera_window.set_focus()
-                                      time.sleep(0.3)
-                                      pyautogui.click(center_x, center_y)
-                                      print(f"[Opera One] Center click {click_num}/3 done.")
-                                      if click_num < 3:
-                                          time.sleep(2)   # 2-second gap between clicks
-                                  opera_one_center_clicks_done = True
-                                  print("[Opera One] Center clicks complete. "
-                                        "Waiting 2 s before key sequence...")
-                                  time.sleep(2)
-                              except Exception as ce:
-                                  print(f"[Opera One] Center click error: {ce}")
-                                  opera_one_center_clicks_done = True  # don't loop forever
+                                      print("[Opera One] 3 center clicks completed.")
+                                      time.sleep(1)
 
-                          # ---- Step 6: throttled RIGHT + ENTER sequence ----
-                          # We send ONE right-arrow per iteration (every ~2 s).
-                          # After 10 rights we send a final ENTER to finish.
-                          # This avoids a burst that could mis-trigger fullscreen.
-                          now = time.time()
-                          if now - opera_one_last_key_time < 2.0:
-                              time.sleep(0.5)
-                              continue
+                                      # Re-focus the opera window after mouse clicks
+                                      # so keyboard events land on the correct window
+                                      try:
+                                          opera_window.set_focus()
+                                          print("[Opera One] Re-focused Opera One window before key presses.")
+                                      except Exception:
+                                          pass
+                                      time.sleep(0.5)
 
-                          if opera_one_slide_index < 10:
-                              try:
-                                  opera_window.set_focus()
-                                  time.sleep(0.4)
-                                  send_keys('{RIGHT}')
-                                  opera_one_slide_index += 1
-                                  opera_one_last_key_time = time.time()
-                                  delay = random.uniform(1.5, 2.5)
-                                  print(f"[Opera One] RIGHT arrow "
-                                        f"({opera_one_slide_index}/10), "
-                                        f"next in {delay:.2f}s")
-                                  time.sleep(delay)
-                              except Exception as ke:
-                                  print(f"[Opera One] Key send error: {ke}")
+                                      # STEP 2: Press RIGHT arrow key 10 times with 1-2s delays
+                                      print("[Opera One] Step 2: Pressing RIGHT arrow 10 times...")
+                                      for i in range(10):
+                                          send_keys('{RIGHT}')
+                                          delay = random.uniform(1.0, 2.0)
+                                          print(f"[Opera One] RIGHT arrow ({i+1}/10) sent. Waiting {delay:.2f}s...")
+                                          time.sleep(delay)
 
-                          elif opera_one_slide_index == 10:
-                              # All slides navigated — send final ENTER
-                              try:
-                                  opera_window.set_focus()
-                                  time.sleep(0.5)
-                                  send_keys('{ENTER}')
-                                  opera_one_slide_index += 1   # prevent re-entry
-                                  opera_one_last_key_time = time.time()
-                                  opera_one_setup_completed = True
-                                  print("[Opera One] Final ENTER sent. "
-                                        "Setup automation completed successfully.")
-                              except Exception as ke:
-                                  print(f"[Opera One] Final ENTER error: {ke}")
+                                      print("[Opera One] 10 RIGHT arrows completed.")
+                                      time.sleep(0.5)
 
-                      # ==================================================
-                      # G2. Ad-MVN resolved to Opera One at runtime
-                      # ==================================================
-                      # The PowerShell watcher detects the actual exe name and
-                      # restarts this handler with software_type="opera_one".
-                      # Nothing extra needed here — covered by block G above.
+                                      # STEP 3: Press ENTER once to finish
+                                      print("[Opera One] Step 3: Pressing ENTER...")
+                                      send_keys('{ENTER}')
+                                      print("[Opera One] ENTER pressed.")
+
+                                      opera_setup_completed = True
+                                      print("[Opera One] Setup automation successfully completed.")
+                                  except Exception as e:
+                                      print(f"[Opera One] Error in automation flow: {e}")
 
                   except Exception as e:
                       pass
                   time.sleep(1)
 
-
           if __name__ == "__main__":
-              username      = sys.argv[1] if len(sys.argv) > 1 else ""
-              password      = sys.argv[2] if len(sys.argv) > 2 else ""
+              username = sys.argv[1] if len(sys.argv) > 1 else ""
+              password = sys.argv[2] if len(sys.argv) > 2 else ""
               software_type = sys.argv[3] if len(sys.argv) > 3 else "avg"
               handle_automation(username, password, software_type)
           '@
@@ -728,22 +613,19 @@ jobs:
           }
 
           # 3. Setup the Software Watcher/Installer background job
-          $dlFolder     = "$env:USERPROFILE\Downloads"
-          $timeoutSecs  = 9 * 60
+          $dlFolder = "$env:USERPROFILE\Downloads"
+          $timeoutSecs = 9 * 60
           $softwareType = $env:SOFTWARE_TYPE
-          $exeFilter    = $env:EXE_FILTER
-          $proxyUser    = $env:PROXY_USER
-          $proxyPass    = $env:PROXY_PASS
-          $handlerScript = "$env:TEMP\auto_handler.py"
+          $exeFilter = $env:EXE_FILTER
 
           $installJob = Start-Job -ScriptBlock {
-              param($dlFolder, $timeoutSecs, $softwareType, $exeFilter,
-                    $proxyUser, $proxyPass, $handlerScript)
-              $deadline  = (Get-Date).AddSeconds($timeoutSecs)
+              param($dlFolder, $timeoutSecs, $softwareType, $exeFilter)
+              $deadline = (Get-Date).AddSeconds($timeoutSecs)
               $installed = $false
 
               while (-not $installed -and (Get-Date) -lt $deadline) {
 
+                  # Find downloaded installer using dynamic filter
                   $candidates = Get-ChildItem -Path $dlFolder -Filter $exeFilter -ErrorAction SilentlyContinue |
                       Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
                       Sort-Object LastWriteTime -Descending
@@ -752,28 +634,15 @@ jobs:
                       $file = $candidates[0]
                       Write-Output "[$softwareType] Download complete! ($($file.Name))"
 
-                      # Detect actual software for ad_mvn
+                      # Dynamically identify exact software installed for Ad-MVN unpredictable links
                       $actualSoftware = $softwareType
                       if ($softwareType -eq "ad_mvn") {
                           if ($file.Name -match "OperaGX") {
                               $actualSoftware = "opera_gx"
-                              Write-Output "[Ad-MVN] Detected payload: Opera GX"
+                              Write-Output "[Ad-MVN] Detected payload as Opera GX"
                           } else {
                               $actualSoftware = "opera_one"
-                              Write-Output "[Ad-MVN] Detected payload: Opera One"
-                          }
-
-                          # Re-launch handler with the correct resolved software type
-                          # so the Opera One wizard automation fires correctly
-                          Write-Output "[Ad-MVN] Restarting handler with type: $actualSoftware"
-                          if ($proxyPass -ne "") {
-                              Start-Process -FilePath "python" `
-                                  -ArgumentList "-u `"$handlerScript`" `"$proxyUser`" `"$proxyPass`" `"$actualSoftware`"" `
-                                  -WindowStyle Hidden
-                          } else {
-                              Start-Process -FilePath "python" `
-                                  -ArgumentList "-u `"$handlerScript`" `"`" `"`" `"$actualSoftware`"" `
-                                  -WindowStyle Hidden
+                              Write-Output "[Ad-MVN] Detected payload as Opera One Standard"
                           }
                       }
 
@@ -817,6 +686,7 @@ jobs:
                               "C:\Program Files (x86)\Opera\opera.exe"
                           )
                       } else {
+                          # AVG paths
                           $appPaths = @(
                               "C:\Program Files\AVG\Browser\Application\AVGBrowser.exe",
                               "C:\Program Files (x86)\AVG\Browser\Application\AVGBrowser.exe",
@@ -830,7 +700,7 @@ jobs:
                           foreach ($p in $appPaths) {
                               if (Test-Path $p) {
                                   Start-Sleep -Seconds 3
-                                  Write-Output "[$actualSoftware] Launching: $p"
+                                  Write-Output "[$actualSoftware] Launching application: $p"
                                   Start-Process -FilePath $p
                                   $launched = $true
                                   break
@@ -841,7 +711,7 @@ jobs:
                       }
 
                       if (-not $launched) {
-                          Write-Output "[$actualSoftware] WARNING: Could not find exe after install."
+                          Write-Output "[$actualSoftware] WARNING: Could not find application exe after install."
                       }
 
                       $installed = $true
@@ -849,8 +719,7 @@ jobs:
                       Start-Sleep -Seconds 5
                   }
               }
-          } -ArgumentList $dlFolder, $timeoutSecs, $softwareType, $exeFilter,
-                          $proxyUser, $proxyPass, $handlerScript
+          } -ArgumentList $dlFolder, $timeoutSecs, $softwareType, $exeFilter
 
           # 4. Find Edge Path & Launch it
           $edgeExe = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
@@ -858,8 +727,9 @@ jobs:
               $edgeExe = "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
           }
 
-          $proxyHost = "residential-proxy.scrapeops.io:8181"
+          $proxyServer = "residential-proxy.scrapeops.io:8181"
 
+          # CLI flags to suppress SmartScreen/download protection
           $edgeArgs = @(
               "--no-first-run",
               "--no-default-browser-check",
@@ -869,30 +739,11 @@ jobs:
           )
 
           if ($env:PROXY_PASS -ne "") {
-              # Embed credentials directly in the proxy URL so Edge pre-authenticates
-              # the CONNECT tunnel for EVERY request including short-links (u.to etc.).
-              # This is the correct fix for ERR_TUNNEL_CONNECTION_FAILED — the error
-              # occurs because Edge sends unauthenticated CONNECT which the ScrapeOps
-              # proxy rejects. With creds in the URL, the tunnel is authorised upfront
-              # and all URLs — short-links, redirects, CDN downloads — go through the
-              # proxy without any error or bypass needed.
-              $encodedUser = [Uri]::EscapeDataString($env:PROXY_USER)
-              $encodedPass = [Uri]::EscapeDataString($env:PROXY_PASS)
-              $proxyWithCreds = "http://${encodedUser}:${encodedPass}@${proxyHost}"
-              $edgeArgs += "--proxy-server=`"$proxyWithCreds`""
-
-              # Also set proxy via registry (WinInet) so that any process spawned by
-              # Edge (e.g. the installer self-updater) also routes through the proxy.
-              $regProxy = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
-              Set-ItemProperty -Path $regProxy -Name "ProxyEnable"  -Value 1
-              Set-ItemProperty -Path $regProxy -Name "ProxyServer"  -Value $proxyHost
-              Set-ItemProperty -Path $regProxy -Name "ProxyOverride" -Value "localhost;127.0.0.1;<local>"
-              Write-Host "WinInet proxy set: $proxyHost" -ForegroundColor DarkGray
+              $edgeArgs += "--proxy-server=`"http://$proxyServer`""
           }
           $edgeArgs += "`"$env:TARGET_URL`""
 
-          Write-Host "Launching Edge -> $env:TARGET_URL" -ForegroundColor Cyan
-          Write-Host "All traffic (short-links + downloads) tunneled via proxy." -ForegroundColor DarkGray
+          Write-Host "Launching Edge with Proxy -> $env:TARGET_URL" -ForegroundColor Cyan
           Start-Process -FilePath $edgeExe -ArgumentList ($edgeArgs -join " ")
 
           # 5. Monitor Output of Background Job
@@ -900,9 +751,7 @@ jobs:
           while ($true) {
               $output = Receive-Job -Job $installJob -ErrorAction SilentlyContinue
               if ($output) { foreach ($line in $output) { Write-Host $line } }
-              if ($installJob.State -eq 'Completed' -or
-                  $installJob.State -eq 'Failed'    -or
-                  (Get-Date) -gt $deadline) { break }
+              if ($installJob.State -eq 'Completed' -or $installJob.State -eq 'Failed' -or (Get-Date) -gt $deadline) { break }
               Start-Sleep -Seconds 5
           }
 
@@ -910,5 +759,5 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          Write-Host "Session is active. Runner stays online until job timeout."
-          Start-Sleep -Seconds 600
+          Write-Host "Session is active. This runner will remain online until the job timeout is reached."
+          Start-Sleep -Seconds 3600
