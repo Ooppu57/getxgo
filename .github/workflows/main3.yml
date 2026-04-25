@@ -52,7 +52,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Esmeel'
+        default: 'Opera-One - Jimmy'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
