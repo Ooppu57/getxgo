@@ -1,18 +1,91 @@
 name: ScrapeOps Proxy API Scraper
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  SECRETS REQUIRED (add in repo Settings → Secrets and variables → Actions):
-#    GH_PAT  – Personal Access Token with repo scope (to commit last-run info)
-# ─────────────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SECRETS REQUIRED (repo Settings → Secrets and variables → Actions):
+#    GH_PAT  – Personal Access Token with `repo` scope (to commit screenshots)
+#
+#  HOW THE TWO-DROPDOWN LINK SYSTEM WORKS:
+#    1. Pick a "software_category" (AVG / Opera-One / OperaGX / Ad-Maven)
+#    2. Pick the matching affiliate link from "affiliate_link"
+#       — only the links that belong to the chosen category are valid here;
+#         the full map lives in the Python script below (Step 4).
+#    3. If the chosen link doesn't belong to the chosen category, the validator
+#       (Step 3) will error before spending any API credits.
+#
+#  SCRAPEOPS PROXY API — KEY FACTS:
+#    • Endpoint  : https://proxy.scrapeops.io/v1/
+#    • Docs      : https://scrapeops.io/docs/proxy-aggregator/integration-guide/
+#    • Credits   : standard=1/req, premium_level_1=1.5/req,
+#                  premium_level_2=3/req, screenshot=+10/req
+#    • Retries   : ScrapeOps retries internally for up to ~2 min per request
+#    • Timeout   : set client timeout to ≥130 s to cover internal retries
+#    • Session   : session_number keeps the same proxy IP within a session
+#                  (different numbers → different IPs)
+#    • Screenshot: requires render_js=true + json_response=true
+#                  response body is JSON: { "body": "<html>", "screenshot": "<b64>" }
+#
+#  GITHUB ARTIFACTS — KEY FACTS:
+#    • actions/upload-artifact@v4 uploads files/folders from the runner
+#    • Default retention: 90 days (overridden to 14 days here to save storage)
+#    • Max artifact size: 10 GB per upload
+#    • Artifacts are downloadable from the Actions run page as a ZIP
+#    • They are NOT accessible via raw URL; use repo commits for that instead
+#
+#  SCREENSHOT PERSISTENCE STRATEGY (4 layers):
+#    Layer 1 – GitHub Artifact "screenshots"         (ZIP of all PNGs, 14 days)
+#    Layer 2 – GitHub Artifact "screenshot-viewer"   (self-contained HTML, 14 days)
+#    Layer 3 – Repo commit under scrapeops-runs/run-N/ (permanent, raw URL)
+#    Layer 4 – summary.json records metadata per request (paths, sizes, status)
+# ═══════════════════════════════════════════════════════════════════════════════
 
 on:
   workflow_dispatch:
     inputs:
 
-      target_url:
-        description: "🌐 URL to scrape"
+      # ── Dropdown 1: Software category ──────────────────────────────────────
+      software_category:
+        description: "📦 Software category"
         required: true
-        type: string
+        default: "AVG"
+        type: choice
+        options:
+          - "AVG"
+          - "Opera-One"
+          - "OperaGX"
+          - "Ad-Maven"
+
+      # ── Dropdown 2: Affiliate link (select the one matching your category) ──
+      #    Links are grouped by category in the label so you can identify them.
+      #    The validator in Step 3 will reject mismatches.
+      affiliate_link:
+        description: "🔗 Affiliate link (must match category above)"
+        required: true
+        default: "AVG - Trader"
+        type: choice
+        options:
+          # ── AVG ──
+          - "AVG - Trader"
+          - "AVG - MlzYT"
+          - "AVG - F.ahmad"
+          - "AVG - B4Books"
+          # ── Opera-One ──
+          - "Opera-One - Esmeel"
+          - "Opera-One - Harrari"
+          - "Opera-One - Chloe"
+          - "Opera-One - Daisy"
+          - "Opera-One - Jimmy"
+          # ── OperaGX ──
+          - "OperaGX - B4Books"
+          - "OperaGX - Techx"
+          - "OperaGX - Fatradez"
+          - "OperaGX - James"
+          - "OperaGX - Oliver"
+          - "OperaGX - Mahal"
+          # ── Ad-Maven ──
+          - "Ad-MVN - Techx"
+          - "Ad-MVN - B4Books"
+          - "Ad-MVN - Orderflowz"
+          - "Ad-MVN - A2Z"
 
       scrapeops_api_key:
         description: "🔑 ScrapeOps API Key"
@@ -22,7 +95,7 @@ on:
       country:
         description: "🌍 Country for geotargeting"
         required: true
-        default: "us"
+        default: "us — United States"
         type: choice
         options:
           - "auto — No preference"
@@ -58,7 +131,7 @@ on:
       premium_level:
         description: "⭐ Premium proxy level"
         required: true
-        default: "none"
+        default: "none — Standard (1 credit/req)"
         type: choice
         options:
           - "none — Standard (1 credit/req)"
@@ -66,14 +139,14 @@ on:
           - "level_2 — Premium Level 2 (3 credits/req)"
 
       take_screenshot:
-        description: "📸 Take screenshot of each page (costs 10 credits/req — requires JS rendering)"
+        description: "📸 Take screenshot of each page (costs +10 credits/req — requires JS rendering)"
         required: false
         default: "false"
         type: boolean
 
 jobs:
   scrape:
-    name: Run ScrapeOps Proxy Requests
+    name: "[${{ inputs.software_category }}] ${{ inputs.affiliate_link }}"
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
@@ -93,21 +166,56 @@ jobs:
       - name: Install Python dependencies
         run: pip install requests
 
-      # ── 3. Validate inputs ───────────────────────────────────────────────────
+      # ── 3. Validate inputs (category ↔ link match + num_requests range) ──────
       - name: Validate inputs
+        env:
+          CATEGORY:     "${{ inputs.software_category }}"
+          LINK_KEY:     "${{ inputs.affiliate_link }}"
+          NUM_REQUESTS: "${{ inputs.num_requests }}"
         run: |
-          NUM="${{ inputs.num_requests }}"
-          if ! [[ "$NUM" =~ ^[0-9]+$ ]] || [ "$NUM" -lt 1 ] || [ "$NUM" -gt 100 ]; then
-            echo "::error::num_requests must be an integer 1–100. Got: $NUM"
-            exit 1
-          fi
-          echo "✅ Inputs valid — will send $NUM request(s)"
+          python3 - <<'PYEOF'
+          import os, sys
+
+          CATEGORY     = os.environ["CATEGORY"].strip()
+          LINK_KEY     = os.environ["LINK_KEY"].strip()
+          NUM_REQUESTS = os.environ["NUM_REQUESTS"].strip()
+
+          # ── Validate num_requests ─────────────────────────────────────────
+          if not NUM_REQUESTS.isdigit() or not (1 <= int(NUM_REQUESTS) <= 100):
+              print(f"::error::num_requests must be an integer 1–100. Got: {NUM_REQUESTS}")
+              sys.exit(1)
+
+          # ── Category → allowed link prefixes ─────────────────────────────
+          #    Each key is a category name (must match the workflow dropdown).
+          #    Each value is the list of prefixes that belong to that category.
+          CATEGORY_PREFIXES = {
+              "AVG":       ["AVG -"],
+              "Opera-One": ["Opera-One -"],
+              "OperaGX":   ["OperaGX -"],
+              "Ad-Maven":  ["Ad-MVN -"],
+          }
+
+          if CATEGORY not in CATEGORY_PREFIXES:
+              print(f"::error::Unknown category '{CATEGORY}'. "
+                    f"Must be one of: {list(CATEGORY_PREFIXES.keys())}")
+              sys.exit(1)
+
+          valid_prefixes = CATEGORY_PREFIXES[CATEGORY]
+          if not any(LINK_KEY.startswith(p) for p in valid_prefixes):
+              print(f"::error::Link '{LINK_KEY}' does not belong to "
+                    f"category '{CATEGORY}'.\n"
+                    f"  Expected a link starting with one of: {valid_prefixes}")
+              sys.exit(1)
+
+          print(f"✅ Category '{CATEGORY}' ↔ link '{LINK_KEY}' — valid match")
+          print(f"✅ num_requests={NUM_REQUESTS} — within allowed range 1–100")
+          PYEOF
 
       # ── 4. Run the scraper ───────────────────────────────────────────────────
       - name: Run ScrapeOps scraper
         id: scraper
         env:
-          TARGET_URL:      "${{ inputs.target_url }}"
+          LINK_KEY:        "${{ inputs.affiliate_link }}"
           SCRAPEOPS_KEY:   "${{ inputs.scrapeops_api_key }}"
           COUNTRY_RAW:     "${{ inputs.country }}"
           NUM_REQUESTS:    "${{ inputs.num_requests }}"
@@ -119,146 +227,222 @@ jobs:
           import os, sys, json, time, base64, requests
           from urllib.parse import urlencode
 
+          # ════════════════════════════════════════════════════════════════════
+          #  AFFILIATE LINK MAP
+          #  Structure: "Display Name": "URL"
+          #  The display name must match the workflow dropdown option exactly.
+          #  To add a new link: append a new entry in the correct category block.
+          # ════════════════════════════════════════════════════════════════════
+          LINK_MAP = {
+              # ── AVG ──────────────────────────────────────────────────────────
+              "AVG - Trader":   "https://u.to/a-trdr/xDh4Ig",
+              "AVG - MlzYT":    "https://u.to/a-mlz/Agt3Ig",
+              "AVG - F.ahmad":  "https://u.to/a-fah/4Qp3Ig",
+              "AVG - B4Books":  "https://u.to/a-b4b/7wp3Ig",
+
+              # ── Opera-One ────────────────────────────────────────────────────
+              "Opera-One - Esmeel":   "https://u.to/esmlxopo/cTOGIg",
+              "Opera-One - Harrari":  "https://u.to/hararixopo/zTOGIg",
+              "Opera-One - Chloe":    "https://u.to/chloexopo/_DOGIg",
+              "Opera-One - Daisy":    "https://u.to/daisyxopo/LjSGIg",
+              "Opera-One - Jimmy":    "https://u.to/jmy/mUZ4Ig",
+
+              # ── OperaGX ──────────────────────────────────────────────────────
+              "OperaGX - B4Books":   "https://u.to/opx-b4b/2nh4Ig",
+              "OperaGX - Techx":     "https://u.to/techxsm/xVyFIg",
+              "OperaGX - Fatradez":  "https://u.to/fatradezsm/cF2FIg",
+              "OperaGX - James":     "https://u.to/jamesxsm/eV2FIg",
+              "OperaGX - Oliver":    "https://u.to/oliverxsm/f12FIg",
+              "OperaGX - Mahal":     "https://u.to/mahalxsm/iF2FIg",
+
+              # ── Ad-Maven ─────────────────────────────────────────────────────
+              "Ad-MVN - Techx":       "https://u.to/techxadmvnxsmrt/gvd7Ig",
+              "Ad-MVN - B4Books":     "https://u.to/b4bxadmvnxsmrt/5-h7Ig",
+              "Ad-MVN - Orderflowz":  "https://u.to/ordrflzadmvnxsmrt/-fZ7Ig",
+              "Ad-MVN - A2Z":         "https://u.to/a2zadmvnxsmrt/Y-t7Ig",
+          }
+
           # ── Resolve inputs ──────────────────────────────────────────────────
-          TARGET_URL      = os.environ["TARGET_URL"].strip()
+          LINK_KEY        = os.environ["LINK_KEY"].strip()
           API_KEY         = os.environ["SCRAPEOPS_KEY"].strip()
-          COUNTRY_RAW     = os.environ["COUNTRY_RAW"].strip()       # "us — United States"
+          COUNTRY_RAW     = os.environ["COUNTRY_RAW"].strip()
           NUM_REQUESTS    = int(os.environ["NUM_REQUESTS"])
           PROXY_TYPE      = os.environ["PROXY_TYPE"].strip()
-          PREMIUM_RAW     = os.environ["PREMIUM_RAW"].strip()       # "level_1 — ..."
+          PREMIUM_RAW     = os.environ["PREMIUM_RAW"].strip()
           TAKE_SCREENSHOT = os.environ["TAKE_SCREENSHOT"].lower() == "true"
 
-          # Extract 2-letter country code from "us — United States" → "us"
-          # "auto — No preference" → "" (empty = no country param)
+          # Resolve URL from map
+          TARGET_URL = LINK_MAP.get(LINK_KEY, "").strip()
+          if not TARGET_URL:
+              print(f"::error::Could not resolve URL for link key '{LINK_KEY}'")
+              sys.exit(1)
+
+          # Extract 2-letter country code: "us — United States" → "us"
+          # "auto — No preference" → "" (omit param = ScrapeOps auto-selects)
           country_code = COUNTRY_RAW.split("—")[0].strip()
           if country_code == "auto":
               country_code = ""
 
-          # Extract premium level: "level_1 — Premium..." → "level_1", "none..." → ""
+          # Extract premium token: "level_1 — Premium..." → "level_1"
+          # "none — Standard..." → "" (omit param = standard proxy)
           premium_token = PREMIUM_RAW.split("—")[0].strip()
           if premium_token == "none":
               premium_token = ""
 
+          # ── ScrapeOps Proxy API endpoint ────────────────────────────────────
+          # Docs: https://scrapeops.io/docs/proxy-aggregator/integration-guide/
+          # All parameters are passed as query params to GET /v1/
+          # The proxy service fetches TARGET_URL on your behalf and returns the
+          # response body (or JSON wrapper when json_response=true).
           ENDPOINT = "https://proxy.scrapeops.io/v1/"
 
           os.makedirs("results",     exist_ok=True)
           os.makedirs("screenshots", exist_ok=True)
 
-          # ── Summary data we'll write out ────────────────────────────────────
-          summary        = []
-          screenshot_b64 = {}   # req_num → base64 string
+          summary = []
 
-          print(f"\n{'='*62}")
+          print(f"\n{'='*64}")
           print(f"  ScrapeOps Proxy API Scraper")
-          print(f"{'='*62}")
+          print(f"{'='*64}")
+          print(f"  Link key      : {LINK_KEY}")
           print(f"  Target URL    : {TARGET_URL}")
           print(f"  Requests      : {NUM_REQUESTS}")
           print(f"  Country       : {country_code or '(auto)'}")
           print(f"  Proxy type    : {PROXY_TYPE}")
           print(f"  Premium level : {premium_token or 'none (standard)'}")
           print(f"  Screenshot    : {TAKE_SCREENSHOT}")
-          print(f"{'='*62}\n")
+          print(f"{'='*64}\n")
 
-          # ── Build params per request ────────────────────────────────────────
+          # ── Build request params ─────────────────────────────────────────────
+          # ScrapeOps parameter reference:
+          #   api_key        – your ScrapeOps API key (required)
+          #   url            – the URL you want scraped (required)
+          #   session_number – 0-10000; same number = same proxy IP; different = new IP
+          #   country        – ISO 3166-1 alpha-2 code (e.g. "us", "de")
+          #   residential    – "true" → use residential proxy pool
+          #   mobile         – "true" → use mobile proxy pool
+          #   premium        – "level_1" or "level_2" for higher-quality proxies
+          #   render_js      – "true" → render JavaScript (headless browser)
+          #   screenshot     – "true" → return a PNG screenshot (requires render_js)
+          #   json_response  – "true" → wrap response as JSON {body, screenshot, ...}
           def build_params(idx):
               p = {
-                  "api_key": API_KEY,
-                  "url":     TARGET_URL,
-                  # Unique session_number per request → different IP every time.
-                  # Range 0-10000; using index directly keeps them distinct.
-                  "session_number": idx,
+                  "api_key":        API_KEY,
+                  "url":            TARGET_URL,
+                  "session_number": idx,   # unique per request → fresh IP each time
               }
-
               if country_code:
                   p["country"] = country_code
-
-              # Proxy type
               if PROXY_TYPE == "residential":
                   p["residential"] = "true"
               elif PROXY_TYPE == "mobile":
                   p["mobile"] = "true"
               elif PROXY_TYPE == "both":
-                  # Alternate: even → residential, odd → mobile
-                  if idx % 2 == 0:
-                      p["residential"] = "true"
-                  else:
-                      p["mobile"] = "true"
-
+                  # Alternate: even index → residential, odd → mobile
+                  p["residential" if idx % 2 == 0 else "mobile"] = "true"
               if premium_token:
                   p["premium"] = premium_token
-
-              # Screenshot requires render_js + json_response (per ScrapeOps docs)
-              # Costs 10 API credits per request.
+              # Screenshot mode: costs 10 extra credits, requires JS rendering.
+              # The API returns JSON: { "body": "<html>...", "screenshot": "<base64 PNG>" }
               if TAKE_SCREENSHOT:
                   p["screenshot"]    = "true"
                   p["render_js"]     = "true"
                   p["json_response"] = "true"
-
               return p
 
-          # ── Main request loop (sequential — concurrency limit = 1) ──────────
+          # ── Request loop (sequential, up to 3 retry attempts per request) ────
+          # Why sequential? ScrapeOps already handles internal retries and
+          # concurrency is not needed for small batch jobs.
           for i in range(NUM_REQUESTS):
               req_num = i + 1
-              print(f"── Request {req_num}/{NUM_REQUESTS} " + "─"*40)
+              print(f"\n── Request {req_num}/{NUM_REQUESTS} " + "─"*42)
 
               params  = build_params(i)
               attempt = 0
               success = False
-              rec     = {"request": req_num, "status": "FAILED",
-                         "session_number": i, "screenshot_saved": False}
+              rec = {
+                  "request":          req_num,
+                  "link_key":         LINK_KEY,
+                  "target_url":       TARGET_URL,
+                  "status":           "FAILED",
+                  "session_number":   i,
+                  "screenshot_saved": False,
+                  "screenshot_path":  None,
+                  "screenshot_size_bytes": 0,
+                  "html_path":        None,
+                  "html_size_bytes":  0,
+                  "attempts":         0,
+                  "error":            None,
+              }
 
               while attempt < 3 and not success:
                   attempt += 1
+                  rec["attempts"] = attempt
                   try:
-                      resp = requests.get(
-                          ENDPOINT,
-                          params=params,
-                          timeout=130,  # ScrapeOps retries internally up to 2 min
-                      )
+                      # Client timeout of 130 s: ScrapeOps may retry internally
+                      # for up to ~120 s; we add 10 s buffer.
+                      resp = requests.get(ENDPOINT, params=params, timeout=130)
 
-                      # 200 = success, 404 = page-not-found (still a valid proxy hit)
+                      # 200 = success; 404 = page not found (proxy still worked)
                       if resp.status_code in (200, 404):
                           print(f"  ✅ HTTP {resp.status_code} — attempt {attempt}")
                           success = True
                           rec["status"] = resp.status_code
 
-                          # ── Parse JSON wrapper (screenshot mode) ─────────────
                           body_text = resp.text
+
+                          # ── Screenshot mode: parse JSON wrapper ───────────────
                           if TAKE_SCREENSHOT:
                               try:
                                   jdata = resp.json()
                                   body_text = jdata.get("body", resp.text)
-
                                   b64 = jdata.get("screenshot", "")
+
                                   if b64:
-                                      # Decode and save PNG
-                                      png_bytes = base64.b64decode(b64)
-                                      png_path  = f"screenshots/screenshot_{req_num:03d}.png"
-                                      with open(png_path, "wb") as fh:
-                                          fh.write(png_bytes)
-                                      # Also save raw base64 for GitHub step outputs
-                                      screenshot_b64[req_num] = b64
-                                      rec["screenshot_saved"] = True
-                                      rec["screenshot_path"]  = png_path
-                                      rec["screenshot_size_bytes"] = len(png_bytes)
-                                      print(f"  📸 Screenshot saved → {png_path}  ({len(png_bytes):,} bytes)")
+                                      # Validate base64 before decoding
+                                      # (truncated responses can corrupt the string)
+                                      try:
+                                          png_bytes = base64.b64decode(b64, validate=False)
+                                      except Exception as b64_err:
+                                          print(f"  ⚠️  base64 decode error: {b64_err}")
+                                          png_bytes = b""
+
+                                      if len(png_bytes) > 1000:
+                                          png_path = f"screenshots/screenshot_{req_num:03d}.png"
+                                          with open(png_path, "wb") as fh:
+                                              fh.write(png_bytes)
+                                          rec["screenshot_saved"]      = True
+                                          rec["screenshot_path"]       = png_path
+                                          rec["screenshot_size_bytes"] = len(png_bytes)
+                                          print(f"  📸 Screenshot saved → {png_path}"
+                                                f"  ({len(png_bytes):,} bytes)")
+                                      else:
+                                          print(f"  ⚠️  Screenshot data too small"
+                                                f" ({len(png_bytes)} bytes) — skipped")
                                   else:
-                                      print("  ⚠️  screenshot=true but API returned no screenshot field")
+                                      print("  ⚠️  screenshot=true but 'screenshot'"
+                                            " field missing in response JSON")
                                       print(f"      Response keys: {list(jdata.keys())}")
-                              except Exception as ex:
-                                  print(f"  ⚠️  Could not parse screenshot JSON: {ex}")
+
+                              except Exception as json_err:
+                                  print(f"  ⚠️  Could not parse screenshot JSON: {json_err}")
+                                  # Fall back: save raw text anyway
+                                  body_text = resp.text
 
                           # ── Save HTML body ────────────────────────────────────
                           html_path = f"results/response_{req_num:03d}.html"
                           with open(html_path, "w", encoding="utf-8", errors="replace") as fh:
                               fh.write(body_text)
-                          rec["html_path"] = html_path
-                          print(f"  💾 HTML saved     → {html_path}")
+                          rec["html_path"]       = html_path
+                          rec["html_size_bytes"] = len(body_text.encode("utf-8", errors="replace"))
+                          print(f"  💾 HTML saved     → {html_path}"
+                                f"  ({rec['html_size_bytes']:,} bytes)")
 
                       else:
                           wait_s = 5 * attempt
                           msg = f"retrying in {wait_s}s…" if attempt < 3 else "giving up"
                           print(f"  ❌ HTTP {resp.status_code} — attempt {attempt} — {msg}")
+                          rec["error"] = f"HTTP {resp.status_code}"
                           if attempt < 3:
                               time.sleep(wait_s)
 
@@ -266,6 +450,7 @@ jobs:
                       wait_s = 5 * attempt
                       msg = f"retrying in {wait_s}s…" if attempt < 3 else "giving up"
                       print(f"  ⏱  Request timeout — attempt {attempt} — {msg}")
+                      rec["error"] = "timeout"
                       if attempt < 3:
                           time.sleep(wait_s)
 
@@ -273,20 +458,27 @@ jobs:
                       wait_s = 5 * attempt
                       msg = f"retrying in {wait_s}s…" if attempt < 3 else "giving up"
                       print(f"  ⚠️  Error: {ex} — attempt {attempt} — {msg}")
+                      rec["error"] = str(ex)
                       if attempt < 3:
                           time.sleep(wait_s)
 
               summary.append(rec)
 
-              # Small gap between sequential requests (concurrency = 1)
+              # Brief pause between requests to avoid hammering the endpoint
               if req_num < NUM_REQUESTS:
                   time.sleep(1)
 
           # ── Write summary JSON ───────────────────────────────────────────────
+          # summary.json is the authoritative record of every request outcome.
+          # Fields per record:
+          #   request, link_key, target_url, status, session_number,
+          #   screenshot_saved, screenshot_path, screenshot_size_bytes,
+          #   html_path, html_size_bytes, attempts, error
           with open("results/summary.json", "w") as fh:
               json.dump(summary, fh, indent=2)
+          print("\n📋 summary.json written → results/summary.json")
 
-          # ── Write screenshot index (paths list) ──────────────────────────────
+          # ── Write screenshot index ───────────────────────────────────────────
           ss_paths = [r["screenshot_path"] for r in summary if r.get("screenshot_path")]
           with open("results/screenshot_index.json", "w") as fh:
               json.dump(ss_paths, fh, indent=2)
@@ -296,77 +488,124 @@ jobs:
           failed = len(summary) - passed
           ss_ok  = sum(1 for r in summary if r.get("screenshot_saved"))
 
-          print(f"\n{'='*62}")
-          print(f"  DONE  ✅ {passed} succeeded  |  ❌ {failed} failed  |  📸 {ss_ok} screenshots")
-          print(f"{'='*62}\n")
+          print(f"\n{'='*64}")
+          print(f"  DONE  ✅ {passed} succeeded  |  ❌ {failed} failed"
+                f"  |  📸 {ss_ok} screenshots saved")
+          print(f"{'='*64}\n")
 
-          # Set output for downstream steps
-          with open(os.environ.get("GITHUB_OUTPUT","_tmp_out.txt"), "a") as gh:
+          # Write GitHub step outputs for downstream steps and job summary
+          with open(os.environ.get("GITHUB_OUTPUT", "_tmp_out.txt"), "a") as gh:
               gh.write(f"passed={passed}\n")
               gh.write(f"failed={failed}\n")
               gh.write(f"screenshots_taken={ss_ok}\n")
               gh.write(f"screenshot_mode={'true' if TAKE_SCREENSHOT else 'false'}\n")
+              gh.write(f"target_url={TARGET_URL}\n")
 
+          # Exit 1 if any requests failed so the workflow shows as "failed"
           if failed > 0:
               sys.exit(1)
           PYEOF
 
-      # ── 5. Convert PNGs → self-contained HTML viewer ─────────────────────────
-      #       This step embeds every screenshot as a base64 <img> in one HTML
-      #       file so it's viewable directly from the GitHub artifact or raw URL.
+      # ── 5. Build self-contained screenshot HTML viewer ───────────────────────
+      #  Embeds every PNG as a base64 <img> in a single HTML file.
+      #  Why: GitHub artifacts download as ZIPs; this viewer works without unzipping.
+      #  Open it in any browser — no internet connection required.
       - name: Build screenshot HTML viewer
         if: ${{ inputs.take_screenshot == 'true' }}
         run: |
           python3 - <<'PYEOF'
           import os, base64, glob, json
 
-          pngs = sorted(glob.glob("screenshots/*.png"))
+          pngs = sorted(glob.glob("screenshots/screenshot_*.png"))
           if not pngs:
-              print("No PNG screenshots found — skipping viewer build")
+              print("⚠️  No PNG screenshots found — skipping viewer build")
               exit(0)
 
           rows = ""
           for png in pngs:
-              name   = os.path.basename(png)
-              b64    = base64.b64encode(open(png,"rb").read()).decode()
-              size   = os.path.getsize(png)
-              rows  += f"""
+              name = os.path.basename(png)
+              size = os.path.getsize(png)
+              if size < 100:
+                  print(f"⚠️  Skipping {name} — file too small ({size} bytes)")
+                  continue
+              b64  = base64.b64encode(open(png, "rb").read()).decode()
+              rows += f"""
               <div class="card">
-                <h3>{name}  <small>({size:,} bytes)</small></h3>
-                <img src="data:image/png;base64,{b64}" alt="{name}" />
+                <h3>{name} <small>({size:,} bytes)</small></h3>
+                <img src="data:image/png;base64,{b64}" alt="{name}" loading="lazy" />
                 <p class="dl">
-                  <a href="data:image/png;base64,{b64}" download="{name}">⬇ Download {name}</a>
+                  <a href="data:image/png;base64,{b64}" download="{name}">
+                    ⬇ Download {name}
+                  </a>
                 </p>
               </div>"""
+
+          if not rows:
+              print("⚠️  All screenshots were too small — viewer not built")
+              exit(0)
+
+          # Load summary for metadata table
+          summary_path = "results/summary.json"
+          meta_table   = ""
+          if os.path.exists(summary_path):
+              with open(summary_path) as f:
+                  summary = json.load(f)
+              ok = sum(1 for r in summary if str(r.get("status","")) in ("200","404"))
+              ss = sum(1 for r in summary if r.get("screenshot_saved"))
+              target = summary[0].get("target_url", "N/A") if summary else "N/A"
+              meta_table = f"""
+              <table>
+                <tr><th>Target URL</th><td><code>{target}</code></td></tr>
+                <tr><th>Total requests</th><td>{len(summary)}</td></tr>
+                <tr><th>Succeeded</th><td>{ok}</td></tr>
+                <tr><th>Screenshots saved</th><td>{ss}</td></tr>
+              </table>"""
 
           html = f"""<!DOCTYPE html>
           <html lang="en">
           <head>
           <meta charset="utf-8"/>
+          <meta name="viewport" content="width=device-width, initial-scale=1"/>
           <title>ScrapeOps Screenshots</title>
           <style>
-            body{{font-family:sans-serif;background:#0d1117;color:#e6edf3;margin:0;padding:24px}}
-            h1{{color:#58a6ff}}
+            *{{box-sizing:border-box;margin:0;padding:0}}
+            body{{font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;
+                  padding:24px;max-width:1200px;margin:auto}}
+            h1{{color:#58a6ff;margin-bottom:16px}}
+            table{{border-collapse:collapse;margin-bottom:24px;width:100%;
+                   background:#161b22;border:1px solid #30363d;border-radius:6px;
+                   overflow:hidden}}
+            th,td{{padding:10px 16px;text-align:left;border-bottom:1px solid #21262d}}
+            th{{background:#1c2128;color:#79c0ff;width:180px}}
+            code{{color:#a5d6ff;font-size:.9em}}
+            .grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(460px,1fr));
+                   gap:20px}}
             .card{{background:#161b22;border:1px solid #30363d;border-radius:8px;
-                   padding:16px;margin-bottom:24px}}
-            .card h3{{margin:0 0 12px;color:#79c0ff}}
-            .card img{{max-width:100%;border-radius:4px;border:1px solid #30363d}}
+                   padding:16px}}
+            .card h3{{margin:0 0 12px;color:#79c0ff;font-size:.95em}}
+            .card img{{max-width:100%;border-radius:4px;border:1px solid #30363d;
+                       display:block}}
             .dl{{margin-top:10px}}
-            .dl a{{color:#58a6ff}}
-            small{{color:#8b949e;font-size:.8em}}
+            .dl a{{color:#58a6ff;text-decoration:none;font-size:.9em}}
+            .dl a:hover{{text-decoration:underline}}
+            small{{color:#8b949e;font-size:.8em;margin-left:8px}}
           </style>
           </head>
           <body>
           <h1>📸 ScrapeOps Screenshots ({len(pngs)} total)</h1>
-          {rows}
+          {meta_table}
+          <div class="grid">{rows}</div>
           </body></html>"""
 
           out = "screenshots/screenshots_viewer.html"
-          open(out,"w").write(html)
-          print(f"✅ Viewer built → {out}")
+          with open(out, "w") as fh:
+              fh.write(html)
+          print(f"✅ Viewer built → {out}  ({os.path.getsize(out):,} bytes)")
           PYEOF
 
       # ── 6. Upload HTML results artifact ──────────────────────────────────────
+      #  Contains: response_NNN.html, summary.json, screenshot_index.json
+      #  Retention: 14 days (configurable, max 90 days on free plans)
       - name: Upload HTML results artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -374,17 +613,22 @@ jobs:
           name: scrape-results
           path: results/
           retention-days: 14
+          if-no-files-found: warn
 
-      # ── 7. Upload screenshots artifact (PNGs + self-contained viewer) ─────────
-      - name: Upload screenshots artifact
+      # ── 7. Upload raw PNGs artifact ───────────────────────────────────────────
+      #  Individual PNG files — useful if you need to process them programmatically.
+      - name: Upload screenshots artifact (raw PNGs)
         if: ${{ inputs.take_screenshot == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: screenshots
-          path: screenshots/
+          path: screenshots/*.png
           retention-days: 14
+          if-no-files-found: warn
 
-      # ── 8. Upload viewer-only artifact (single HTML file — easy to share) ─────
+      # ── 8. Upload self-contained HTML viewer artifact ─────────────────────────
+      #  A single file with all PNGs embedded. Download → open in browser.
+      #  No unzipping needed to view screenshots.
       - name: Upload screenshot viewer artifact
         if: ${{ inputs.take_screenshot == 'true' }}
         uses: actions/upload-artifact@v4
@@ -392,62 +636,78 @@ jobs:
           name: screenshot-viewer-html
           path: screenshots/screenshots_viewer.html
           retention-days: 14
+          if-no-files-found: warn
 
-      # ── 9. Commit screenshots + viewer back into the repo ────────────────────
-      #       Uses GH_PAT so it has push access. Files land in scrapeops-runs/
-      #       with the run number as folder — permanent, browseable via GitHub UI.
+      # ── 9. Commit screenshots + viewer into repository ───────────────────────
+      #  Why commit to repo? GitHub artifacts expire (14–90 days).
+      #  Repo commits are permanent and give raw.githubusercontent.com URLs
+      #  you can share or use in further automation.
+      #
+      #  Files committed to: scrapeops-runs/run-<N>/
+      #    screenshot_NNN.png        – individual screenshots
+      #    screenshots_viewer.html   – self-contained viewer
+      #    summary.json              – request metadata
+      #    README.md                 – index with raw PNG URLs
       - name: Commit screenshots to repository
         if: ${{ inputs.take_screenshot == 'true' }}
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
-          # Configure git with the PAT
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin \
             https://x-access-token:${GH_PAT}@github.com/${{ github.repository }}.git
 
+          # Pull to avoid conflicts with any concurrent steps
+          git pull --rebase origin ${{ github.ref_name }} 2>/dev/null || true
+
           RUN_DIR="scrapeops-runs/run-${{ github.run_number }}"
           mkdir -p "$RUN_DIR"
 
-          # Copy screenshots and viewer into the run folder
-          cp -r screenshots/*.png "$RUN_DIR/" 2>/dev/null || true
+          # Copy artefacts (|| true = don't fail if no PNGs exist)
+          cp screenshots/screenshot_*.png   "$RUN_DIR/" 2>/dev/null || true
           cp screenshots/screenshots_viewer.html "$RUN_DIR/" 2>/dev/null || true
-          cp results/summary.json "$RUN_DIR/" 2>/dev/null || true
+          cp results/summary.json           "$RUN_DIR/" 2>/dev/null || true
 
-          # Write a simple index markdown listing raw PNG URLs
+          # Build README with raw PNG links
           REPO="${{ github.repository }}"
           BRANCH="${{ github.ref_name }}"
-          echo "# Run ${{ github.run_number }} Screenshots" > "$RUN_DIR/README.md"
-          echo "" >> "$RUN_DIR/README.md"
-          echo "**Target URL:** ${{ inputs.target_url }}" >> "$RUN_DIR/README.md"
-          echo "**Run date:** $(date -u '+%Y-%m-%d %H:%M UTC')" >> "$RUN_DIR/README.md"
-          echo "" >> "$RUN_DIR/README.md"
-          echo "## Screenshot links" >> "$RUN_DIR/README.md"
-          echo "" >> "$RUN_DIR/README.md"
-
-          for f in "$RUN_DIR"/screenshot_*.png; do
-            fname=$(basename "$f")
-            raw_url="https://raw.githubusercontent.com/${REPO}/${BRANCH}/${RUN_DIR}/${fname}"
-            echo "- [\`${fname}\`](${raw_url})" >> "$RUN_DIR/README.md"
-          done
-
-          echo "" >> "$RUN_DIR/README.md"
-          echo "## Viewer" >> "$RUN_DIR/README.md"
-          echo "" >> "$RUN_DIR/README.md"
-          VIEWER_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/${RUN_DIR}/screenshots_viewer.html"
-          echo "Self-contained HTML viewer (download and open in browser):" >> "$RUN_DIR/README.md"
-          echo "" >> "$RUN_DIR/README.md"
-          echo "[\`screenshots_viewer.html\`](${VIEWER_URL})" >> "$RUN_DIR/README.md"
+          {
+            echo "# Run ${{ github.run_number }} — ${{ inputs.affiliate_link }}"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| **Category** | ${{ inputs.software_category }} |"
+            echo "| **Link** | ${{ inputs.affiliate_link }} |"
+            echo "| **Run date** | $(date -u '+%Y-%m-%d %H:%M UTC') |"
+            echo "| **Requests** | ${{ inputs.num_requests }} |"
+            echo "| **Passed** | ${{ steps.scraper.outputs.passed }} |"
+            echo "| **Screenshots** | ${{ steps.scraper.outputs.screenshots_taken }} |"
+            echo ""
+            echo "## Screenshot raw URLs"
+            echo ""
+            for f in "$RUN_DIR"/screenshot_*.png; do
+              [ -f "$f" ] || continue
+              fname=$(basename "$f")
+              raw_url="https://raw.githubusercontent.com/${REPO}/${BRANCH}/${RUN_DIR}/${fname}"
+              echo "- [\`${fname}\`](${raw_url})"
+            done
+            echo ""
+            echo "## Self-contained viewer"
+            echo ""
+            VIEWER_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/${RUN_DIR}/screenshots_viewer.html"
+            echo "Download and open in browser: [\`screenshots_viewer.html\`](${VIEWER_URL})"
+          } > "$RUN_DIR/README.md"
 
           git add "$RUN_DIR"
           git diff --cached --quiet && echo "Nothing to commit" && exit 0
-
-          git commit -m "ci: add screenshots for run #${{ github.run_number }}"
+          git commit -m "ci: screenshots for run #${{ github.run_number }} [${{ inputs.affiliate_link }}]"
           git push origin HEAD:${{ github.ref_name }}
           echo "✅ Screenshots committed to ${RUN_DIR}"
 
-      # ── 10. Save last-run inputs to repo (main5-last-inputs.json) ─────────────
+      # ── 10. Save last-run metadata to repo ───────────────────────────────────
+      #  main5-last-inputs.json — lightweight record of the most recent run.
+      #  Useful for dashboards, bots, or scripts that need to know the last run.
       - name: Save last run inputs to repo
         if: always()
         env:
@@ -458,22 +718,23 @@ jobs:
           git remote set-url origin \
             https://x-access-token:${GH_PAT}@github.com/${{ github.repository }}.git
 
-          # Pull latest in case step 9 just pushed
           git pull --rebase origin ${{ github.ref_name }} 2>/dev/null || true
 
           cat > main5-last-inputs.json <<EOF
           {
-            "run_number":      "${{ github.run_number }}",
-            "run_id":          "${{ github.run_id }}",
-            "timestamp_utc":   "$(date -u '+%Y-%m-%dT%H:%M:%SZ')",
-            "target_url":      "${{ inputs.target_url }}",
-            "country":         "${{ inputs.country }}",
-            "num_requests":    "${{ inputs.num_requests }}",
-            "proxy_type":      "${{ inputs.proxy_type }}",
-            "premium_level":   "${{ inputs.premium_level }}",
-            "take_screenshot": "${{ inputs.take_screenshot }}",
-            "passed":          "${{ steps.scraper.outputs.passed }}",
-            "failed":          "${{ steps.scraper.outputs.failed }}",
+            "run_number":        "${{ github.run_number }}",
+            "run_id":            "${{ github.run_id }}",
+            "timestamp_utc":     "$(date -u '+%Y-%m-%dT%H:%M:%SZ')",
+            "software_category": "${{ inputs.software_category }}",
+            "affiliate_link":    "${{ inputs.affiliate_link }}",
+            "target_url":        "${{ steps.scraper.outputs.target_url }}",
+            "country":           "${{ inputs.country }}",
+            "num_requests":      "${{ inputs.num_requests }}",
+            "proxy_type":        "${{ inputs.proxy_type }}",
+            "premium_level":     "${{ inputs.premium_level }}",
+            "take_screenshot":   "${{ inputs.take_screenshot }}",
+            "passed":            "${{ steps.scraper.outputs.passed }}",
+            "failed":            "${{ steps.scraper.outputs.failed }}",
             "screenshots_taken": "${{ steps.scraper.outputs.screenshots_taken }}"
           }
           EOF
@@ -484,22 +745,25 @@ jobs:
           git push origin HEAD:${{ github.ref_name }}
           echo "✅ main5-last-inputs.json saved"
 
-      # ── 11. Write full job summary ────────────────────────────────────────────
+      # ── 11. Write job summary ─────────────────────────────────────────────────
+      #  Visible on the Actions run page under the "Summary" tab.
       - name: Write job summary
         if: always()
         run: |
           REPO="${{ github.repository }}"
-          RUN_ID="${{ github.run_id }}"
           RUN_NUM="${{ github.run_number }}"
           BRANCH="${{ github.ref_name }}"
           SS_MODE="${{ inputs.take_screenshot }}"
+          TARGET_URL="${{ steps.scraper.outputs.target_url }}"
 
           cat >> $GITHUB_STEP_SUMMARY <<SUMMARY
           ## 🕷️ ScrapeOps Proxy Scraper — Run #${RUN_NUM}
 
           | Setting | Value |
           |---------|-------|
-          | 🌐 Target URL | \`${{ inputs.target_url }}\` |
+          | 📦 Category | ${{ inputs.software_category }} |
+          | 🔗 Link | ${{ inputs.affiliate_link }} |
+          | 🌐 Target URL | \`${TARGET_URL}\` |
           | 🔢 Requests | ${{ inputs.num_requests }} |
           | 🌍 Country | ${{ inputs.country }} |
           | 🔀 Proxy Type | ${{ inputs.proxy_type }} |
@@ -507,31 +771,28 @@ jobs:
           | 📸 Screenshot | ${{ inputs.take_screenshot }} |
           | ✅ Passed | ${{ steps.scraper.outputs.passed }} |
           | ❌ Failed | ${{ steps.scraper.outputs.failed }} |
-          | 📸 Screenshots taken | ${{ steps.scraper.outputs.screenshots_taken }} |
+          | 📸 Screenshots saved | ${{ steps.scraper.outputs.screenshots_taken }} |
 
           ---
 
-          ## 📦 How to access your screenshots (4 ways)
+          ## 📦 Accessing your results
 
-          ### Method 1 — GitHub Artifacts (available immediately)
-          1. Scroll to the bottom of this run page
-          2. Download the **\`screenshots\`** artifact (ZIP of all PNGs)
-          3. Download the **\`screenshot-viewer-html\`** artifact → open the single HTML file in any browser — all screenshots are embedded inside it, no internet needed
+          ### Method 1 — GitHub Artifacts *(available immediately, expire in 14 days)*
+          Scroll to the bottom of this run page and download:
+          - **\`scrape-results\`** — HTML pages + summary.json
+          - **\`screenshots\`** — raw PNG files
+          - **\`screenshot-viewer-html\`** — single HTML file with all screenshots embedded; open in any browser, no internet needed
 
-          ### Method 2 — GitHub Repository (permanent raw URLs)
+          ### Method 2 — Repository commits *(permanent, shareable raw URLs)*
           Screenshots were committed to \`scrapeops-runs/run-${RUN_NUM}/\`
 
-          Browse them at:
-          \`https://github.com/${REPO}/tree/${BRANCH}/scrapeops-runs/run-${RUN_NUM}/\`
+          Browse: \`https://github.com/${REPO}/tree/${BRANCH}/scrapeops-runs/run-${RUN_NUM}/\`
 
-          Individual raw PNG URLs follow the pattern:
+          Raw PNG pattern:
           \`https://raw.githubusercontent.com/${REPO}/${BRANCH}/scrapeops-runs/run-${RUN_NUM}/screenshot_NNN.png\`
 
-          ### Method 3 — HTML Results Artifact
-          Download the **\`scrape-results\`** artifact → open \`summary.json\` to see all request results and file paths.
-
-          ### Method 4 — Re-host a PNG for a public shareable link
-          Download any PNG → upload to [**imgur.com/upload**](https://imgur.com/upload) or [**postimages.org**](https://postimages.org) for a free permanent public URL (no account needed).
+          ### Method 3 — Free image hosting *(instant public URL)*
+          Download any PNG → upload to [imgur.com/upload](https://imgur.com/upload) or [postimages.org](https://postimages.org) for a free permanent public URL (no account required).
 
           ---
 
