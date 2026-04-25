@@ -52,7 +52,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Jimmy'
+        default: 'OperaGX - James'
       scrapeops_api_key:
         description: 'ScrapeOps API Key (Proxy Password)'
         required: true
@@ -70,7 +70,7 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'USA'
+        default: 'Australia'
       mobile_proxies:
         description: 'Use Mobile Proxies (.mobile=true)'
         required: true
@@ -159,15 +159,17 @@ jobs:
           target_url = all_urls.get(software_choice, avg_urls["AVG - B4Books"])
 
           # Determine software type and dynamic exe filter
-          if software_choice.startswith("OperaGX"):
+          dynamic_links =["OperaGX - Techx", "OperaGX - Fatradez", "OperaGX - James", "OperaGX - Oliver", "OperaGX - Mahal"]
+          
+          if software_choice in dynamic_links or software_choice.startswith("Ad-MVN"):
+              software_type = "dynamic_opera"
+              exe_filter = "*Opera*Setup*.exe" # Catch both GX and One
+          elif software_choice.startswith("OperaGX"):
               software_type = "opera_gx"
               exe_filter = "OperaGXSetup*.exe"
           elif software_choice.startswith("Opera-One"):
               software_type = "opera_one"
               exe_filter = "OperaSetup*.exe"
-          elif software_choice.startswith("Ad-MVN"):
-              software_type = "ad_mvn"
-              exe_filter = "*Opera*Setup*.exe" # Catch both GX and One
           else:
               software_type = "avg"
               exe_filter = "*avg*.exe"
@@ -216,7 +218,6 @@ jobs:
           STICKY: ${{ inputs.sticky_sessions }}
         run: |
           import re, os
-          # Updated file path to main3.yml as requested
           file_path = ".github/workflows/main3.yml"
 
           if os.path.exists(file_path):
@@ -258,7 +259,6 @@ jobs:
     name: Remote Session ${{ matrix.device }}
     needs: prepare_matrix
     runs-on: ${{ matrix.os }}
-    # Reduced timeout from 60 minutes to 10 minutes
     timeout-minutes: 10
 
     strategy:
@@ -337,9 +337,9 @@ jobs:
               desktop = Desktop(backend="uia")
               start_time = time.time()
               last_ctrl_j_time = time.time()
+              last_dl_click_time = 0
               ctrl_j_attempts = 0
               keep_clicked = False
-              opera_download_clicked = False
               opera_launched_time = None
               opera_setup_completed = False
 
@@ -404,28 +404,60 @@ jobs:
                               time.sleep(0.5)
 
                       # --------------------------------------------------
-                      # C. Opera landing page: click "Download Opera"
+                      # C. Interstitial & Final Download Auto-Clicker
                       # --------------------------------------------------
-                      if edge_window and software_type in["opera_gx", "opera_one", "ad_mvn"] and not opera_download_clicked:
-                          for btn_title in["Download Opera", "Download Opera GX", "Download now", "Download"]:
-                              dl_btns = edge_window.descendants(control_type="Button", title=btn_title)
-                              if dl_btns:
+                      if edge_window and software_type in["opera_gx", "opera_one", "ad_mvn", "dynamic_opera"]:
+                          # 1. Cookie Popups
+                          for cookie_btn in["Accept all", "Accepter tout", "Tout accepter", "Accept Cookies", "Allow all", "Accept selection"]:
+                              btns = edge_window.descendants(control_type="Button", title=cookie_btn)
+                              if btns:
                                   try:
-                                      edge_window.set_focus()
-                                      time.sleep(0.5)
-                                      dl_btns[0].click_input()
-                                      opera_download_clicked = True
-                                      print(f"[{software_type}] Clicked Download button on landing page.")
-                                      time.sleep(2)
-                                      break
-                                  except Exception:
+                                      btns[0].click_input()
+                                      print(f"[{software_type}] Clicked Cookie Consent: {cookie_btn}")
+                                      time.sleep(1)
+                                  except:
                                       pass
+
+                          # 2. Main Download / Smart Link Clicks (Throttled to every 5 seconds)
+                          if time.time() - last_dl_click_time > 5:
+                              clicked_something = False
+                              
+                              # Try Final Download Button First
+                              dl_keywords =["download opera", "download now", "télécharger", "baixar", "herunterladen", "descargar", "download"]
+                              for btn in edge_window.descendants(control_type="Button"):
+                                  btntxt = btn.window_text()
+                                  if btntxt and any(k in btntxt.lower() for k in dl_keywords):
+                                      try:
+                                          edge_window.set_focus()
+                                          time.sleep(0.5)
+                                          btn.click_input()
+                                          last_dl_click_time = time.time()
+                                          print(f"[{software_type}] Clicked Final Download Button: {btntxt}")
+                                          clicked_something = True
+                                          break
+                                      except:
+                                          pass
+                              
+                              # Try Interstitial Links if no valid button found
+                              if not clicked_something:
+                                  for el in edge_window.descendants():
+                                      if el.element_info.control_type in ["Hyperlink", "Text", "Image"]:
+                                          wt = el.window_text()
+                                          if wt and "opera" in wt.lower() and len(wt) < 150:
+                                              if "smart link" not in wt.lower() and "http" not in wt.lower() and "playabledownloads" not in wt.lower():
+                                                  try:
+                                                      edge_window.set_focus()
+                                                      el.click_input()
+                                                      last_dl_click_time = time.time()
+                                                      print(f"[{software_type}] Clicked Interstitial Element: {wt}")
+                                                      break
+                                                  except:
+                                                      pass
 
                       # --------------------------------------------------
                       # D. Browser Extensions Handling (Add to Chrome / Edge)
                       # --------------------------------------------------
                       if edge_window:
-                          # 1. Check for the confirmation popup first (Add extension)
                           add_ext_btns = edge_window.descendants(control_type="Button", title="Add extension")
                           if add_ext_btns:
                               try:
@@ -437,7 +469,6 @@ jobs:
                               except Exception:
                                   pass
                           else:
-                              # 2. Check for 'Add to Chrome' or 'Get' on the Web Store page
                               for btn_name in["Add to Chrome", "Get"]:
                                   install_btns = edge_window.descendants(control_type="Button", title=btn_name)
                                   if install_btns:
@@ -468,11 +499,11 @@ jobs:
                       # --------------------------------------------------
                       # F. Opera Post-install Keyboard Automation Flow
                       # --------------------------------------------------
-                      if software_type in["opera_gx", "opera_one", "ad_mvn"] and opera_window and not opera_setup_completed:
+                      if software_type in["opera_gx", "opera_one", "ad_mvn", "dynamic_opera"] and opera_window and not opera_setup_completed:
                           wt = opera_window.window_text()
                           
                           # Robust logic to decide which exact software launched
-                          if software_type == "ad_mvn":
+                          if software_type in ["ad_mvn", "dynamic_opera"]:
                               is_gx_flow = "GX" in wt.upper()
                           else:
                               is_gx_flow = (software_type == "opera_gx")
@@ -487,7 +518,6 @@ jobs:
                               except Exception:
                                   pass
                           
-                          # Increased wait time to 90 seconds for Opera One to properly launch & render
                           wait_time = 15 if is_gx_flow else 90
 
                           if time.time() - opera_launched_time > wait_time:
@@ -501,27 +531,23 @@ jobs:
                                   # --- OPERA GX Logic: Tab & Enter Sequence ---
                                   print("[Opera GX] Starting TAB/ENTER automation flow...")
                                   try:
-                                      # Tab 4 times
                                       for _ in range(4):
                                           send_keys('{TAB}')
                                           time.sleep(0.5)
                                       print("[Opera GX] Pressed TAB 4 times.")
 
-                                      # Enter 8 times with 1-2s delay
                                       for i in range(8):
                                           send_keys('{ENTER}')
                                           delay = random.uniform(1.0, 2.0)
                                           print(f"[Opera GX] Pressed ENTER ({i+1}/8), waiting {delay:.2f}s")
                                           time.sleep(delay)
 
-                                      # Tab random 4 to 10 times
                                       random_tabs = random.randint(4, 10)
                                       for _ in range(random_tabs):
                                           send_keys('{TAB}')
                                           time.sleep(0.3)
                                       print(f"[Opera GX] Pressed TAB {random_tabs} times.")
 
-                                      # Enter once to complete
                                       send_keys('{ENTER}')
                                       print("[Opera GX] Pressed final ENTER.")
 
@@ -538,21 +564,18 @@ jobs:
                                       cx, cy = sw // 2, sh // 2
                                       print(f"[Opera One] Clicking center of screen ({cx}, {cy}) 3 times...")
                                       
-                                      # Click center 3 times with 1-2s delay
                                       for i in range(3):
                                           pyautogui.click(cx, cy)
                                           delay = random.uniform(1.0, 2.0)
                                           print(f"[Opera One] Center click {i+1}/3 done, waiting {delay:.2f}s")
                                           time.sleep(delay)
 
-                                      # Right Arrow 10 times with 1-2s delay
                                       for i in range(10):
                                           send_keys('{RIGHT}')
                                           delay = random.uniform(1.0, 2.0)
                                           print(f"[Opera One] Sent RIGHT arrow ({i+1}/10), waiting {delay:.2f}s")
                                           time.sleep(delay)
                                       
-                                      # Complete with Enter
                                       send_keys('{ENTER}')
                                       print("[Opera One] Pressed ENTER.")
 
@@ -581,7 +604,7 @@ jobs:
               Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"`" `"`" `"$env:SOFTWARE_TYPE`"" -WindowStyle Hidden
           }
 
-          # 3. Setup the Software Watcher/Installer background job (9 min timeout to fit within 10 min job limit)
+          # 3. Setup the Software Watcher/Installer background job (9 min timeout)
           $dlFolder = "$env:USERPROFILE\Downloads"
           $timeoutSecs = 9 * 60
           $softwareType = $env:SOFTWARE_TYPE
@@ -603,15 +626,15 @@ jobs:
                       $file = $candidates[0]
                       Write-Output "[$softwareType] Download complete! ($($file.Name))"
 
-                      # Dynamically identify exact software installed for Ad-MVN unpredictable links
+                      # Dynamically identify exact software installed for dynamic links
                       $actualSoftware = $softwareType
-                      if ($softwareType -eq "ad_mvn") {
+                      if ($softwareType -eq "ad_mvn" -or $softwareType -eq "dynamic_opera") {
                           if ($file.Name -match "OperaGX") {
                               $actualSoftware = "opera_gx"
-                              Write-Output "[Ad-MVN] Detected payload as Opera GX"
+                              Write-Output "[$softwareType] Detected payload as Opera GX"
                           } else {
                               $actualSoftware = "opera_one"
-                              Write-Output "[Ad-MVN] Detected payload as Opera One Standard"
+                              Write-Output "[$softwareType] Detected payload as Opera One Standard"
                           }
                       }
 
