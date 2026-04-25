@@ -336,25 +336,14 @@ jobs:
           Start-Process msiexec.exe -Wait -ArgumentList $InstallArgs
           Write-Host "Getscreen.me is configured and running. Device Name: ${{ matrix.device }}"
 
-      - name: Setup Proxied Auto-Downloader & Software Installation
+      - name: Generate UIA Background Handler (Python)
         shell: pwsh
-        env:
-          PROXY_USER: ${{ matrix.proxy_user }}
-          PROXY_PASS: ${{ matrix.proxy_pass }}
-          TARGET_URL: ${{ matrix.target_url }}
-          SOFTWARE_TYPE: ${{ matrix.software_type }}
-          EXE_FILTER: ${{ matrix.exe_filter }}
         run: |
-          Write-Host "============================================================" -ForegroundColor Cyan
-          Write-Host " Zero-Touch Proxy-Aware Downloader & Installer Active" -ForegroundColor Cyan
-          Write-Host " Category: $env:SOFTWARE_TYPE" -ForegroundColor Cyan
-          Write-Host "============================================================" -ForegroundColor Cyan
-
           # 1. Ensure Python dependencies are available
           Write-Host "Checking python UIA modules..." -ForegroundColor DarkGray
           python -m pip install pywinauto pyautogui pygetwindow keyboard --quiet
 
-          # 2. Build the UIA background handler
+          # 2. Build the UIA background handler and write to disk
           $handlerPy = @'
           import time, sys, subprocess, random
           from pywinauto import Desktop
@@ -624,15 +613,30 @@ jobs:
           '@
 
           $handlerPy | Out-File -FilePath "$env:TEMP\auto_handler.py" -Encoding utf8
+          Write-Host "Python handler successfully written to temporary path."
 
-          # Start the handler concurrently
+      - name: Setup Proxied Auto-Downloader & Software Installation
+        shell: pwsh
+        env:
+          PROXY_USER: ${{ matrix.proxy_user }}
+          PROXY_PASS: ${{ matrix.proxy_pass }}
+          TARGET_URL: ${{ matrix.target_url }}
+          SOFTWARE_TYPE: ${{ matrix.software_type }}
+          EXE_FILTER: ${{ matrix.exe_filter }}
+        run: |
+          Write-Host "============================================================" -ForegroundColor Cyan
+          Write-Host " Zero-Touch Proxy-Aware Downloader & Installer Active" -ForegroundColor Cyan
+          Write-Host " Category: $env:SOFTWARE_TYPE" -ForegroundColor Cyan
+          Write-Host "============================================================" -ForegroundColor Cyan
+
+          # Start the pre-generated python handler concurrently
           if ($env:PROXY_PASS -ne "") {
               Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`" `"$env:SOFTWARE_TYPE`"" -WindowStyle Hidden
           } else {
               Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"`" `"`" `"$env:SOFTWARE_TYPE`"" -WindowStyle Hidden
           }
 
-          # 3. Setup the Software Watcher/Installer background job
+          # Setup the Software Watcher/Installer background job
           $dlFolder = "$env:USERPROFILE\Downloads"
           $timeoutSecs = ${{ matrix.job_timeout }} * 60
           $softwareType = $env:SOFTWARE_TYPE
@@ -745,7 +749,7 @@ jobs:
               }
           } -ArgumentList $dlFolder, $timeoutSecs, $softwareType, $exeFilter
 
-          # 4. Find Edge Path & Launch it
+          # Find Edge Path & Launch it
           $edgeExe = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
           if (-Not (Test-Path $edgeExe)) {
               $edgeExe = "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
@@ -770,7 +774,7 @@ jobs:
           Write-Host "Launching Edge with Proxy -> $env:TARGET_URL" -ForegroundColor Cyan
           Start-Process -FilePath $edgeExe -ArgumentList ($edgeArgs -join " ")
 
-          # 5. Monitor Output of Background Job
+          # Monitor Output of Background Job
           $deadline = (Get-Date).AddSeconds($timeoutSecs)
           while ($true) {
               $output = Receive-Job -Job $installJob -ErrorAction SilentlyContinue
@@ -779,7 +783,7 @@ jobs:
               Start-Sleep -Seconds 5
           }
 
-          # 6. Graceful Exit Flow (Ensuring Automation Finalizes)
+          # Graceful Exit Flow (Ensuring Automation Finalizes)
           if ($installJob.State -eq 'Completed') {
               Write-Host "============================================================" -ForegroundColor Cyan
               Write-Host " Installer finished executing!" -ForegroundColor Green
