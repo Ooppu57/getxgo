@@ -52,7 +52,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - James'
+        default: 'Ad-MVN - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -75,12 +75,12 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'Brazil'
+        default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: true
+        default: false
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
