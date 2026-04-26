@@ -51,7 +51,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Ad-MVN - Techx'
+        default: 'OperaGX - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
@@ -61,7 +61,7 @@ on:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
         type: boolean
-        default: true
+        default: false
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -452,7 +452,7 @@ jobs:
             RETRY=$((RETRY+1))
           done
 
-          if[ "$SUCCESS" = false ]; then
+          if [ "$SUCCESS" = false ]; then
             echo "ERROR: Getscreen.me DMG failed to download. Skipping (non-fatal)."
             exit 0
           fi
@@ -479,7 +479,7 @@ jobs:
             CFBundleIdentifier 2>/dev/null || echo "")
           echo "Bundle ID: ${APP_BUNDLE_ID:-<not found>}"
 
-          if[ -n "$APP_BUNDLE_ID" ]; then
+          if [ -n "$APP_BUNDLE_ID" ]; then
             # Grant ALL relevant permissions for discovered bundle ID
             for SVC in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServiceLocalNetwork; do
               sudo sqlite3 "$TCC_DB" \
@@ -497,12 +497,12 @@ jobs:
             CFBundleExecutable 2>/dev/null || echo "")
           EXEC_PATH="/Applications/$APP_NAME/Contents/MacOS/$EXEC_NAME"
 
-          if [ ! -x "$EXEC_PATH" ]; then
+          if[ ! -x "$EXEC_PATH" ]; then
             EXEC_PATH=$(find "/Applications/$APP_NAME/Contents/MacOS" \
               -maxdepth 1 -type f -perm +111 2>/dev/null | head -1)
           fi
 
-          if[ -z "$EXEC_PATH" ] || [ ! -x "$EXEC_PATH" ]; then
+          if [ -z "$EXEC_PATH" ] ||[ ! -x "$EXEC_PATH" ]; then
             echo "ERROR: Getscreen executable not found. Skipping registration."
             exit 0
           fi
@@ -537,7 +537,7 @@ jobs:
             -o "$CHROME_DMG" 2>/dev/null || true
 
           FILE_SIZE=$(stat -f%z "$CHROME_DMG" 2>/dev/null || echo 0)
-          if [ -f "$CHROME_DMG" ] &&[ "$FILE_SIZE" -gt 1000000 ]; then
+          if[ -f "$CHROME_DMG" ] && [ "$FILE_SIZE" -gt 1000000 ]; then
             hdiutil attach "$CHROME_DMG" -quiet -nobrowse \
               -mountpoint /Volumes/GoogleChrome || true
             if[ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
@@ -554,7 +554,7 @@ jobs:
             echo "WARNING: Chrome DMG download failed ($FILE_SIZE B)."
           fi
 
-          if [ -d "/Applications/Google Chrome.app" ]; then
+          if[ -d "/Applications/Google Chrome.app" ]; then
             echo "CHROME_AVAILABLE=true" >> "$GITHUB_ENV"
           else
             echo "CHROME_AVAILABLE=false" >> "$GITHUB_ENV"
@@ -576,8 +576,7 @@ jobs:
         run: |
           echo "============================================================"
           echo " Zero-Touch Downloader & Installer Active (macOS)"
-          echo " Category  : $SOFTWARE_TYPE"
-          [ "$USE_PROXY" = "true" ] && echo " Mode      : Proxy-enabled" \
+          echo " Category  : $SOFTWARE_TYPE"[ "$USE_PROXY" = "true" ] && echo " Mode      : Proxy-enabled" \
                                     || echo " Mode      : Direct (no proxy)"
           echo "============================================================"
 
@@ -795,7 +794,7 @@ jobs:
           end tell''', silent=True)
 
           def accept_cookie():
-              for b in["Accept all","Accept All","Accept Cookies","Allow all","Accepter tout"]:
+              for b in ["Accept all","Accept All","Accept Cookies","Allow all","Accepter tout"]:
                   r = run_as(f'''
           tell application "System Events"
             tell process "Google Chrome"
@@ -1058,8 +1057,7 @@ jobs:
                   PREV=0
                   for i in $(seq 1 30); do
                     SZ=$(stat -f%z "$FILE" 2>/dev/null || \
-                         stat -c%s "$FILE" 2>/dev/null || echo 0)
-                    [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 1000000 ] && break
+                         stat -c%s "$FILE" 2>/dev/null || echo 0)[ "$SZ" = "$PREV" ] && [ "$SZ" -gt 1000000 ] && break
                     PREV=$SZ; sleep 2
                   done
                 else
@@ -1173,7 +1171,7 @@ jobs:
           if[ "$USE_PROXY" = "true" ]; then
             PROXY_SRV="residential-proxy.scrapeops.io:8181"
             echo "Launching Chrome WITH proxy -> $TARGET_URL"
-            if[ -f "$CHROME_BIN" ]; then
+            if [ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
                 "${CHROME_FLAGS[@]}" \
                 --proxy-server="http://$PROXY_SRV" \
@@ -1183,7 +1181,7 @@ jobs:
             fi
           else
             echo "Launching browser (direct) -> $TARGET_URL"
-            if[ -f "$CHROME_BIN" ]; then
+            if [ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
                 "${CHROME_FLAGS[@]}" \
                 "$TARGET_URL" &
