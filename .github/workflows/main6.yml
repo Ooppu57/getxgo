@@ -57,6 +57,11 @@ on:
         required: false
         type: string
         default: '2f2622aa-3db7-4033-8b94-f0657bdf0cb3'
+      run_without_proxy:
+        description: 'Run without proxy (Bypass all proxies)'
+        required: true
+        type: boolean
+        default: false
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -102,6 +107,7 @@ jobs:
           OS_VERSION: ${{ inputs.os_version }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
+          RUN_WITHOUT_PROXY: ${{ inputs.run_without_proxy }}
           COUNTRY: ${{ inputs.proxy_country }}
           MOBILE: ${{ inputs.mobile_proxies }}
           STICKY: ${{ inputs.sticky_sessions }}
@@ -111,11 +117,15 @@ jobs:
           num_devices = int(os.environ.get("NUM_DEVICES", "1"))
           os_version = os.environ.get("OS_VERSION", "macos-15")
           api_key = os.environ.get("API_KEY", "").strip()
+          run_without_proxy = os.environ.get("RUN_WITHOUT_PROXY", "false").lower() == "true"
           country_input = os.environ.get("COUNTRY", "USA")
           mobile = os.environ.get("MOBILE", "false").lower() == "true"
           sticky = os.environ.get("STICKY", "false").lower() == "true"
           software_choice = os.environ.get("SOFTWARE_CHOICE", "OperaGX - James")
-          use_proxy = bool(api_key)
+          
+          # If the user selected to bypass proxy, force use_proxy to False
+          use_proxy = bool(api_key) and not run_without_proxy
+          
           country_map = {
               "USA": "us", "UK": "uk", "Canada": "ca",
               "Australia": "au", "Germany": "de", "France": "fr",
@@ -147,7 +157,7 @@ jobs:
           all_urls = {**opera_urls, **opera_one_urls, **ad_mvn_urls}
           target_url = all_urls.get(software_choice, opera_urls["OperaGX - James"])
 
-          dynamic_links = [
+          dynamic_links =[
               "OperaGX - Techx", "OperaGX - Fatradez", "OperaGX - James",
               "OperaGX - Oliver", "OperaGX - Mahal"
           ]
@@ -190,7 +200,7 @@ jobs:
 
           short_os_tag = short_os(os_version)
           short_sw_tag = short_software(software_choice)
-          includes = []
+          includes =[]
           if email:
               for i in range(1, num_devices + 1):
                   device_name = f"{i}-{short_os_tag}-{short_sw_tag}"
@@ -230,6 +240,7 @@ jobs:
           NUM_DEVICES: ${{ inputs.num_devices }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
+          RUN_WITHOUT_PROXY: ${{ inputs.run_without_proxy }}
           COUNTRY: ${{ inputs.proxy_country }}
           MOBILE: ${{ inputs.mobile_proxies }}
           STICKY: ${{ inputs.sticky_sessions }}
@@ -252,6 +263,7 @@ jobs:
               update_default_str("num_devices",       os.environ.get("NUM_DEVICES"))
               update_default_str("software_choice",   os.environ.get("SOFTWARE_CHOICE"))
               update_default_str("scrapeops_api_key", os.environ.get("API_KEY"))
+              update_default_bool("run_without_proxy",os.environ.get("RUN_WITHOUT_PROXY"))
               update_default_str("proxy_country",     os.environ.get("COUNTRY"))
               update_default_bool("mobile_proxies",   os.environ.get("MOBILE"))
               update_default_bool("sticky_sessions",  os.environ.get("STICKY"))
@@ -331,7 +343,7 @@ jobs:
             NONINTERACTIVE=1 /bin/bash -c \
               "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
             for bp in /opt/homebrew/bin /usr/local/bin; do
-              if [ -x "$bp/brew" ]; then
+              if[ -x "$bp/brew" ]; then
                 export PATH="$bp:$PATH"
                 echo "PATH=$bp:$PATH" >> "$GITHUB_ENV"
                 break
@@ -426,12 +438,12 @@ jobs:
           MAX_RETRIES=3
           RETRY=0
           SUCCESS=false
-          while [ $RETRY -lt $MAX_RETRIES ]; do
+          while[ $RETRY -lt $MAX_RETRIES ]; do
             curl -L -o getscreen.dmg "https://getscreen.me/download/getscreen.dmg" \
               --retry 3 --retry-delay 5 --silent --show-error
             FILE_SIZE=$(stat -f%z getscreen.dmg 2>/dev/null || \
                         stat -c%s getscreen.dmg 2>/dev/null || echo 0)
-            if [ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
+            if [ -f "getscreen.dmg" ] &&[ "$FILE_SIZE" -gt 102400 ]; then
               SUCCESS=true
               break
             fi
@@ -440,7 +452,7 @@ jobs:
             RETRY=$((RETRY+1))
           done
 
-          if [ "$SUCCESS" = false ]; then
+          if[ "$SUCCESS" = false ]; then
             echo "ERROR: Getscreen.me DMG failed to download. Skipping (non-fatal)."
             exit 0
           fi
@@ -467,7 +479,7 @@ jobs:
             CFBundleIdentifier 2>/dev/null || echo "")
           echo "Bundle ID: ${APP_BUNDLE_ID:-<not found>}"
 
-          if [ -n "$APP_BUNDLE_ID" ]; then
+          if[ -n "$APP_BUNDLE_ID" ]; then
             # Grant ALL relevant permissions for discovered bundle ID
             for SVC in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServiceLocalNetwork; do
               sudo sqlite3 "$TCC_DB" \
@@ -490,7 +502,7 @@ jobs:
               -maxdepth 1 -type f -perm +111 2>/dev/null | head -1)
           fi
 
-          if [ -z "$EXEC_PATH" ] || [ ! -x "$EXEC_PATH" ]; then
+          if[ -z "$EXEC_PATH" ] || [ ! -x "$EXEC_PATH" ]; then
             echo "ERROR: Getscreen executable not found. Skipping registration."
             exit 0
           fi
@@ -525,10 +537,10 @@ jobs:
             -o "$CHROME_DMG" 2>/dev/null || true
 
           FILE_SIZE=$(stat -f%z "$CHROME_DMG" 2>/dev/null || echo 0)
-          if [ -f "$CHROME_DMG" ] && [ "$FILE_SIZE" -gt 1000000 ]; then
+          if [ -f "$CHROME_DMG" ] &&[ "$FILE_SIZE" -gt 1000000 ]; then
             hdiutil attach "$CHROME_DMG" -quiet -nobrowse \
               -mountpoint /Volumes/GoogleChrome || true
-            if [ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
+            if[ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
               sudo cp -R "/Volumes/GoogleChrome/Google Chrome.app" /Applications/ || true
               sudo xattr -dr com.apple.quarantine \
                 "/Applications/Google Chrome.app" 2>/dev/null || true
@@ -586,7 +598,7 @@ jobs:
               HAS_ATOMACOS = False
               print("[Handler] atomacos not available — AppleScript only.")
 
-          DOWNLOAD_DONE_TITLES = [
+          DOWNLOAD_DONE_TITLES =[
               "Thanks for downloading Opera", "Thanks for downloadin",
               "Download | Thanks", "sudetyj", "clickWorker",
               "GET READY TO PLAY", "ready to install",
@@ -594,7 +606,7 @@ jobs:
 
           # Popup button labels we auto-allow (local network, notifications, etc.)
           # "Allow" is clicked ONLY for these known non-auth dialogs
-          AUTO_ALLOW_KEYWORDS = [
+          AUTO_ALLOW_KEYWORDS =[
               "local network", "local networks", "find devices",
               "notifications", "incoming network connections",
           ]
@@ -620,7 +632,7 @@ jobs:
               r = run_as(
                   'tell application "System Events" to get name of every process '
                   'whose visible is true', silent=True)
-              return [n.strip() for n in r.split(",") if n.strip()]
+              return[n.strip() for n in r.split(",") if n.strip()]
 
           # ------------------------------------------------------------------
           # POPUP DISMISSER — clicks Allow on system permission dialogs ONLY
@@ -783,7 +795,7 @@ jobs:
           end tell''', silent=True)
 
           def accept_cookie():
-              for b in ["Accept all","Accept All","Accept Cookies","Allow all","Accepter tout"]:
+              for b in["Accept all","Accept All","Accept Cookies","Allow all","Accepter tout"]:
                   r = run_as(f'''
           tell application "System Events"
             tell process "Google Chrome"
@@ -880,7 +892,7 @@ jobs:
                               last_cookie = time.time()
 
                       # ---- Download button ----
-                      if chrome and sw_type in ["opera_gx","opera_one","dynamic_opera","ad_mvn"]:
+                      if chrome and sw_type in["opera_gx","opera_one","dynamic_opera","ad_mvn"]:
                           if time.time() - last_dl > 5:
                               r = click_dl_button()
                               if r and "clicked" in r:
@@ -898,7 +910,7 @@ jobs:
                           wins_closed = True
 
                       # ---- Opera GX setup ----
-                      if sw_type in ["opera_gx","dynamic_opera","ad_mvn"] and op_gx and not setup_done:
+                      if sw_type in["opera_gx","dynamic_opera","ad_mvn"] and op_gx and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
                               print("[Handler] Opera GX detected — 15s wait...")
@@ -1024,14 +1036,14 @@ jobs:
             INSTALLED=false
             echo "[Watcher] Monitoring $DL_FOLDER ..."
 
-            while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            while [ "$INSTALLED" = false ] &&[ "$(date +%s)" -lt "$DEADLINE" ]; do
 
               FILE=$(find "$DL_FOLDER" -maxdepth 1 \
                      \( -name "*.dmg" -o -name "*.pkg" \) \
                      ! -name "*.download" ! -name "*.crdownload" ! -name "*.part" \
                      -newer /tmp/watcher_start_marker 2>/dev/null | head -1)
 
-              if [ -z "$FILE" ]; then
+              if[ -z "$FILE" ]; then
                 FILE=$(find "$DL_FOLDER" -maxdepth 1 -type d -name "*.app" \
                        -newer /tmp/watcher_start_marker 2>/dev/null | head -1)
               fi
@@ -1064,7 +1076,7 @@ jobs:
                         | awk '/\/Volumes\// {print $NF}' | head -1)
                   if [ -n "$MNT" ]; then
                     APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -1)
-                    if [ -n "$APP_SRC" ]; then
+                    if[ -n "$APP_SRC" ]; then
                       AN=$(basename "$APP_SRC")
                       sudo cp -R "$APP_SRC" /Applications/ || true
                       sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
@@ -1081,7 +1093,7 @@ jobs:
                   echo "[Installer] Installing PKG..."
                   sudo installer -pkg "$FILE" -target / -verboseR || true
 
-                elif [ "$EXT" = "app" ]; then
+                elif[ "$EXT" = "app" ]; then
                   echo "[Installer] Direct .app: $BASENAME"
                   sudo cp -R "$FILE" /Applications/ || true
                   sudo xattr -dr com.apple.quarantine "/Applications/$BASENAME" 2>/dev/null || true
@@ -1090,7 +1102,7 @@ jobs:
                 fi
 
                 ACTUAL="$SOFTWARE_TYPE"
-                if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
+                if[ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
                   echo "$BASENAME" | grep -qi "gx" && ACTUAL="opera_gx" || ACTUAL="opera_one"
                 fi
 
@@ -1158,10 +1170,10 @@ jobs:
             --use-mock-keychain
           )
 
-          if [ "$USE_PROXY" = "true" ]; then
+          if[ "$USE_PROXY" = "true" ]; then
             PROXY_SRV="residential-proxy.scrapeops.io:8181"
             echo "Launching Chrome WITH proxy -> $TARGET_URL"
-            if [ -f "$CHROME_BIN" ]; then
+            if[ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
                 "${CHROME_FLAGS[@]}" \
                 --proxy-server="http://$PROXY_SRV" \
@@ -1171,7 +1183,7 @@ jobs:
             fi
           else
             echo "Launching browser (direct) -> $TARGET_URL"
-            if [ -f "$CHROME_BIN" ]; then
+            if[ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
                 "${CHROME_FLAGS[@]}" \
                 "$TARGET_URL" &
@@ -1186,8 +1198,7 @@ jobs:
           # ----------------------------------------------------------------
           echo "Monitoring for up to $TIMEOUT_SECS seconds..."
           DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
-          while kill -0 $WATCHER_PID 2>/dev/null && [ "$(date +%s)" -lt "$DEADLINE" ]; do
-            [ -f /tmp/handler_output.log ] && \
+          while kill -0 $WATCHER_PID 2>/dev/null && [ "$(date +%s)" -lt "$DEADLINE" ]; do[ -f /tmp/handler_output.log ] && \
               timeout 10 tail -f /tmp/handler_output.log 2>/dev/null || sleep 10
           done
           wait $WATCHER_PID 2>/dev/null || true
