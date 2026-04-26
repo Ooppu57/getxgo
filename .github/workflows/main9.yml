@@ -36,7 +36,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '1'
+        default: '5'
 
 jobs:
   prepare_matrix:
@@ -220,11 +220,12 @@ jobs:
           Write-Host "============================================================" -ForegroundColor Cyan
           Write-Host " Zero-Touch Downloader & Installer Active (Windows)" -ForegroundColor Cyan
           Write-Host " Detects downloaded Opera/AVG -> Installs -> Runs Setup Flow" -ForegroundColor Cyan
+          Write-Host " Works continuously for multiple sequential downloads!" -ForegroundColor Cyan
           Write-Host "============================================================" -ForegroundColor Cyan
 
           python -m pip install pywinauto pyautogui pygetwindow keyboard --quiet
           
-          # 1. Background Python UI Automation Handler (from Script 2)
+          # 1. Background Python UI Automation Handler
           $handlerPy = @'
           import time, random, sys, os
           import pyautogui
@@ -238,10 +239,10 @@ jobs:
               one_done = False
               avg_done = False
 
-              print("[Handler] Watching for launched applications...")
+              print("[Handler] Watching for launched applications continuously...")
               while True:
                   try:
-                      # --- AVG Installer UI (Maintained from Script 1) ---
+                      # --- AVG Installer UI ---
                       if not avg_done:
                           wins =[w for w in gw.getAllWindows() if 'AVG' in w.title or 'Antivirus' in w.title]
                           if wins:
@@ -255,7 +256,7 @@ jobs:
                                   avg_done = True
                               except: pass
 
-                      # --- Opera Flow (From Script 2) ---
+                      # --- Opera Flow ---
                       for window in desktop.windows(visible_only=True):
                           wt = window.window_text()
                           if not wt: continue
@@ -264,7 +265,7 @@ jobs:
                           is_one = "Opera" in wt and "Opera GX" not in wt
 
                           if is_gx and not gx_done:
-                              print("[Opera GX] Window Detected. Waiting 15s...")
+                              print(f"[Opera GX] Window Detected: {wt}. Waiting 15s...")
                               time.sleep(15)
                               try: window.set_focus(); window.maximize()
                               except: pass
@@ -283,9 +284,10 @@ jobs:
                               send_keys('{ENTER}')
                               gx_done = True
                               print("[Opera GX] Setup automation completed.")
+                              break # Break out of loop to reset window search fresh
 
                           elif is_one and not one_done:
-                              print("[Opera One] Window Detected. Waiting 90s...")
+                              print(f"[Opera One] Window Detected: {wt}. Waiting 90s...")
                               time.sleep(90)
                               try: window.set_focus(); window.maximize()
                               except: pass
@@ -303,6 +305,7 @@ jobs:
                               send_keys('{ENTER}')
                               one_done = True
                               print("[Opera One] Setup automation completed.")
+                              break
 
                   except Exception as e:
                       pass
@@ -314,7 +317,7 @@ jobs:
           $handlerPy | Out-File -FilePath "$env:TEMP\auto_handler.py" -Encoding utf8
           Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`"" -WindowStyle Hidden
 
-          # 2. File Download Watcher (From Script 2)
+          # 2. File Download Watcher - Continuous Non-Blocking Check
           $dlFolder = "$env:USERPROFILE\Downloads"
           $timeoutSecs = 55 * 60
           $processed = @()
@@ -335,17 +338,42 @@ jobs:
 
                       if ($file.Name -match "OperaGX") {
                           Write-Output "[OperaGX] Found: $($file.Name) - Running silent install..."
-                          Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
-                          Start-Sleep -Seconds 5
+                          # Start Process without -Wait to ensure loop doesn't permanently freeze on stub
+                          Start-Process -FilePath $file.FullName -ArgumentList "/silent"
+                          
                           $appPaths = @("$env:LOCALAPPDATA\Programs\Opera GX\launcher.exe", "C:\Program Files\Opera GX\launcher.exe", "C:\Program Files (x86)\Opera GX\launcher.exe")
-                          foreach ($p in $appPaths) { if (Test-Path $p) { Start-Process -FilePath $p; break } }
+                          $launched = $false
+                          Write-Output "[OperaGX] Waiting for app deploy before checking next download..."
+                          for ($i=0; $i -lt 120; $i++) {
+                              foreach ($p in $appPaths) { 
+                                  if (Test-Path $p) { 
+                                      Start-Sleep -Seconds 3
+                                      Start-Process -FilePath $p 
+                                      $launched = $true; break 
+                                  } 
+                              }
+                              if ($launched) { Write-Output "[OperaGX] App deployed and launched."; break }
+                              Start-Sleep -Seconds 2
+                          }
                       }
                       elseif ($file.Name -match "Opera" -and $file.Name -notmatch "OperaGX") {
                           Write-Output "[OperaOne] Found: $($file.Name) - Running silent install..."
-                          Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
-                          Start-Sleep -Seconds 5
+                          Start-Process -FilePath $file.FullName -ArgumentList "/silent"
+                          
                           $appPaths = @("$env:LOCALAPPDATA\Programs\Opera\launcher.exe", "C:\Program Files\Opera\launcher.exe", "C:\Program Files (x86)\Opera\launcher.exe")
-                          foreach ($p in $appPaths) { if (Test-Path $p) { Start-Process -FilePath $p; break } }
+                          $launched = $false
+                          Write-Output "[OperaOne] Waiting for app deploy before checking next download..."
+                          for ($i=0; $i -lt 120; $i++) {
+                              foreach ($p in $appPaths) { 
+                                  if (Test-Path $p) { 
+                                      Start-Sleep -Seconds 3
+                                      Start-Process -FilePath $p 
+                                      $launched = $true; break 
+                                  } 
+                              }
+                              if ($launched) { Write-Output "[OperaOne] App deployed and launched."; break }
+                              Start-Sleep -Seconds 2
+                          }
                       }
                       elseif ($file.Name -match "avg") {
                           Write-Output "[AVG] Found: $($file.Name) - Launching installer..."
@@ -356,7 +384,7 @@ jobs:
               }
           } -ArgumentList $dlFolder, $timeoutSecs, $processed
 
-          # Monitor Job output
+          # Monitor Job output actively
           $deadline = (Get-Date).AddSeconds($timeoutSecs)
           while ((Get-Date) -lt $deadline) {
               $output = Receive-Job -Job $watchJob -ErrorAction SilentlyContinue
@@ -460,9 +488,10 @@ jobs:
           echo "============================================================"
           echo " Zero-Touch Downloader & Installer Active (macOS)"
           echo " Detects downloaded Opera DMG/ZIP -> Installs -> Setup Flow"
+          echo " Works continuously for multiple sequential downloads!"
           echo "============================================================"
 
-          # 1. Background AppleScript Setup Handler (From Script 3)
+          # 1. Background AppleScript Setup Handler
           cat > /tmp/macos_handler.py << 'PYEOF'
           import time, subprocess, random
 
@@ -527,15 +556,21 @@ jobs:
               gx_done = False
               one_done = False
               while True:
-                  apps = run_as('tell application "System Events" to get name of every process whose visible is true')
-                  if "Opera GX" in apps and not gx_done:
-                      time.sleep(5)
-                      flow("Opera GX")
-                      gx_done = True
-                  elif "Opera" in apps and "Opera GX" not in apps and not one_done:
-                      time.sleep(5)
-                      flow("Opera One")
-                      one_done = True
+                  apps_str = run_as('tell application "System Events" to get name of every process whose visible is true')
+                  if apps_str:
+                      apps =[a.strip() for a in apps_str.split(',')]
+                      
+                      has_gx = any("Opera GX" in a for a in apps)
+                      has_one = any("Opera" in a and "Opera GX" not in a for a in apps)
+                      
+                      if has_gx and not gx_done:
+                          time.sleep(5)
+                          flow("Opera GX")
+                          gx_done = True
+                      elif has_one and not one_done:
+                          time.sleep(5)
+                          flow("Opera One")
+                          one_done = True
                   time.sleep(2)
 
           if __name__ == "__main__":
@@ -544,7 +579,7 @@ jobs:
 
           python3 -u /tmp/macos_handler.py > /tmp/macos_handler.log 2>&1 &
 
-          # 2. File Download Watcher (From Script 3)
+          # 2. File Download Watcher (Non-Blocking Continuous)
           DL_FOLDER="$HOME/Downloads"
           PROCESSED_FILE="/tmp/processed_files.txt"
           touch "$PROCESSED_FILE"
@@ -604,7 +639,7 @@ jobs:
           done
           ) &
           
-          # Maintain log stream
+          # Maintain log stream actively
           TIMEOUT=3300
           START=$(date +%s)
           while[ $(($(date +%s) - START)) -lt $TIMEOUT ]; do
