@@ -1,7 +1,7 @@
-name: Apify Actors Scraper
+name: Apify Actors (OS Mimic) Scraper
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  FILE: main_apify_actors.yml                                                 ║
+# ║  FILE: main_apify_mimic_os.yml                                               ║
 # ║                                                                              ║
 # ║  SECRETS REQUIRED (repo → Settings → Secrets and variables → Actions):     ║
 # ║    GH_PAT  — Personal Access Token with full `repo` scope                  ║
@@ -62,6 +62,15 @@ on:
           - "apify/screenshot-url (Best for Screenshots)"
           - "apify/web-scraper (Best for Raw HTML)"
 
+      target_os:
+        description: "💻 Operating System to Mimic/Spoof"
+        required: true
+        default: "Windows 11"
+        type: choice
+        options:
+          - "Windows 11"
+          - "macOS (Apple Silicon)"
+
       country:
         description: "🌍 Geo-target country"
         required: true
@@ -75,10 +84,6 @@ on:
           - "de — Germany"
           - "fr — France"
           - "it — Italy"
-          - "es — Spain"
-          - "br — Brazil"
-          - "in — India"
-          - "jp — Japan"
 
       num_requests:
         description: "🔢 Number of runs (1–50)"
@@ -86,18 +91,9 @@ on:
         default: "1"
         type: string
 
-      proxy_type:
-        description: "🔀 Proxy type"
-        required: true
-        default: "datacenter"
-        type: choice
-        options:
-          - "datacenter"
-          - "residential"
-
 jobs:
   scrape:
-    name: "[${{ inputs.software_category }}] ${{ inputs.affiliate_link }}"
+    name: "[Mimic ${{ inputs.target_os }}] ${{ inputs.affiliate_link }}"
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
@@ -156,10 +152,6 @@ jobs:
               "Ad-Maven » A2Z":            "https://u.to/a2zadmvnxsmrt/Y-t7Ig",
           }
 
-          if LINK_KEY not in LINK_MAP:
-              print(f"::error::Link key '{LINK_KEY}' not found in LINK_MAP.")
-              sys.exit(1)
-
           target_url = LINK_MAP[LINK_KEY]
           print(f"✅ Target URL: {target_url}")
 
@@ -168,52 +160,76 @@ jobs:
               f.write(f"target_url={target_url}\n")
           PYEOF
 
-      - name: Trigger Apify Actor Runs
+      - name: Trigger Apify Actor Runs with OS Spoofing
         id: scraper
         env:
           TARGET_URL:      "${{ steps.resolve.outputs.target_url }}"
           APIFY_TOKEN:     "${{ inputs.apify_api_token }}"
           COUNTRY_RAW:     "${{ inputs.country }}"
           NUM_REQUESTS:    "${{ inputs.num_requests }}"
-          PROXY_TYPE:      "${{ inputs.proxy_type }}"
           APIFY_ACTOR:     "${{ inputs.apify_actor }}"
+          TARGET_OS:       "${{ inputs.target_os }}"
           LINK_KEY:        "${{ inputs.affiliate_link }}"
           CATEGORY:        "${{ inputs.software_category }}"
         run: |
           python3 - <<'PYEOF'
-          import os, sys, json, requests
+          import os, sys, json, requests, uuid
           from apify_client import ApifyClient
 
           TARGET_URL      = os.environ["TARGET_URL"].strip()
           APIFY_TOKEN     = os.environ["APIFY_TOKEN"].strip()
           COUNTRY_RAW     = os.environ["COUNTRY_RAW"].strip()
           NUM_REQUESTS    = int(os.environ["NUM_REQUESTS"])
-          PROXY_TYPE      = os.environ["PROXY_TYPE"].strip()
+          TARGET_OS       = os.environ["TARGET_OS"].strip()
           LINK_KEY        = os.environ["LINK_KEY"].strip()
           CATEGORY        = os.environ["CATEGORY"].strip()
-          
-          # Clean the dropdown string to get just the actor name (e.g. "apify/web-scraper")
-          ACTOR_ID = os.environ["APIFY_ACTOR"].split(" ")[0].strip()
+          ACTOR_ID        = os.environ["APIFY_ACTOR"].split(" ")[0].strip()
 
-          # Parse ISO 2-letter country code
+          # Format Country Code
           country_part = COUNTRY_RAW.split("—")[0].strip().upper()
           country_code = "" if country_part == "AUTO" else country_part
+
+          # ─── OS SPOOFING CONFIGURATION ──────────────────────────────────────
+          if "Windows" in TARGET_OS:
+              USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+              NAV_PLATFORM = "Win32"
+              SEC_CH_UA_PLATFORM = '"Windows"'
+              PROXY_OS_GROUP = "os-WINDOWS"
+          else:
+              USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+              NAV_PLATFORM = "MacIntel"
+              SEC_CH_UA_PLATFORM = '"macOS"'
+              PROXY_OS_GROUP = "os-MAC"
+
+          # JavaScript injection to override deeper browser APIs (for web-scraper)
+          PRE_HOOK_JS = f"""[
+              async ({{ page }}) => {{
+                  await page.setExtraHTTPHeaders({{
+                      'sec-ch-ua-platform': '{SEC_CH_UA_PLATFORM}',
+                      'sec-ch-ua-mobile': '?0'
+                  }});
+                  await page.evaluateOnNewDocument(() => {{
+                      Object.defineProperty(navigator, 'platform', {{ get: () => '{NAV_PLATFORM}' }});
+                      Object.defineProperty(navigator, 'userAgent', {{ get: () => '{USER_AGENT}' }});
+                      Object.defineProperty(navigator, 'vendor', {{ get: () => 'Google Inc.' }});
+                  }});
+              }}
+          ]
+          """
 
           os.makedirs("results", exist_ok=True)
           os.makedirs("screenshots", exist_ok=True)
 
-          # Initialize the Apify SDK
           client = ApifyClient(APIFY_TOKEN)
           summary =[]
 
           print(f"\n{'═'*65}")
-          print(f"  Apify Cloud Actors Integration")
+          print(f"  Apify Cloud Actors — Advanced OS Mimicking")
           print(f"{'═'*65}")
-          print(f"  Actor         : {ACTOR_ID}")
           print(f"  Target URL    : {TARGET_URL}")
-          print(f"  Requests      : {NUM_REQUESTS}")
-          print(f"  Proxy type    : {PROXY_TYPE}")
-          print(f"  Country       : {country_code or 'AUTO'}")
+          print(f"  Mimicking OS  : {TARGET_OS}")
+          print(f"  User-Agent    : {USER_AGENT[:50]}...")
+          print(f"  IP Proxy Match: {PROXY_OS_GROUP}")
           print(f"{'═'*65}\n")
 
           for i in range(NUM_REQUESTS):
@@ -230,32 +246,39 @@ jobs:
                   "screenshot_saved": False
               }
 
-              # Common Proxy Configuration for Apify Actors
-              proxy_config = {"useApifyProxy": True}
-              if PROXY_TYPE == "residential":
-                  proxy_config["apifyProxyGroups"] =["RESIDENTIAL"]
-              if country_code:
-                  proxy_config["apifyProxyCountry"] = country_code
+              # Build custom proxy URL to force Apify to route through the specified OS
+              session_id = f"gh_{uuid.uuid4().hex[:8]}"
+              proxy_parts = ["groups-RESIDENTIAL", PROXY_OS_GROUP]
+              if country_code: proxy_parts.append(f"country-{country_code}")
+              proxy_parts.append(f"session-{session_id}")
+              proxy_str = ",".join(proxy_parts)
+              
+              custom_proxy_url = f"http://{proxy_str}:{APIFY_TOKEN}@proxy.apify.com:8000"
+              
+              proxy_config = {
+                  "useApifyProxy": False, # We set this false to provide our strict custom proxy string
+                  "proxyUrls": [custom_proxy_url]
+              }
 
               try:
                   if ACTOR_ID == "apify/screenshot-url":
                       run_input = {
                           "urls": [{"url": TARGET_URL}],
                           "waitUntil": "networkidle2",
-                          "delay": 2000, # Added a short 2s delay post-load to ensure ads/renders catch up
+                          "delay": 2000,
+                          "userAgent": USER_AGENT,
                           "proxyConfiguration": proxy_config
                       }
                       
                       print(f"  🚀 Calling {ACTOR_ID} (waiting for cloud execution...)")
                       run = client.actor(ACTOR_ID).call(run_input=run_input)
                       
-                      # Fetch results from the Actor's Dataset
                       dataset_id = run["defaultDatasetId"]
                       items = list(client.dataset(dataset_id).iterate_items())
                       
                       if items and "screenshotUrl" in items[0]:
                           screenshot_url = items[0]["screenshotUrl"]
-                          print(f"  📥 Result ready! Downloading PNG from Apify KVS...")
+                          print(f"  📥 Downloading PNG from Apify...")
                           
                           img_resp = requests.get(screenshot_url, timeout=60)
                           if img_resp.status_code == 200:
@@ -269,10 +292,9 @@ jobs:
                           else:
                               print(f"  ❌ Download failed (HTTP {img_resp.status_code})")
                       else:
-                          print("  ❌ No screenshot URL returned in Dataset. Output was:", items)
+                          print("  ❌ No screenshot URL returned.")
 
                   elif ACTOR_ID == "apify/web-scraper":
-                      # Web Scraper requires a Javascript 'pageFunction' to tell it what to scrape.
                       page_func = """async function pageFunction(context) { 
                           return { html: document.documentElement.outerHTML }; 
                       }"""
@@ -281,7 +303,10 @@ jobs:
                           "runMode": "PRODUCTION",
                           "startUrls":[{"url": TARGET_URL}],
                           "pageFunction": page_func,
-                          "proxyConfiguration": proxy_config
+                          "preNavigationHooks": PRE_HOOK_JS,
+                          "proxyConfiguration": proxy_config,
+                          "useChrome": True,
+                          "ignoreSslErrors": True
                       }
                       
                       print(f"  🚀 Calling {ACTOR_ID} (waiting for cloud execution...)")
@@ -298,14 +323,13 @@ jobs:
                           rec["status"] = "200"
                           print(f"  ✅ HTML saved → {html_path} ({len(html_content)} bytes)")
                       else:
-                          print("  ❌ No HTML data returned in Dataset. Output was:", items)
+                          print("  ❌ No HTML data returned in Dataset.")
 
               except Exception as e:
                   print(f"  ⚠️ Error calling Actor API: {e}")
               
               summary.append(rec)
               
-          # Save summary json
           with open("results/summary.json", "w") as fh:
               json.dump(summary, fh, indent=2)
 
@@ -315,7 +339,6 @@ jobs:
 
           print(f"\n  RESULTS: ✅ Succeeded: {passed} | ❌ Failed: {failed} | 📸 Screenshots: {ss_ok}\n")
 
-          # Export to GH env
           gh_out = os.environ.get("GITHUB_OUTPUT", "_tmp_out.txt")
           with open(gh_out, "a") as f:
               f.write(f"passed={passed}\n")
@@ -379,14 +402,14 @@ jobs:
         if: always()
         run: |
           cat >> $GITHUB_STEP_SUMMARY << SUMMARY
-          ## 🤖 Apify Actors — Run #${{ github.run_number }}
+          ## 🤖 Apify OS Spoofing — Run #${{ github.run_number }}
           | Setting | Value |
           |---------|-------|
+          | 💻 Spoofed OS | **${{ inputs.target_os }}** |
           | 🤖 Actor Used | ${{ inputs.apify_actor }} |
           | 🔗 Link | ${{ inputs.affiliate_link }} |
           | 🔢 Requests | ${{ inputs.num_requests }} |
           | 🌍 Country | ${{ inputs.country }} |
-          | 🔀 Proxy Type | ${{ inputs.proxy_type }} |
           | ✅ Passed | ${{ steps.scraper.outputs.passed }} |
           | ❌ Failed | ${{ steps.scraper.outputs.failed }} |
           | 📸 Screenshots saved | ${{ steps.scraper.outputs.screenshots_taken }} |
