@@ -49,12 +49,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - James'
+        default: 'Opera-One - Jimmy'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '589109d6-21c7-4f1c-b369-6557eca63d01'
+        default: '2f2622aa-3db7-4033-8b94-f0657bdf0cb3'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -67,12 +67,12 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'Brazil'
+        default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: true
+        default: false
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
