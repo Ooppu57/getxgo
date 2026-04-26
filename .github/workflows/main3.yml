@@ -52,7 +52,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - Techx'
+        default: 'OperaGX - James'
       manual_software_url:
         description: 'Manual Software URL (Overrides Dropdown - Detects Opera GX/One)'
         required: false
@@ -75,12 +75,12 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'USA'
+        default: 'Brazil'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: false
+        default: true
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
@@ -114,13 +114,14 @@ jobs:
           STICKY: ${{ inputs.sticky_sessions }}
         run: |
           import os, json, uuid
+          
           email = os.environ.get("EMAIL", "").strip()
           num_devices = int(os.environ.get("NUM_DEVICES", "1"))
           os_version = os.environ.get("OS_VERSION", "windows-2025")
           
-          # Clean and validate API Key for strict empty bypass
+          # Smart API Key validation - forces empty string if user clears field or types blank
           api_key = os.environ.get("API_KEY", "").strip()
-          if api_key.lower() in ["none", "null", "false"]:
+          if not api_key or api_key.lower() in ["none", "null", "false", "blank", "empty", "''", '""']:
               api_key = ""
               
           country_input = os.environ.get("COUNTRY", "USA")
@@ -129,7 +130,7 @@ jobs:
           software_choice = os.environ.get("SOFTWARE_CHOICE", "AVG - B4Books")
           manual_url = os.environ.get("MANUAL_URL", "").strip()
           
-          # Determine if proxy should be used at all
+          # Final toggle: Use Proxy only if API key actually contains text
           use_proxy = bool(api_key)
           
           # Map Country to ScrapeOps codes
@@ -176,7 +177,7 @@ jobs:
           if manual_url:
               target_url = manual_url
               software_type = "dynamic_opera"
-              exe_filter = "*.exe" # Broadened to ensure it captures custom downloaded manual binaries
+              exe_filter = "*.exe" 
           else:
               target_url = all_urls.get(software_choice, avg_urls["AVG - B4Books"])
               if software_choice in dynamic_links or software_choice.startswith("Ad-MVN"):
@@ -225,7 +226,7 @@ jobs:
               for i in range(1, num_devices + 1):
                   device_name = f"{i}-{short_os_tag}-{short_sw_tag}"
                   
-                  # Only build proxy credentials when an API key is provided
+                  # Attach proxy settings solely if use_proxy is True
                   if use_proxy:
                       proxy_user = f"scrapeops.country={cc}"
                       if mobile:
@@ -270,48 +271,74 @@ jobs:
           MOBILE: ${{ inputs.mobile_proxies }}
           STICKY: ${{ inputs.sticky_sessions }}
         run: |
-          import re, os
-          file_path = ".github/workflows/main3.yml"
-          if os.path.exists(file_path):
-              with open(file_path, "r") as f:
+          import re, os, glob
+          
+          # Extremely robust block-level YAML parser that never fails on missing quotes
+          def update_yaml_default(yaml_str, input_key, new_val, is_bool=False):
+              lines = yaml_str.split("\n")
+              in_target_block = False
+              target_indent = -1
+              
+              for i, line in enumerate(lines):
+                  match = re.match(r"^([ \t]*)" + input_key + r":", line)
+                  if match:
+                      in_target_block = True
+                      target_indent = len(match.group(1))
+                      continue
+                  
+                  if in_target_block:
+                      # If we exit the specific input block's indentation, stop looking
+                      current_indent = len(line) - len(line.lstrip(" \t"))
+                      if line.strip() and current_indent <= target_indent:
+                          in_target_block = False
+                          continue
+                          
+                      # Find and overwrite the exact default field for this input
+                      if line.lstrip(" \t").startswith("default:"):
+                          indent = line[:len(line) - len(line.lstrip(" \t"))]
+                          if is_bool:
+                              val_str = "true" if str(new_val).lower() == "true" else "false"
+                              lines[i] = f"{indent}default: {val_str}"
+                          else:
+                              # Ensures strict blanking
+                              if new_val is None or str(new_val).strip().lower() in["none", "null", "blank", "empty", "''", '""']:
+                                  safe_val = ""
+                              else:
+                                  safe_val = str(new_val).replace("'", "\\'")
+                              lines[i] = f"{indent}default: '{safe_val}'"
+                          break
+              return "\n".join(lines)
+              
+          updated_any = False
+          # Scans dynamically for ANY YAML file to ensure no rename breaks the save logic
+          for file_path in glob.glob(".github/workflows/*.yml") + glob.glob(".github/workflows/*.yaml"):
+              with open(file_path, "r", encoding="utf-8") as f:
                   content = f.read()
-              
-              def update_default_str(input_name, new_val):
-                  global content
-                  if new_val is None or new_val.lower() in ["none", "null"]:
-                      new_val = ""
-                  # Overwrites content inside default: '...' including blanking it to default: ''
-                  pattern = r"(" + input_name + r":[\s\S]*?default:\s*')[^']*(')"
-                  content = re.sub(pattern, rf"\g<1>{new_val}\g<2>", content, count=1)
                   
-              def update_default_bool(input_name, new_val):
-                  global content
-                  pattern = r"(" + input_name + r":[\s\S]*?default:\s*)(true|false)"
-                  content = re.sub(pattern, rf"\g<1>{new_val.lower()}", content, count=1)
+              if "scrapeops_api_key" in content:
+                  content = update_yaml_default(content, "os_version", os.environ.get("OS_VERSION"))
+                  content = update_yaml_default(content, "getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
+                  content = update_yaml_default(content, "num_devices", os.environ.get("NUM_DEVICES"))
+                  content = update_yaml_default(content, "software_choice", os.environ.get("SOFTWARE_CHOICE"))
+                  content = update_yaml_default(content, "manual_software_url", os.environ.get("MANUAL_URL"))
+                  content = update_yaml_default(content, "scrapeops_api_key", os.environ.get("API_KEY"))
+                  content = update_yaml_default(content, "proxy_country", os.environ.get("COUNTRY"))
+                  content = update_yaml_default(content, "mobile_proxies", os.environ.get("MOBILE"), is_bool=True)
+                  content = update_yaml_default(content, "sticky_sessions", os.environ.get("STICKY"), is_bool=True)
                   
-              update_default_str("os_version", os.environ.get("OS_VERSION"))
-              update_default_str("getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
-              update_default_str("num_devices", os.environ.get("NUM_DEVICES"))
-              update_default_str("software_choice", os.environ.get("SOFTWARE_CHOICE"))
-              update_default_str("manual_software_url", os.environ.get("MANUAL_URL"))
-              
-              # Automatically writes a blank string to YAML default if proxy API key was empty
-              update_default_str("scrapeops_api_key", os.environ.get("API_KEY"))
-              
-              update_default_str("proxy_country", os.environ.get("COUNTRY"))
-              update_default_bool("mobile_proxies", os.environ.get("MOBILE"))
-              update_default_bool("sticky_sessions", os.environ.get("STICKY"))
-              
-              with open(file_path, "w") as f:
-                  f.write(content)
-          else:
-              print(f"File {file_path} not found. Skipping auto-save.")
+                  with open(file_path, "w", encoding="utf-8") as f:
+                      f.write(content)
+                  updated_any = True
+                  print(f"Successfully saved new defaults in {file_path}")
+                  
+          if not updated_any:
+              print("No matching workflow files found to auto-save.")
               
       - name: Commit and Push New Defaults
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/main3.yml
+          git add .github/workflows/*.yml .github/workflows/*.yaml
           git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs[skip ci]" && git push)
 
   remote_session:
@@ -385,7 +412,7 @@ jobs:
           if ($useProxy) {
               Write-Host " Mode      : Proxy-enabled" -ForegroundColor Cyan
           } else {
-              Write-Host " Mode      : Direct (Proxy Bypassed completely)" -ForegroundColor Yellow
+              Write-Host " Mode      : Direct (Proxy Completely Bypassed)" -ForegroundColor Yellow
           }
           Write-Host "============================================================" -ForegroundColor Cyan
           
@@ -532,7 +559,7 @@ jobs:
                           
                       # A. Proxy Authentication dialog — ONLY EXECUTED IF PROXY IS ACTIVE
                       if use_proxy and (edge_window or opera_window):
-                          for w in[edge_window, opera_window]:
+                          for w in [edge_window, opera_window]:
                               if w:
                                   user_fields = w.descendants(control_type="Edit", title="Username")
                                   pass_fields = w.descendants(control_type="Edit", title="Password")
@@ -621,7 +648,7 @@ jobs:
                               except Exception:
                                   pass
                           else:
-                              for btn_name in["Add to Chrome", "Get"]:
+                              for btn_name in ["Add to Chrome", "Get"]:
                                   install_btns = edge_window.descendants(control_type="Button", title=btn_name)
                                   if install_btns:
                                       try:
@@ -729,17 +756,17 @@ jobs:
                   time.sleep(1)
                   
           if __name__ == "__main__":
-              username    = sys.argv[1] if len(sys.argv) > 1 else ""
-              password    = sys.argv[2] if len(sys.argv) > 2 else ""
+              username      = sys.argv[1] if len(sys.argv) > 1 else ""
+              password      = sys.argv[2] if len(sys.argv) > 2 else ""
               software_type = sys.argv[3] if len(sys.argv) > 3 else "avg"
               # Converts the "true" or "false" string passed from PowerShell into a real boolean
-              use_proxy   = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
+              use_proxy     = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
               
               handle_automation(username, password, software_type, use_proxy)
           '@
           $handlerPy | Out-File -FilePath "$env:TEMP\auto_handler.py" -Encoding utf8
           
-          # Start the handler concurrently — always pass use_proxy as final arg
+          # Start the handler concurrently — passing args exactly in sequence
           Start-Process -FilePath "python" `
               -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`" `"$env:SOFTWARE_TYPE`" `"$env:USE_PROXY`"" `
               -WindowStyle Hidden
@@ -869,7 +896,7 @@ jobs:
               "--disable-features=msSmartScreenProtection,SmartScreenPuaEnabled"
           )
           
-          # Only add proxy flag when a key was provided and not blank
+          # Only add proxy flag when a key was provided AND NOT BLANK
           if ($useProxy) {
               $proxyServer = "residential-proxy.scrapeops.io:8181"
               $edgeArgs += "--proxy-server=`"http://$proxyServer`""
