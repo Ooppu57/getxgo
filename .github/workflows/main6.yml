@@ -14,7 +14,7 @@ on:
           - 'macos-15-xlarge'
           - 'macos-26'
           - 'macos-26-intel'
-        default: 'macos-26'
+        default: 'macos-15'
       getscreen_email:
         description: 'Getscreen.me Account Email'
         required: true
@@ -51,12 +51,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - B4Books'
+        default: 'OperaGX - James'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '2f2622aa-3db7-4033-8b94-f0657bdf0cb3'
+        default: '589109d6-21c7-4f1c-b369-6557eca63d01'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -69,12 +69,12 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'USA'
+        default: 'Brazil'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: false
+        default: true
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
@@ -343,7 +343,53 @@ jobs:
           echo "All dependencies installed."
 
       # ================================================================== #
-      # STEP 3 — Getscreen.me (DMG + TCC + exec — proven working logic)   #
+      # STEP 3 — Pre-grant ALL TCC permissions (LocalNetwork, Screen,      #
+      #           Accessibility) BEFORE any app launches                   #
+      # ================================================================== #
+      - name: Pre-Grant System Permissions (TCC Injection)
+        shell: bash
+        run: |
+          echo "=== Pre-granting TCC permissions to prevent popups ==="
+          TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
+
+          # Helper function to insert TCC record
+          grant_tcc() {
+            local SERVICE="$1"
+            local CLIENT="$2"
+            local CLIENT_TYPE="$3"   # 0=bundle, 1=path
+            sudo sqlite3 "$TCC_DB" \
+              "INSERT OR REPLACE INTO access \
+               (service, client, client_type, auth_value, auth_reason, auth_version, flags) \
+               VALUES ('${SERVICE}', '${CLIENT}', ${CLIENT_TYPE}, 2, 4, 1, 0);" \
+              2>/dev/null || true
+          }
+
+          # ---- Accessibility ----
+          grant_tcc kTCCServiceAccessibility com.apple.Terminal             0
+          grant_tcc kTCCServiceAccessibility com.apple.systemevents         0
+          grant_tcc kTCCServiceAccessibility /usr/bin/osascript             1
+          grant_tcc kTCCServiceAccessibility com.google.Chrome              0
+          grant_tcc kTCCServiceAccessibility com.operasoftware.OperaGX      0
+          grant_tcc kTCCServiceAccessibility com.operasoftware.opera        0
+
+          # ---- Screen Recording ----
+          grant_tcc kTCCServiceScreenCapture com.google.Chrome              0
+          grant_tcc kTCCServiceScreenCapture com.apple.Terminal             0
+
+          # ---- Local Network (prevents the "find devices" popup) ----
+          grant_tcc kTCCServiceLocalNetwork  com.google.Chrome              0
+          grant_tcc kTCCServiceLocalNetwork  com.apple.Terminal             0
+          grant_tcc kTCCServiceLocalNetwork  com.operasoftware.OperaGX      0
+          grant_tcc kTCCServiceLocalNetwork  com.operasoftware.opera        0
+
+          # ---- Also disable notification center prompts ----
+          sudo defaults write /Library/Preferences/com.apple.notificationcenterui \
+            doNotDisturb -bool true 2>/dev/null || true
+
+          echo "TCC pre-grant complete."
+
+      # ================================================================== #
+      # STEP 4 — Getscreen.me (DMG + TCC + exec)                          #
       # ================================================================== #
       - name: Install, Bypass Security, and Start Getscreen.me (macOS)
         shell: bash
@@ -398,17 +444,21 @@ jobs:
 
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
 
+          grant_tcc() {
+            local SERVICE="$1"
+            local CLIENT="$2"
+            local CLIENT_TYPE="$3"
+            sudo sqlite3 "$TCC_DB" \
+              "INSERT OR REPLACE INTO access \
+               (service, client, client_type, auth_value, auth_reason, auth_version, flags) \
+               VALUES ('${SERVICE}', '${CLIENT}', ${CLIENT_TYPE}, 2, 4, 1, 0);" \
+              2>/dev/null || true
+          }
+
           if [ -n "$APP_BUNDLE_ID" ]; then
-            sudo sqlite3 "$TCC_DB" \
-              "INSERT OR REPLACE INTO access \
-               (service, client, client_type, auth_value, auth_reason, auth_version, flags) \
-               VALUES ('kTCCServiceScreenCapture', \
-                       '$APP_BUNDLE_ID', 0, 2, 4, 1, 0);" 2>/dev/null || true
-            sudo sqlite3 "$TCC_DB" \
-              "INSERT OR REPLACE INTO access \
-               (service, client, client_type, auth_value, auth_reason, auth_version, flags) \
-               VALUES ('kTCCServiceAccessibility', \
-                       '$APP_BUNDLE_ID', 0, 2, 4, 1, 0);" 2>/dev/null || true
+            grant_tcc kTCCServiceScreenCapture  "$APP_BUNDLE_ID" 0
+            grant_tcc kTCCServiceAccessibility  "$APP_BUNDLE_ID" 0
+            grant_tcc kTCCServiceLocalNetwork   "$APP_BUNDLE_ID" 0
             echo "TCC permissions granted for $APP_BUNDLE_ID"
           else
             echo "WARNING: Bundle ID not found — skipping TCC injection."
@@ -443,7 +493,7 @@ jobs:
           echo "Getscreen.me registered as '$DEVICE_NAME' and started successfully."
 
       # ================================================================== #
-      # STEP 4 — Google Chrome                                              #
+      # STEP 5 — Google Chrome                                             #
       # ================================================================== #
       - name: Install Google Chrome (Proxy-capable Browser)
         shell: bash
@@ -476,6 +526,60 @@ jobs:
             echo "WARNING: Chrome DMG download failed ($FILE_SIZE B)."
           fi
 
+          # ---- Suppress Chrome first-run and permission prompts ----
+          CHROME_PREFS_DIR="$HOME/Library/Application Support/Google/Chrome/Default"
+          mkdir -p "$CHROME_PREFS_DIR"
+          cat > "$CHROME_PREFS_DIR/Preferences" << 'PREFS_EOF'
+          {
+            "profile": {
+              "default_content_setting_values": {
+                "notifications": 2,
+                "media_stream_mic": 2,
+                "media_stream_camera": 2,
+                "geolocation": 2,
+                "popups": 1
+              }
+            },
+            "browser": {
+              "has_seen_welcome_page": true,
+              "show_home_button": false
+            },
+            "signin": {
+              "allowed": false
+            },
+            "sync": {
+              "requested": false
+            },
+            "credentials_enable_service": false,
+            "password_manager_enabled": false
+          }
+          PREFS_EOF
+
+          # ---- Chrome managed policies: suppress ALL permission dialogs ----
+          sudo mkdir -p /Library/Managed\ Preferences/
+          sudo mkdir -p /Library/Preferences/
+          sudo /usr/bin/defaults write \
+            /Library/Preferences/com.google.Chrome \
+            AuthServerAllowlist "*" 2>/dev/null || true
+          sudo /usr/bin/defaults write \
+            /Library/Preferences/com.google.Chrome \
+            AuthNegotiateDelegateAllowlist "*" 2>/dev/null || true
+          sudo /usr/bin/defaults write \
+            /Library/Preferences/com.google.Chrome \
+            DefaultNotificationsSetting 2 2>/dev/null || true
+          sudo /usr/bin/defaults write \
+            /Library/Preferences/com.google.Chrome \
+            DefaultGeolocationSetting 2 2>/dev/null || true
+          sudo /usr/bin/defaults write \
+            /Library/Preferences/com.google.Chrome \
+            PromptForDownloadLocation 0 2>/dev/null || true
+          sudo /usr/bin/defaults write \
+            /Library/Preferences/com.google.Chrome \
+            SafeBrowsingEnabled 0 2>/dev/null || true
+          sudo /usr/bin/defaults write \
+            /Library/Preferences/com.google.Chrome \
+            MetricsReportingEnabled 0 2>/dev/null || true
+
           if [ -d "/Applications/Google Chrome.app" ]; then
             echo "CHROME_AVAILABLE=true" >> "$GITHUB_ENV"
           else
@@ -484,7 +588,7 @@ jobs:
           fi
 
       # ================================================================== #
-      # STEP 5 — Download, Install & Automate Software                     #
+      # STEP 6 — Download, Install & Automate Software                     #
       # ================================================================== #
       - name: Setup Auto-Downloader & Software Installation (macOS)
         shell: bash
@@ -499,7 +603,7 @@ jobs:
           echo "============================================================"
           echo " Zero-Touch Downloader & Installer Active (macOS)"
           echo " Category  : $SOFTWARE_TYPE"
-          [ "$USE_PROXY" = "true" ] && echo " Mode      : Proxy-enabled" \
+          [ "$USE_PROXY" = "true" ] && echo " Mode      : Proxy-enabled (credentials embedded)" \
                                     || echo " Mode      : Direct (no proxy)"
           echo "============================================================"
 
@@ -507,6 +611,76 @@ jobs:
           SENTINEL_PATH="/tmp/download_done.flag"
           TIMEOUT_SECS=360
 
+          # ----------------------------------------------------------------
+          # Build proxy URL with embedded credentials
+          # (avoids Chrome auth dialog entirely)
+          # URL-encode '=' as '%3D' in the username field
+          # ----------------------------------------------------------------
+          if [ "$USE_PROXY" = "true" ]; then
+            PROXY_USER_ENC=$(echo "$PROXY_USER" | python3 -c \
+              "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip(), safe='.-_'))")
+            PROXY_PASS_ENC=$(echo "$PROXY_PASS" | python3 -c \
+              "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip(), safe='.-_'))")
+            PROXY_URL_WITH_CREDS="http://${PROXY_USER_ENC}:${PROXY_PASS_ENC}@residential-proxy.scrapeops.io:8181"
+            echo "Proxy URL (creds embedded): http://***:***@residential-proxy.scrapeops.io:8181"
+          fi
+
+          # ----------------------------------------------------------------
+          # 1. Write dialog dismisser (runs in background, auto-clicks Allow)
+          # ----------------------------------------------------------------
+          cat > /tmp/dialog_dismisser.sh << 'DISMISS_EOF'
+          #!/bin/bash
+          # Auto-click Allow/OK on any macOS system dialog that appears
+          DEADLINE=$(($(date +%s) + 400))
+          echo "[Dismisser] Started — will auto-allow system dialogs"
+
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            # Auto-click "Allow" on any visible system dialog
+            osascript << 'ASEOF' 2>/dev/null
+          try
+            tell application "System Events"
+              set allProcs to every process whose visible is true
+              repeat with proc in allProcs
+                try
+                  set procName to name of proc
+                  tell proc
+                    repeat with w in every window
+                      try
+                        set btnNames to name of every button of w
+                        -- Click Allow if present
+                        if "Allow" is in btnNames then
+                          click button "Allow" of w
+                          log "[Dismisser] Clicked Allow in " & procName
+                        end if
+                        -- Click OK if present and no Allow
+                        if "OK" is in btnNames and "Allow" is not in btnNames then
+                          click button "OK" of w
+                          log "[Dismisser] Clicked OK in " & procName
+                        end if
+                        -- Dismiss "Don't Allow" situations by preferring Allow
+                        if "Don't Allow" is in btnNames and "Allow" is in btnNames then
+                          click button "Allow" of w
+                        end if
+                      end try
+                    end repeat
+                  end tell
+                end try
+              end repeat
+            end tell
+          end try
+          ASEOF
+            sleep 2
+          done
+          echo "[Dismisser] Exiting."
+          DISMISS_EOF
+          chmod +x /tmp/dialog_dismisser.sh
+          /tmp/dialog_dismisser.sh > /tmp/dismisser.log 2>&1 &
+          DISMISSER_PID=$!
+          echo "Dialog dismisser PID: $DISMISSER_PID"
+
+          # ----------------------------------------------------------------
+          # 2. Write Python UI automation handler
+          # ----------------------------------------------------------------
           cat > /tmp/macos_handler.py << 'PYEOF'
           import time, sys, os, subprocess, random
 
@@ -541,28 +715,35 @@ jobs:
                   run_as(f'tell application "System Events" to key code {code}')
 
           def running_apps():
-              r = run_as('tell application "System Events" to get name of every process whose visible is true',
-                         silent=True)
+              r = run_as(
+                  'tell application "System Events" to get name of every process whose visible is true',
+                  silent=True)
               return [n.strip() for n in r.split(",") if n.strip()]
 
-          def fill_proxy_auth(user, pwd):
-              return run_as(f'''
-          tell application "System Events"
-              tell process "Google Chrome"
-                  try
-                      set uF to text field 1 of sheet 1 of window 1
-                      set focused of uF to true
-                      set value of uF to "{user}"
-                      set pF to text field 2 of sheet 1 of window 1
-                      set focused of pF to true
-                      set value of pF to "{pwd}"
-                      click button "OK" of sheet 1 of window 1
-                      return "filled"
-                  on error e
-                      return "err:" & e
-                  end try
-              end tell
-          end tell''')
+          def dismiss_all_system_dialogs():
+              """Click Allow/OK on any system permission dialog."""
+              run_as('''
+          try
+            tell application "System Events"
+              set allProcs to every process whose visible is true
+              repeat with proc in allProcs
+                try
+                  tell proc
+                    repeat with w in every window
+                      try
+                        set btnNames to name of every button of w
+                        if "Allow" is in btnNames then
+                          click button "Allow" of w
+                        else if "OK" is in btnNames then
+                          click button "OK" of w
+                        end if
+                      end try
+                    end repeat
+                  end tell
+                end try
+              end repeat
+            end tell
+          end try''', silent=True)
 
           def click_dl_button():
               return run_as('''
@@ -646,23 +827,25 @@ jobs:
 
           def handle(user, pwd, sw_type, use_proxy, timeout=360):
               t0 = time.time()
-              last_dl = last_cookie = 0
-              proxy_done = wins_closed = setup_done = False
+              last_dl = last_cookie = last_dismiss = 0
+              wins_closed = setup_done = False
               op_launch_t = None
               sentinel = "/tmp/download_done.flag"
 
               print(f"[Handler] Started. type={sw_type}, proxy={use_proxy}")
+              print(f"[Handler] Note: proxy auth handled via embedded URL credentials.")
+
               while time.time() - t0 < timeout:
                   try:
+                      # Always dismiss system dialogs every 3 seconds
+                      if time.time() - last_dismiss > 3:
+                          dismiss_all_system_dialogs()
+                          last_dismiss = time.time()
+
                       apps = running_apps()
                       chrome = "Google Chrome" in apps
                       op_gx  = any("Opera GX" in a for a in apps)
                       op_one = any("Opera" in a and "Opera GX" not in a for a in apps)
-
-                      if use_proxy and chrome and not proxy_done:
-                          if fill_proxy_auth(user, pwd) == "filled":
-                              proxy_done = True
-                              print("[Handler] Proxy auth done.")
 
                       if chrome and time.time() - last_cookie > 10:
                           if accept_cookie():
@@ -712,7 +895,9 @@ jobs:
               handle(u, p, sw, px)
           PYEOF
 
-          sudo tccutil reset Accessibility 2>/dev/null || true
+          # ----------------------------------------------------------------
+          # 3. TCC — grant Accessibility to osascript & System Events
+          # ----------------------------------------------------------------
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           sudo sqlite3 "$TCC_DB" \
             "INSERT OR REPLACE INTO access \
@@ -729,6 +914,9 @@ jobs:
              VALUES('kTCCServiceAccessibility','com.apple.systemevents',0,2,4,1,0);" \
             2>/dev/null || true
 
+          # ----------------------------------------------------------------
+          # 4. Start UI handler in background
+          # ----------------------------------------------------------------
           HANDLER_PYTHON="${UIENV_PYTHON:-python3}"
           echo "Starting UI handler ($HANDLER_PYTHON)..."
           "$HANDLER_PYTHON" -u /tmp/macos_handler.py \
@@ -737,6 +925,9 @@ jobs:
           HANDLER_PID=$!
           echo "Handler PID: $HANDLER_PID"
 
+          # ----------------------------------------------------------------
+          # 5. Background watcher: detect download → install → launch
+          # ----------------------------------------------------------------
           (
             DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
             INSTALLED=false
@@ -852,18 +1043,31 @@ jobs:
           WATCHER_PID=$!
           echo "Watcher PID: $WATCHER_PID"
 
+          # ----------------------------------------------------------------
+          # 6. Launch Chrome with proxy credentials embedded in URL
+          # ----------------------------------------------------------------
           touch /tmp/watcher_start_marker
           CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
+          CHROME_FLAGS=(
+            --no-first-run
+            --no-default-browser-check
+            --disable-sync
+            --disable-extensions-except=
+            --safebrowsing-disable-download-protection
+            --disable-features=SafeBrowsingEnhancedProtection
+            --disable-features=PrivacySandboxSettings4
+            --no-service-autorun
+            --password-store=basic
+            --use-mock-keychain
+          )
+
           if [ "$USE_PROXY" = "true" ]; then
-            PROXY_SRV="residential-proxy.scrapeops.io:8181"
-            echo "Launching Chrome WITH proxy -> $TARGET_URL"
+            echo "Launching Chrome WITH embedded-credential proxy -> $TARGET_URL"
             if [ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
-                --no-first-run --no-default-browser-check --disable-sync \
-                --safebrowsing-disable-download-protection \
-                --disable-features=SafeBrowsingEnhancedProtection \
-                --proxy-server="http://$PROXY_SRV" \
+                "${CHROME_FLAGS[@]}" \
+                --proxy-server="$PROXY_URL_WITH_CREDS" \
                 "$TARGET_URL" &
             else
               echo "ERROR: Chrome required for proxy mode but not found."; exit 1
@@ -872,9 +1076,7 @@ jobs:
             echo "Launching browser (direct) -> $TARGET_URL"
             if [ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
-                --no-first-run --no-default-browser-check --disable-sync \
-                --safebrowsing-disable-download-protection \
-                --disable-features=SafeBrowsingEnhancedProtection \
+                "${CHROME_FLAGS[@]}" \
                 "$TARGET_URL" &
             else
               echo "Chrome not found — Safari fallback."
@@ -882,6 +1084,9 @@ jobs:
             fi
           fi
 
+          # ----------------------------------------------------------------
+          # 7. Monitor & wait
+          # ----------------------------------------------------------------
           echo "Monitoring for up to $TIMEOUT_SECS seconds..."
           DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
           while kill -0 $WATCHER_PID 2>/dev/null && [ "$(date +%s)" -lt "$DEADLINE" ]; do
@@ -890,10 +1095,11 @@ jobs:
           done
           wait $WATCHER_PID 2>/dev/null || true
           kill $HANDLER_PID 2>/dev/null || true
+          kill $DISMISSER_PID 2>/dev/null || true
           echo "=== Installation workflow complete ==="
 
       # ================================================================== #
-      # STEP 6 — Keep runner alive                                         #
+      # STEP 7 — Keep runner alive                                         #
       # ================================================================== #
       - name: Keep Runner Alive
         if: always()
