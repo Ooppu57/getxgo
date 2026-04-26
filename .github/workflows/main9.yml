@@ -1,0 +1,619 @@
+name: Parrallel Win/Mac
+
+on:
+  workflow_dispatch:
+    inputs:
+      os_version:
+        description: 'Select OS Runner Version'
+        required: true
+        type: choice
+        options:
+          - 'windows-2025'
+          - 'windows-2022'
+          - 'windows-11-arm'
+          - 'macos-14'
+          - 'macos-15'
+          - 'macos-26'
+          - 'macos-26-intel'
+        default: 'windows-2025'
+      getscreen_email:
+        description: 'Getscreen.me Account Email'
+        required: true
+        type: string
+        default: 'techx@justzeus.com'
+      gologin_email:
+        description: 'GoLogin Account Email'
+        required: true
+        type: string
+        default: 'ok6@mnb.net'
+      num_devices:
+        description: 'Number of Devices to Spawn'
+        required: true
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '3'
+          - '4'
+          - '5'
+        default: '5'
+
+jobs:
+  prepare_matrix:
+    name: Check Inputs & Prepare Runners
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Generate Dynamic Matrix
+        id: set-matrix
+        shell: python
+        env:
+          EMAIL: ${{ inputs.getscreen_email }}
+          NUM_DEVICES: ${{ inputs.num_devices }}
+          OS_VERSION: ${{ inputs.os_version }}
+        run: |
+          import os, json
+          email = os.environ.get("EMAIL", "").strip()
+          num_devices = int(os.environ.get("NUM_DEVICES", "1"))
+          os_version = os.environ.get("OS_VERSION", "windows-2025")
+
+          includes =[]
+          if email:
+              for i in range(1, num_devices + 1):
+                  if "windows" in os_version.lower():
+                      short_os = os_version.replace("windows-", "")
+                      device_name = f"{i}-Win-{short_os}"
+                  else:
+                      short_os = os_version.replace("macos-", "")
+                      device_name = f"{i}-mac-{short_os}"
+
+                  includes.append({
+                      "device": device_name,
+                      "email": email,
+                      "os": os_version
+                  })
+
+          if not includes:
+              print("Error: Valid configuration could not be generated. Exiting.")
+              exit(1)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"matrix={json.dumps({'include': includes})}\n")
+
+      - name: Update Workflow Defaults (Remember Inputs)
+        shell: python
+        env:
+          OS_VERSION: ${{ inputs.os_version }}
+          GETSCREEN_EMAIL: ${{ inputs.getscreen_email }}
+          GOLOGIN_EMAIL: ${{ inputs.gologin_email }}
+          NUM_DEVICES: ${{ inputs.num_devices }}
+        run: |
+          import re
+          import os
+          file_path = ".github/workflows/main9.yml"
+
+          if os.path.exists(file_path):
+              with open(file_path, "r") as f:
+                  content = f.read()
+
+              def update_default(input_name, new_val):
+                  global content
+                  pattern = r"(" + input_name + r":[\s\S]*?default:\s*')[^']*(')"
+                  content = re.sub(pattern, rf"\g<1>{new_val}\g<2>", content, count=1)
+
+              update_default("os_version", os.environ.get("OS_VERSION"))
+              update_default("getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
+              update_default("gologin_email", os.environ.get("GOLOGIN_EMAIL"))
+              update_default("num_devices", os.environ.get("NUM_DEVICES"))
+
+              with open(file_path, "w") as f:
+                  f.write(content)
+          else:
+              print(f"File {file_path} not found. Skipping auto-save.")
+
+      - name: Commit and Push New Defaults
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/main9.yml
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs [skip ci]" && git push)
+
+  remote_session:
+    name: Remote Session ${{ matrix.device }}
+    needs: prepare_matrix
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare_matrix.outputs.matrix) }}
+
+    steps:
+      # ==========================================
+      # WINDOWS SPECIFIC STEPS
+      # ==========================================
+      - name: Install and Start Getscreen.me (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "Downloading Getscreen.me Agent..."
+          $MaxRetries = 3
+          $RetryCount = 0
+          $Success = $false
+          while (-not $Success -and $RetryCount -lt $MaxRetries) {
+              try {
+                  Invoke-WebRequest -Uri "https://getscreen.me/download/getscreen.msi" -OutFile "getscreen.msi" -ErrorAction Stop
+                  if ((Get-Item "getscreen.msi").length -gt 1MB) { $Success = $true }
+                  else { Start-Sleep -Seconds 5; $RetryCount++ }
+              } catch { Start-Sleep -Seconds 5; $RetryCount++ }
+          }
+          if (-not $Success) { exit 1 }
+
+          $InstallArgs = "/i getscreen.msi /qn REGISTER=`"${{ matrix.email }}`" CONFIG=`"name='${{ matrix.device }}' autostart=true nonadmin=true control=true disable_confirmation=true`""
+          Start-Process msiexec.exe -Wait -ArgumentList $InstallArgs
+          Write-Host "Getscreen.me is configured and running."
+
+      - name: Download, Install, and Open GoLogin (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "Downloading GoLogin for Windows..."
+          Invoke-WebRequest -Uri "https://dl.gologin.com/gologin.exe" -OutFile "gologin_installer.exe" -ErrorAction Stop
+          Start-Process -FilePath ".\gologin_installer.exe" -ArgumentList "/S" -Wait
+
+          $GoLoginPath = "$env:USERPROFILE\AppData\Local\Programs\GoLogin\GoLogin.exe"
+          $WaitAttempts = 0
+          while (-Not (Test-Path $GoLoginPath) -and $WaitAttempts -lt 30) { Start-Sleep -Seconds 2; $WaitAttempts++ }
+
+          if (-Not (Test-Path $GoLoginPath)) {
+              $Found = Get-ChildItem -Path "$env:USERPROFILE\AppData" -Filter "GoLogin.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($Found) { $GoLoginPath = $Found.FullName } else { exit 1 }
+          }
+          Start-Process $GoLoginPath
+
+      - name: Automate GoLogin Login (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GOLOGIN_EMAIL: ${{ inputs.gologin_email }}
+          GOLOGIN_PASSWORD: "11223344"
+        run: |
+          pip install pyautogui pygetwindow --quiet
+          $pyCode = "import pyautogui, pygetwindow as gw, time, os, sys`n" +
+                    "wait_time = 0`n" +
+                    "win = None`n" +
+                    "while wait_time < 60:`n" +
+                    "    for title in['Gologin', 'GoLogin', 'gologin']:`n" +
+                    "        windows = gw.getWindowsWithTitle(title)`n" +
+                    "        if windows: win = windows[0]; break`n" +
+                    "    if win: break`n" +
+                    "    time.sleep(2); wait_time += 2`n" +
+                    "if win:`n" +
+                    "    try:`n" +
+                    "        win.activate()`n" +
+                    "        win.maximize()`n" +
+                    "    except: pass`n" +
+                    "    time.sleep(5)`n" +
+                    "    pyautogui.press('tab', presses=8, interval=0.5)`n" +
+                    "    pyautogui.press('enter')`n" +
+                    "    time.sleep(4)`n" +
+                    "    pyautogui.write(os.environ.get('GOLOGIN_EMAIL', ''))`n" +
+                    "    pyautogui.press('tab')`n" +
+                    "    pyautogui.write(os.environ.get('GOLOGIN_PASSWORD', ''))`n" +
+                    "    pyautogui.press('enter')`n" +
+                    "    print('Login automated successfully.')`n" +
+                    "else: sys.exit(1)`n"
+          
+          $pyCode | Out-File -FilePath "$env:TEMP\gologin_ui.py" -Encoding utf8
+          python -u "$env:TEMP\gologin_ui.py"
+
+      - name: Auto-Detect, Install & Post-Install Setup (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "============================================================" -ForegroundColor Cyan
+          Write-Host " Zero-Touch Downloader & Installer Active (Windows)" -ForegroundColor Cyan
+          Write-Host " Detects downloaded Opera/AVG -> Installs -> Runs Setup Flow" -ForegroundColor Cyan
+          Write-Host "============================================================" -ForegroundColor Cyan
+
+          python -m pip install pywinauto pyautogui pygetwindow keyboard --quiet
+          
+          # 1. Background Python UI Automation Handler (from Script 2)
+          $handlerPy = @'
+          import time, random, sys, os
+          import pyautogui
+          import pygetwindow as gw
+          from pywinauto import Desktop
+          from pywinauto.keyboard import send_keys
+
+          def handle_automation():
+              desktop = Desktop(backend="uia")
+              gx_done = False
+              one_done = False
+              avg_done = False
+
+              print("[Handler] Watching for launched applications...")
+              while True:
+                  try:
+                      # --- AVG Installer UI (Maintained from Script 1) ---
+                      if not avg_done:
+                          wins =[w for w in gw.getAllWindows() if 'AVG' in w.title or 'Antivirus' in w.title]
+                          if wins:
+                              try:
+                                  wins[0].activate()
+                                  time.sleep(5)
+                                  pyautogui.press('enter')
+                                  time.sleep(1)
+                                  pyautogui.press('space')
+                                  print('[AVG] Sent UI keys to installer.')
+                                  avg_done = True
+                              except: pass
+
+                      # --- Opera Flow (From Script 2) ---
+                      for window in desktop.windows(visible_only=True):
+                          wt = window.window_text()
+                          if not wt: continue
+
+                          is_gx = "Opera GX" in wt
+                          is_one = "Opera" in wt and "Opera GX" not in wt
+
+                          if is_gx and not gx_done:
+                              print("[Opera GX] Window Detected. Waiting 15s...")
+                              time.sleep(15)
+                              try: window.set_focus(); window.maximize()
+                              except: pass
+                              time.sleep(1)
+
+                              print("[Opera GX] Starting TAB/ENTER automation flow...")
+                              for _ in range(4):
+                                  send_keys('{TAB}')
+                                  time.sleep(0.5)
+                              for i in range(8):
+                                  send_keys('{ENTER}')
+                                  time.sleep(random.uniform(1.0, 2.0))
+                              for _ in range(random.randint(4, 10)):
+                                  send_keys('{TAB}')
+                                  time.sleep(0.3)
+                              send_keys('{ENTER}')
+                              gx_done = True
+                              print("[Opera GX] Setup automation completed.")
+
+                          elif is_one and not one_done:
+                              print("[Opera One] Window Detected. Waiting 90s...")
+                              time.sleep(90)
+                              try: window.set_focus(); window.maximize()
+                              except: pass
+                              time.sleep(1)
+
+                              print("[Opera One] Starting automation flow...")
+                              sw, sh = pyautogui.size()
+                              cx, cy = sw // 2, sh // 2
+                              for i in range(3):
+                                  pyautogui.click(cx, cy)
+                                  time.sleep(random.uniform(1.0, 2.0))
+                              for i in range(10):
+                                  send_keys('{RIGHT}')
+                                  time.sleep(random.uniform(1.0, 2.0))
+                              send_keys('{ENTER}')
+                              one_done = True
+                              print("[Opera One] Setup automation completed.")
+
+                  except Exception as e:
+                      pass
+                  time.sleep(2)
+
+          if __name__ == "__main__":
+              handle_automation()
+          '@
+          $handlerPy | Out-File -FilePath "$env:TEMP\auto_handler.py" -Encoding utf8
+          Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`"" -WindowStyle Hidden
+
+          # 2. File Download Watcher (From Script 2)
+          $dlFolder = "$env:USERPROFILE\Downloads"
+          $timeoutSecs = 55 * 60
+          $processed = @()
+
+          $watchJob = Start-Job -ScriptBlock {
+              param($dlFolder, $timeoutSecs, $processed)
+              $deadline = (Get-Date).AddSeconds($timeoutSecs)
+
+              while ((Get-Date) -lt $deadline) {
+                  $candidates = Get-ChildItem -Path $dlFolder -Filter "*.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } | Sort-Object LastWriteTime -Descending
+
+                  foreach ($file in $candidates) {
+                      if ($processed -contains $file.FullName) { continue }
+                      $processed += $file.FullName
+
+                      $locked = $true
+                      while ($locked) { Start-Sleep -Seconds 2; try { $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None'); $s.Close(); $locked = $false } catch { } }
+
+                      if ($file.Name -match "OperaGX") {
+                          Write-Output "[OperaGX] Found: $($file.Name) - Running silent install..."
+                          Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
+                          Start-Sleep -Seconds 5
+                          $appPaths = @("$env:LOCALAPPDATA\Programs\Opera GX\launcher.exe", "C:\Program Files\Opera GX\launcher.exe", "C:\Program Files (x86)\Opera GX\launcher.exe")
+                          foreach ($p in $appPaths) { if (Test-Path $p) { Start-Process -FilePath $p; break } }
+                      }
+                      elseif ($file.Name -match "Opera" -and $file.Name -notmatch "OperaGX") {
+                          Write-Output "[OperaOne] Found: $($file.Name) - Running silent install..."
+                          Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
+                          Start-Sleep -Seconds 5
+                          $appPaths = @("$env:LOCALAPPDATA\Programs\Opera\launcher.exe", "C:\Program Files\Opera\launcher.exe", "C:\Program Files (x86)\Opera\launcher.exe")
+                          foreach ($p in $appPaths) { if (Test-Path $p) { Start-Process -FilePath $p; break } }
+                      }
+                      elseif ($file.Name -match "avg") {
+                          Write-Output "[AVG] Found: $($file.Name) - Launching installer..."
+                          Start-Process -FilePath $file.FullName
+                      }
+                  }
+                  Start-Sleep -Seconds 5
+              }
+          } -ArgumentList $dlFolder, $timeoutSecs, $processed
+
+          # Monitor Job output
+          $deadline = (Get-Date).AddSeconds($timeoutSecs)
+          while ((Get-Date) -lt $deadline) {
+              $output = Receive-Job -Job $watchJob -ErrorAction SilentlyContinue
+              if ($output) { foreach ($line in $output) { Write-Host $line } }
+              Start-Sleep -Seconds 5
+          }
+
+      - name: Keep Runner Alive (Windows)
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "Session is active. This runner will remain online until the job timeout is reached."
+          Start-Sleep -Seconds 3600
+
+
+      # ==========================================
+      # macOS SPECIFIC STEPS
+      # ==========================================
+      - name: Setup GUI Authorization Credentials (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          sudo sysadminctl -addUser admin -password admin -admin || true
+          sudo sysadminctl -adminUser "$USER" -password admin || true
+          echo "Credentials configured. User: admin / Pass: admin"
+
+      - name: Install, Bypass Security, and Start Getscreen.me (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          curl -L -o getscreen.dmg "https://getscreen.me/download/getscreen.dmg" --retry 3 --retry-delay 5
+          hdiutil attach getscreen.dmg -mountpoint /Volumes/getscreen -nobrowse -quiet
+          APP_PATH=$(find /Volumes/getscreen -maxdepth 1 -name "*.app" | head -n 1)
+          APP_NAME=$(basename "$APP_PATH")
+          sudo cp -R "$APP_PATH" /Applications/
+          hdiutil detach /Volumes/getscreen -quiet -force
+
+          APP_BUNDLE_ID=$(defaults read "/Applications/$APP_NAME/Contents/Info.plist" CFBundleIdentifier)
+          sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceScreenCapture', '$APP_BUNDLE_ID', 0, 2, 4, 1, 0);" || true
+          sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceAccessibility', '$APP_BUNDLE_ID', 0, 2, 4, 1, 0);" || true
+
+          EXEC_NAME=$(defaults read "/Applications/$APP_NAME/Contents/Info.plist" CFBundleExecutable)
+          EXEC_PATH="/Applications/$APP_NAME/Contents/MacOS/$EXEC_NAME"
+          sudo "$EXEC_PATH" -install || true
+          sudo "$EXEC_PATH" -register "${{ matrix.email }}"
+          sudo "$EXEC_PATH" -config "name='${{ matrix.device }}' autostart=true nonadmin=true control=true disable_confirmation=true"
+          sudo "$EXEC_PATH" -start || true
+
+      - name: Download, Install, and Open GoLogin (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          if [[ "${{ matrix.os }}" == "macos-13" || "${{ matrix.os }}" == "macos-26-intel" ]]; then
+              curl -L -o gologin.dmg "https://dl.gologin.com/gologin.dmg" --retry 3
+          else
+              curl -L -o gologin.dmg "https://dl.gologin.com/gologin-arm64.dmg" --retry 3
+          fi
+          hdiutil attach gologin.dmg -mountpoint /Volumes/gologin -nobrowse -quiet
+          sudo cp -R /Volumes/gologin/GoLogin.app /Applications/
+          hdiutil detach /Volumes/gologin -quiet -force
+          open /Applications/GoLogin.app
+
+      - name: Automate GoLogin Login (macOS Native)
+        if: runner.os == 'macOS'
+        env:
+          GOLOGIN_EMAIL: ${{ inputs.gologin_email }}
+          GOLOGIN_PASSWORD: "11223344"
+        run: |
+          sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceAccessibility', '/usr/bin/osascript', 1, 2, 4, 1, 0);" || true
+          sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceAccessibility', 'com.apple.systemevents', 0, 2, 4, 1, 0);" || true
+
+          sleep 30
+          osascript -e '
+          set userEmail to system attribute "GOLOGIN_EMAIL"
+          set userPass to system attribute "GOLOGIN_PASSWORD"
+          tell application "System Events"
+              tell application "GoLogin" to activate
+              delay 3
+              repeat 8 times
+                  key code 48
+                  delay 0.5
+              end repeat
+              key code 36
+              delay 4
+              set the clipboard to userEmail
+              delay 0.5
+              keystroke "v" using command down
+              delay 1
+              key code 48
+              delay 1
+              set the clipboard to userPass
+              delay 0.5
+              keystroke "v" using command down
+              delay 1
+              key code 36
+              delay 5
+          end tell
+          '
+
+      - name: Auto-Detect, Install & Post-Install Setup (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          echo "============================================================"
+          echo " Zero-Touch Downloader & Installer Active (macOS)"
+          echo " Detects downloaded Opera DMG/ZIP -> Installs -> Setup Flow"
+          echo "============================================================"
+
+          # 1. Background AppleScript Setup Handler (From Script 3)
+          cat > /tmp/macos_handler.py << 'PYEOF'
+          import time, subprocess, random
+
+          def run_as(script):
+              try:
+                  r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=20)
+                  return r.stdout.strip()
+              except Exception: return ""
+
+          def press(key_name):
+              key_map = {"tab": 48, "return": 36, "right": 124}
+              if key_name in key_map: run_as(f'tell application "System Events" to key code {key_map[key_name]}')
+
+          def click_accept_and_install():
+              script = '''
+              tell application "System Events"
+                repeat with proc in (every process whose visible is true)
+                  if name of proc contains "Opera" then
+                    try
+                      repeat with win in (every window of proc)
+                        if exists button "Accept and Install" of win then
+                          click button "Accept and Install" of win
+                          return "clicked"
+                        end if
+                        if exists button "Accept & Install" of win then
+                          click button "Accept & Install" of win
+                          return "clicked"
+                        end if
+                        if exists button "Accept" of win then
+                          click button "Accept" of win
+                          return "clicked"
+                        end if
+                      end repeat
+                    end try
+                  end if
+                end repeat
+              end tell'''
+              return run_as(script)
+
+          def flow(browser_name):
+              print(f"[{browser_name}] App launched. Attempting to click Accept and Install...")
+              for _ in range(15):
+                  if click_accept_and_install() == "clicked": break
+                  time.sleep(2)
+              print(f"[{browser_name}] Waiting 20 seconds for next screen...")
+              time.sleep(20)
+              
+              print(f"[{browser_name}] Pressing Tab 4 times")
+              for _ in range(4): press("tab"); time.sleep(0.5)
+              
+              print(f"[{browser_name}] Pressing Enter 8 times")
+              for i in range(8): press("return"); time.sleep(random.uniform(1.0, 2.0))
+              time.sleep(5)
+              
+              tab_count = random.randint(6, 14)
+              print(f"[{browser_name}] Pressing Tab {tab_count} times")
+              for _ in range(tab_count): press("tab"); time.sleep(0.5)
+              press("return")
+              print(f"[{browser_name}] Setup complete.")
+
+          def handle():
+              gx_done = False
+              one_done = False
+              while True:
+                  apps = run_as('tell application "System Events" to get name of every process whose visible is true')
+                  if "Opera GX" in apps and not gx_done:
+                      time.sleep(5)
+                      flow("Opera GX")
+                      gx_done = True
+                  elif "Opera" in apps and "Opera GX" not in apps and not one_done:
+                      time.sleep(5)
+                      flow("Opera One")
+                      one_done = True
+                  time.sleep(2)
+
+          if __name__ == "__main__":
+              handle()
+          PYEOF
+
+          python3 -u /tmp/macos_handler.py > /tmp/macos_handler.log 2>&1 &
+
+          # 2. File Download Watcher (From Script 3)
+          DL_FOLDER="$HOME/Downloads"
+          PROCESSED_FILE="/tmp/processed_files.txt"
+          touch "$PROCESSED_FILE"
+
+          (
+          while true; do
+              for FILE in "$DL_FOLDER"/*; do
+                  if [[ -f "$FILE" ]] && ! grep -qxF "$FILE" "$PROCESSED_FILE"; then
+                      if [[ "$FILE" =~ \.(crdownload|download|part)$ ]]; then continue; fi
+
+                      # Wait for file download to complete
+                      PREV=0
+                      for i in {1..30}; do
+                          SZ=$(stat -f%z "$FILE" 2>/dev/null || echo 0)
+                          if[ "$SZ" -eq "$PREV" ] && [ "$SZ" -gt 100000 ]; then break; fi
+                          PREV=$SZ; sleep 2
+                      done
+
+                      echo "$FILE" >> "$PROCESSED_FILE"
+                      BASENAME=$(basename "$FILE")
+                      EXT="${BASENAME##*.}"
+
+                      if [[ "$BASENAME" == *Opera* || "$BASENAME" == *avg* ]]; then
+                          echo "[macOS] Detected Software Download: $BASENAME"
+                          if [ "$EXT" == "dmg" ]; then
+                              MNT=$(hdiutil attach "$FILE" -nobrowse -quiet | awk '/\/Volumes\// {print $NF}' | head -1)
+                              if [ -n "$MNT" ]; then
+                                  APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -1)
+                                  if [ -n "$APP_SRC" ]; then
+                                      AN=$(basename "$APP_SRC")
+                                      sudo cp -R "$APP_SRC" /Applications/
+                                      sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
+                                      open "/Applications/$AN"
+                                  fi
+                                  hdiutil detach "$MNT" -quiet || true
+                              fi
+                          elif [ "$EXT" == "zip" ]; then
+                              EXTRACT_DIR="${DL_FOLDER}/extracted_$(date +%s)"
+                              mkdir -p "$EXTRACT_DIR"
+                              unzip -q "$FILE" -d "$EXTRACT_DIR" >/dev/null 2>&1
+                              APP_SRC=$(find "$EXTRACT_DIR" -maxdepth 3 -name "*.app" | head -1)
+                              if [ -n "$APP_SRC" ]; then
+                                  AN=$(basename "$APP_SRC")
+                                  sudo cp -R "$APP_SRC" /Applications/
+                                  sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
+                                  open "/Applications/$AN"
+                              fi
+                          elif [ "$EXT" == "app" ]; then
+                              sudo cp -R "$FILE" /Applications/
+                              sudo xattr -dr com.apple.quarantine "/Applications/$BASENAME" 2>/dev/null || true
+                              open "/Applications/$BASENAME"
+                          fi
+                      fi
+                  fi
+              done
+              sleep 5
+          done
+          ) &
+          
+          # Maintain log stream
+          TIMEOUT=3300
+          START=$(date +%s)
+          while[ $(($(date +%s) - START)) -lt $TIMEOUT ]; do
+              tail -n 5 /tmp/macos_handler.log 2>/dev/null || true
+              sleep 10
+          done
+
+      - name: Keep Runner Alive (macOS)
+        if: always() && runner.os == 'macOS'
+        run: |
+          echo "Session is active. This runner will remain online until the job timeout is reached."
+          sleep 3600
