@@ -52,17 +52,22 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Ad-MVN - Techx'
+        default: 'OperaGX - James'
       manual_software_url:
-        description: 'Manual Software URL (Overrides Dropdown - Detects Opera GX/One)'
+        description: 'Manual Software URL'
         required: false
         type: string
         default: ''
       scrapeops_api_key:
-        description: 'ScrapeOps API Key (Leave blank to run without proxy)'
+        description: 'ScrapeOps API Key'
         required: false
         type: string
         default: 'fe5f4c89-9797-400b-bcc8-fd0e84788842'
+      use_without_proxy:
+        description: 'Run without proxy'
+        required: true
+        type: boolean
+        default: false
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -75,12 +80,12 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'USA'
+        default: 'Brazil'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: false
+        default: true
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
@@ -109,6 +114,7 @@ jobs:
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
           MANUAL_URL: ${{ inputs.manual_software_url }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
+          WITHOUT_PROXY: ${{ inputs.use_without_proxy }}
           COUNTRY: ${{ inputs.proxy_country }}
           MOBILE: ${{ inputs.mobile_proxies }}
           STICKY: ${{ inputs.sticky_sessions }}
@@ -119,9 +125,13 @@ jobs:
           num_devices = int(os.environ.get("NUM_DEVICES", "1"))
           os_version = os.environ.get("OS_VERSION", "windows-2025")
           
-          # Smart API Key validation - forces empty string if user clears field or types blank
+          # Smart API Key & Checkbox validation
           api_key = os.environ.get("API_KEY", "").strip()
-          if not api_key or api_key.lower() in["none", "null", "false", "blank", "empty", "''", '""']:
+          without_proxy = os.environ.get("WITHOUT_PROXY", "false").lower() == "true"
+          
+          if without_proxy:
+              api_key = "" # Checkbox overrides API key entirely
+          elif not api_key or api_key.lower() in ["none", "null", "false", "blank", "empty", "''", '""']:
               api_key = ""
               
           country_input = os.environ.get("COUNTRY", "USA")
@@ -267,6 +277,7 @@ jobs:
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
           MANUAL_URL: ${{ inputs.manual_software_url }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
+          WITHOUT_PROXY: ${{ inputs.use_without_proxy }}
           COUNTRY: ${{ inputs.proxy_country }}
           MOBILE: ${{ inputs.mobile_proxies }}
           STICKY: ${{ inputs.sticky_sessions }}
@@ -321,6 +332,7 @@ jobs:
               content = update_yaml_default(content, "software_choice", os.environ.get("SOFTWARE_CHOICE"))
               content = update_yaml_default(content, "manual_software_url", os.environ.get("MANUAL_URL"))
               content = update_yaml_default(content, "scrapeops_api_key", os.environ.get("API_KEY"))
+              content = update_yaml_default(content, "use_without_proxy", os.environ.get("WITHOUT_PROXY"), is_bool=True)
               content = update_yaml_default(content, "proxy_country", os.environ.get("COUNTRY"))
               content = update_yaml_default(content, "mobile_proxies", os.environ.get("MOBILE"), is_bool=True)
               content = update_yaml_default(content, "sticky_sessions", os.environ.get("STICKY"), is_bool=True)
@@ -336,7 +348,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .github/workflows/main3.yml
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs[skip ci]" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs [skip ci]" && git push)
 
   remote_session:
     name: Remote Session ${{ matrix.device }}
@@ -645,7 +657,7 @@ jobs:
                               except Exception:
                                   pass
                           else:
-                              for btn_name in["Add to Chrome", "Get"]:
+                              for btn_name in ["Add to Chrome", "Get"]:
                                   install_btns = edge_window.descendants(control_type="Button", title=btn_name)
                                   if install_btns:
                                       try:
