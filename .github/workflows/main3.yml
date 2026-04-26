@@ -121,7 +121,7 @@ jobs:
           
           # Smart API Key validation - forces empty string if user clears field or types blank
           api_key = os.environ.get("API_KEY", "").strip()
-          if not api_key or api_key.lower() in ["none", "null", "false", "blank", "empty", "''", '""']:
+          if not api_key or api_key.lower() in["none", "null", "false", "blank", "empty", "''", '""']:
               api_key = ""
               
           country_input = os.environ.get("COUNTRY", "USA")
@@ -271,7 +271,7 @@ jobs:
           MOBILE: ${{ inputs.mobile_proxies }}
           STICKY: ${{ inputs.sticky_sessions }}
         run: |
-          import re, os, glob
+          import re, os
           
           # Extremely robust block-level YAML parser that never fails on missing quotes
           def update_yaml_default(yaml_str, input_key, new_val, is_bool=False):
@@ -309,36 +309,33 @@ jobs:
                           break
               return "\n".join(lines)
               
-          updated_any = False
-          # Scans dynamically for ANY YAML file to ensure no rename breaks the save logic
-          for file_path in glob.glob(".github/workflows/*.yml") + glob.glob(".github/workflows/*.yaml"):
+          # Targeting exclusively main3.yml as requested
+          file_path = ".github/workflows/main3.yml"
+          if os.path.exists(file_path):
               with open(file_path, "r", encoding="utf-8") as f:
                   content = f.read()
                   
-              if "scrapeops_api_key" in content:
-                  content = update_yaml_default(content, "os_version", os.environ.get("OS_VERSION"))
-                  content = update_yaml_default(content, "getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
-                  content = update_yaml_default(content, "num_devices", os.environ.get("NUM_DEVICES"))
-                  content = update_yaml_default(content, "software_choice", os.environ.get("SOFTWARE_CHOICE"))
-                  content = update_yaml_default(content, "manual_software_url", os.environ.get("MANUAL_URL"))
-                  content = update_yaml_default(content, "scrapeops_api_key", os.environ.get("API_KEY"))
-                  content = update_yaml_default(content, "proxy_country", os.environ.get("COUNTRY"))
-                  content = update_yaml_default(content, "mobile_proxies", os.environ.get("MOBILE"), is_bool=True)
-                  content = update_yaml_default(content, "sticky_sessions", os.environ.get("STICKY"), is_bool=True)
-                  
-                  with open(file_path, "w", encoding="utf-8") as f:
-                      f.write(content)
-                  updated_any = True
-                  print(f"Successfully saved new defaults in {file_path}")
-                  
-          if not updated_any:
-              print("No matching workflow files found to auto-save.")
+              content = update_yaml_default(content, "os_version", os.environ.get("OS_VERSION"))
+              content = update_yaml_default(content, "getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
+              content = update_yaml_default(content, "num_devices", os.environ.get("NUM_DEVICES"))
+              content = update_yaml_default(content, "software_choice", os.environ.get("SOFTWARE_CHOICE"))
+              content = update_yaml_default(content, "manual_software_url", os.environ.get("MANUAL_URL"))
+              content = update_yaml_default(content, "scrapeops_api_key", os.environ.get("API_KEY"))
+              content = update_yaml_default(content, "proxy_country", os.environ.get("COUNTRY"))
+              content = update_yaml_default(content, "mobile_proxies", os.environ.get("MOBILE"), is_bool=True)
+              content = update_yaml_default(content, "sticky_sessions", os.environ.get("STICKY"), is_bool=True)
+              
+              with open(file_path, "w", encoding="utf-8") as f:
+                  f.write(content)
+              print(f"Successfully saved new defaults in {file_path}")
+          else:
+              print(f"File {file_path} not found. Skipping auto-save.")
               
       - name: Commit and Push New Defaults
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/*.yml .github/workflows/*.yaml
+          git add .github/workflows/main3.yml
           git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs[skip ci]" && git push)
 
   remote_session:
@@ -648,7 +645,7 @@ jobs:
                               except Exception:
                                   pass
                           else:
-                              for btn_name in ["Add to Chrome", "Get"]:
+                              for btn_name in["Add to Chrome", "Get"]:
                                   install_btns = edge_window.descendants(control_type="Button", title=btn_name)
                                   if install_btns:
                                       try:
