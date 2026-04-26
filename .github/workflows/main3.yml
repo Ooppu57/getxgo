@@ -52,14 +52,14 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Ad-MVN - Techx'
+        default: 'OperaGX - James'
       manual_software_url:
-        description: 'Manual Software URL'
+        description: 'Manual Software URL (Overrides Dropdown - Detects Opera GX/One)'
         required: false
         type: string
         default: ''
       scrapeops_api_key:
-        description: 'ScrapeOps API Key'
+        description: 'ScrapeOps API Key (Leave blank to run without proxy)'
         required: false
         type: string
         default: 'fe5f4c89-9797-400b-bcc8-fd0e84788842'
@@ -75,12 +75,12 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'USA'
+        default: 'Brazil'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: false
+        default: true
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
@@ -117,7 +117,12 @@ jobs:
           email = os.environ.get("EMAIL", "").strip()
           num_devices = int(os.environ.get("NUM_DEVICES", "1"))
           os_version = os.environ.get("OS_VERSION", "windows-2025")
+          
+          # Clean and validate API Key for strict empty bypass
           api_key = os.environ.get("API_KEY", "").strip()
+          if api_key.lower() in ["none", "null", "false"]:
+              api_key = ""
+              
           country_input = os.environ.get("COUNTRY", "USA")
           mobile = os.environ.get("MOBILE", "false").lower() == "true"
           sticky = os.environ.get("STICKY", "false").lower() == "true"
@@ -170,8 +175,6 @@ jobs:
           
           if manual_url:
               target_url = manual_url
-              # By using 'dynamic_opera', the script automatically adjusts for Opera One or Opera GX 
-              # based on the downloaded executable's file name. 
               software_type = "dynamic_opera"
               exe_filter = "*.exe" # Broadened to ensure it captures custom downloaded manual binaries
           else:
@@ -215,11 +218,7 @@ jobs:
               return choice.replace(" ", "").replace("-", "")
               
           short_os_tag = short_os(os_version)
-          
-          if manual_url:
-              short_sw_tag = "MANUAL"
-          else:
-              short_sw_tag = short_software(software_choice)
+          short_sw_tag = "MANUAL" if manual_url else short_software(software_choice)
               
           includes =[]
           if email:
@@ -276,12 +275,15 @@ jobs:
           if os.path.exists(file_path):
               with open(file_path, "r") as f:
                   content = f.read()
+              
               def update_default_str(input_name, new_val):
                   global content
-                  if new_val is None:
+                  if new_val is None or new_val.lower() in ["none", "null"]:
                       new_val = ""
+                  # Overwrites content inside default: '...' including blanking it to default: ''
                   pattern = r"(" + input_name + r":[\s\S]*?default:\s*')[^']*(')"
                   content = re.sub(pattern, rf"\g<1>{new_val}\g<2>", content, count=1)
+                  
               def update_default_bool(input_name, new_val):
                   global content
                   pattern = r"(" + input_name + r":[\s\S]*?default:\s*)(true|false)"
@@ -292,7 +294,10 @@ jobs:
               update_default_str("num_devices", os.environ.get("NUM_DEVICES"))
               update_default_str("software_choice", os.environ.get("SOFTWARE_CHOICE"))
               update_default_str("manual_software_url", os.environ.get("MANUAL_URL"))
+              
+              # Automatically writes a blank string to YAML default if proxy API key was empty
               update_default_str("scrapeops_api_key", os.environ.get("API_KEY"))
+              
               update_default_str("proxy_country", os.environ.get("COUNTRY"))
               update_default_bool("mobile_proxies", os.environ.get("MOBILE"))
               update_default_bool("sticky_sessions", os.environ.get("STICKY"))
@@ -380,7 +385,7 @@ jobs:
           if ($useProxy) {
               Write-Host " Mode      : Proxy-enabled" -ForegroundColor Cyan
           } else {
-              Write-Host " Mode      : Direct (no proxy)" -ForegroundColor Yellow
+              Write-Host " Mode      : Direct (Proxy Bypassed completely)" -ForegroundColor Yellow
           }
           Write-Host "============================================================" -ForegroundColor Cyan
           
@@ -525,9 +530,9 @@ jobs:
                           print("[CloseWindow] Download window cleanup complete.")
                           edge_window = None
                           
-                      # A. Proxy Authentication dialog — only when proxy is active
+                      # A. Proxy Authentication dialog — ONLY EXECUTED IF PROXY IS ACTIVE
                       if use_proxy and (edge_window or opera_window):
-                          for w in [edge_window, opera_window]:
+                          for w in[edge_window, opera_window]:
                               if w:
                                   user_fields = w.descendants(control_type="Edit", title="Username")
                                   pass_fields = w.descendants(control_type="Edit", title="Password")
@@ -642,7 +647,7 @@ jobs:
                               pass
                               
                       # F. Opera Post-install Keyboard Automation Flow
-                      if software_type in ["opera_gx", "opera_one", "ad_mvn", "dynamic_opera"] and opera_window and not opera_setup_completed:
+                      if software_type in["opera_gx", "opera_one", "ad_mvn", "dynamic_opera"] and opera_window and not opera_setup_completed:
                           wt = opera_window.window_text()
                           if software_type in ["ad_mvn", "dynamic_opera"]:
                               is_gx_flow = "GX" in wt.upper()
@@ -727,7 +732,7 @@ jobs:
               username    = sys.argv[1] if len(sys.argv) > 1 else ""
               password    = sys.argv[2] if len(sys.argv) > 2 else ""
               software_type = sys.argv[3] if len(sys.argv) > 3 else "avg"
-              # "true" or "false" string passed from PowerShell
+              # Converts the "true" or "false" string passed from PowerShell into a real boolean
               use_proxy   = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
               
               handle_automation(username, password, software_type, use_proxy)
@@ -864,7 +869,7 @@ jobs:
               "--disable-features=msSmartScreenProtection,SmartScreenPuaEnabled"
           )
           
-          # Only add proxy flag when a key was provided
+          # Only add proxy flag when a key was provided and not blank
           if ($useProxy) {
               $proxyServer = "residential-proxy.scrapeops.io:8181"
               $edgeArgs += "--proxy-server=`"http://$proxyServer`""
