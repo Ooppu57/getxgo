@@ -51,7 +51,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Ad-MVN - Techx'
+        default: 'OperaGX - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
@@ -61,7 +61,7 @@ on:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
         type: boolean
-        default: true
+        default: false
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -122,10 +122,9 @@ jobs:
           mobile = os.environ.get("MOBILE", "false").lower() == "true"
           sticky = os.environ.get("STICKY", "false").lower() == "true"
           software_choice = os.environ.get("SOFTWARE_CHOICE", "OperaGX - James")
-          
-          # If the user selected to bypass proxy, force use_proxy to False
+
           use_proxy = bool(api_key) and not run_without_proxy
-          
+
           country_map = {
               "USA": "us", "UK": "uk", "Canada": "ca",
               "Australia": "au", "Germany": "de", "France": "fr",
@@ -157,7 +156,7 @@ jobs:
           all_urls = {**opera_urls, **opera_one_urls, **ad_mvn_urls}
           target_url = all_urls.get(software_choice, opera_urls["OperaGX - James"])
 
-          dynamic_links =[
+          dynamic_links = [
               "OperaGX - Techx", "OperaGX - Fatradez", "OperaGX - James",
               "OperaGX - Oliver", "OperaGX - Mahal"
           ]
@@ -200,7 +199,7 @@ jobs:
 
           short_os_tag = short_os(os_version)
           short_sw_tag = short_software(software_choice)
-          includes =[]
+          includes = []
           if email:
               for i in range(1, num_devices + 1):
                   device_name = f"{i}-{short_os_tag}-{short_sw_tag}"
@@ -323,6 +322,12 @@ jobs:
               break
             fi
           done
+
+          if [ -z "$PYTHON_BIN" ]; then
+            echo "ERROR: No Python3 found on runner."
+            exit 1
+          fi
+
           echo "Using Python: $PYTHON_BIN ($($PYTHON_BIN --version 2>&1))"
 
           rm -rf "$VENV_DIR"
@@ -342,8 +347,9 @@ jobs:
             echo "Installing Homebrew..."
             NONINTERACTIVE=1 /bin/bash -c \
               "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
+            # FIX: added space between 'if' and '['
             for bp in /opt/homebrew/bin /usr/local/bin; do
-              if[ -x "$bp/brew" ]; then
+              if [ -x "$bp/brew" ]; then
                 export PATH="$bp:$PATH"
                 echo "PATH=$bp:$PATH" >> "$GITHUB_ENV"
                 break
@@ -363,11 +369,10 @@ jobs:
           echo "=== Pre-Granting TCC Permissions ==="
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
 
-          # Helper to safely insert TCC rows
           grant_tcc() {
             local SERVICE="$1"
             local CLIENT="$2"
-            local CLIENT_TYPE="$3"   # 0=bundle, 1=path
+            local CLIENT_TYPE="$3"
             sudo sqlite3 "$TCC_DB" \
               "INSERT OR REPLACE INTO access \
                (service, client, client_type, auth_value, auth_reason, auth_version, flags) \
@@ -386,27 +391,24 @@ jobs:
           grant_tcc kTCCServiceScreenCapture com.google.Chrome           0
           grant_tcc kTCCServiceScreenCapture com.apple.Terminal          0
 
-          # ---- Local Network (fixes "Allow to find devices" popup) ----
+          # ---- Local Network ----
           grant_tcc kTCCServiceLocalNetwork  com.google.Chrome           0
           grant_tcc kTCCServiceLocalNetwork  com.apple.Terminal          0
           grant_tcc kTCCServiceLocalNetwork  /usr/bin/osascript          1
-          # Common Getscreen bundle IDs (cover variants)
           grant_tcc kTCCServiceLocalNetwork  me.getscreen.agent          0
           grant_tcc kTCCServiceLocalNetwork  com.getscreen.agent         0
           grant_tcc kTCCServiceLocalNetwork  com.getscreen.mac           0
           grant_tcc kTCCServiceLocalNetwork  me.getscreen.mac            0
 
-          # ---- Camera / Microphone (prevent future popups) ----
+          # ---- Camera / Microphone ----
           grant_tcc kTCCServiceCamera        com.google.Chrome           0
           grant_tcc kTCCServiceMicrophone    com.google.Chrome           0
 
           echo "All TCC permissions pre-granted."
 
-          # ---- Suppress macOS privacy alerts via defaults ----
           sudo defaults write /Library/Preferences/com.apple.security \
             "SecAssessmentDisableUserApproval" -bool true 2>/dev/null || true
 
-          # ---- Chrome managed policy to suppress proxy-auth UI (use native auth) ----
           CHROME_POLICY_DIR="/Library/Managed Preferences"
           sudo mkdir -p "$CHROME_POLICY_DIR"
           sudo /usr/libexec/PlistBuddy -c \
@@ -438,12 +440,15 @@ jobs:
           MAX_RETRIES=3
           RETRY=0
           SUCCESS=false
-          while[ $RETRY -lt $MAX_RETRIES ]; do
+
+          # FIX: added space between 'while' and '['
+          while [ $RETRY -lt $MAX_RETRIES ]; do
             curl -L -o getscreen.dmg "https://getscreen.me/download/getscreen.dmg" \
               --retry 3 --retry-delay 5 --silent --show-error
             FILE_SIZE=$(stat -f%z getscreen.dmg 2>/dev/null || \
                         stat -c%s getscreen.dmg 2>/dev/null || echo 0)
-            if [ -f "getscreen.dmg" ] &&[ "$FILE_SIZE" -gt 102400 ]; then
+            # FIX: added space between ']' and '&&' and '['
+            if [ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
               SUCCESS=true
               break
             fi
@@ -480,7 +485,6 @@ jobs:
           echo "Bundle ID: ${APP_BUNDLE_ID:-<not found>}"
 
           if [ -n "$APP_BUNDLE_ID" ]; then
-            # Grant ALL relevant permissions for discovered bundle ID
             for SVC in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServiceLocalNetwork; do
               sudo sqlite3 "$TCC_DB" \
                 "INSERT OR REPLACE INTO access \
@@ -497,12 +501,14 @@ jobs:
             CFBundleExecutable 2>/dev/null || echo "")
           EXEC_PATH="/Applications/$APP_NAME/Contents/MacOS/$EXEC_NAME"
 
-          if[ ! -x "$EXEC_PATH" ]; then
+          # FIX: added space between 'if' and '['
+          if [ ! -x "$EXEC_PATH" ]; then
             EXEC_PATH=$(find "/Applications/$APP_NAME/Contents/MacOS" \
               -maxdepth 1 -type f -perm +111 2>/dev/null | head -1)
           fi
 
-          if [ -z "$EXEC_PATH" ] ||[ ! -x "$EXEC_PATH" ]; then
+          # FIX: added space between ']' and '||' and '['
+          if [ -z "$EXEC_PATH" ] || [ ! -x "$EXEC_PATH" ]; then
             echo "ERROR: Getscreen executable not found. Skipping registration."
             exit 0
           fi
@@ -537,10 +543,13 @@ jobs:
             -o "$CHROME_DMG" 2>/dev/null || true
 
           FILE_SIZE=$(stat -f%z "$CHROME_DMG" 2>/dev/null || echo 0)
-          if[ -f "$CHROME_DMG" ] && [ "$FILE_SIZE" -gt 1000000 ]; then
+
+          # FIX: added space between 'if' and '['
+          if [ -f "$CHROME_DMG" ] && [ "$FILE_SIZE" -gt 1000000 ]; then
             hdiutil attach "$CHROME_DMG" -quiet -nobrowse \
               -mountpoint /Volumes/GoogleChrome || true
-            if[ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
+            # FIX: added space between 'if' and '['
+            if [ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
               sudo cp -R "/Volumes/GoogleChrome/Google Chrome.app" /Applications/ || true
               sudo xattr -dr com.apple.quarantine \
                 "/Applications/Google Chrome.app" 2>/dev/null || true
@@ -554,7 +563,8 @@ jobs:
             echo "WARNING: Chrome DMG download failed ($FILE_SIZE B)."
           fi
 
-          if[ -d "/Applications/Google Chrome.app" ]; then
+          # FIX: added space between 'if' and '['
+          if [ -d "/Applications/Google Chrome.app" ]; then
             echo "CHROME_AVAILABLE=true" >> "$GITHUB_ENV"
           else
             echo "CHROME_AVAILABLE=false" >> "$GITHUB_ENV"
@@ -576,8 +586,13 @@ jobs:
         run: |
           echo "============================================================"
           echo " Zero-Touch Downloader & Installer Active (macOS)"
-          echo " Category  : $SOFTWARE_TYPE"[ "$USE_PROXY" = "true" ] && echo " Mode      : Proxy-enabled" \
-                                    || echo " Mode      : Direct (no proxy)"
+          echo " Category  : $SOFTWARE_TYPE"
+          # FIX: separated echo from conditional onto its own line
+          if [ "$USE_PROXY" = "true" ]; then
+            echo " Mode      : Proxy-enabled"
+          else
+            echo " Mode      : Direct (no proxy)"
+          fi
           echo "============================================================"
 
           DL_FOLDER="$HOME/Downloads"
@@ -597,15 +612,13 @@ jobs:
               HAS_ATOMACOS = False
               print("[Handler] atomacos not available — AppleScript only.")
 
-          DOWNLOAD_DONE_TITLES =[
+          DOWNLOAD_DONE_TITLES = [
               "Thanks for downloading Opera", "Thanks for downloadin",
               "Download | Thanks", "sudetyj", "clickWorker",
               "GET READY TO PLAY", "ready to install",
           ]
 
-          # Popup button labels we auto-allow (local network, notifications, etc.)
-          # "Allow" is clicked ONLY for these known non-auth dialogs
-          AUTO_ALLOW_KEYWORDS =[
+          AUTO_ALLOW_KEYWORDS = [
               "local network", "local networks", "find devices",
               "notifications", "incoming network connections",
           ]
@@ -631,24 +644,14 @@ jobs:
               r = run_as(
                   'tell application "System Events" to get name of every process '
                   'whose visible is true', silent=True)
-              return[n.strip() for n in r.split(",") if n.strip()]
+              return [n.strip() for n in r.split(",") if n.strip()]
 
-          # ------------------------------------------------------------------
-          # POPUP DISMISSER — clicks Allow on system permission dialogs ONLY
-          # (local network, incoming connections, etc.)
-          # Does NOT touch Chrome proxy auth dialog
-          # ------------------------------------------------------------------
           def dismiss_system_popups():
-              """
-              Scans all visible processes for permission-style dialogs
-              and clicks Allow/OK — but NEVER touches Chrome proxy auth sheets.
-              """
               script = r'''
           tell application "System Events"
             set popupClicked to ""
             repeat with proc in (every process whose visible is true)
               set pName to name of proc
-              -- Skip Chrome entirely; its auth sheet is handled separately
               if pName is "Google Chrome" then
               else
                 try
@@ -663,8 +666,6 @@ jobs:
                         set winTitle to (title of win) as string
                       end try
                       set combinedText to (winDesc & " " & winTitle) as string
-
-                      -- Check for known permission dialog keywords
                       if combinedText contains "local network" or ¬
                          combinedText contains "Local Network" or ¬
                          combinedText contains "find devices" or ¬
@@ -675,9 +676,6 @@ jobs:
                           set popupClicked to "local_network_allowed"
                         end try
                       end if
-
-                      -- Generic: any floating dialog with both Allow/Don't Allow
-                      -- (but only if it's NOT an accessibility dialog)
                       if combinedText does not contain "Accessibility" and ¬
                          combinedText does not contain "accessibility" then
                         try
@@ -688,7 +686,6 @@ jobs:
                           end if
                         end try
                       end if
-
                     end try
                   end repeat
                 end try
@@ -702,22 +699,12 @@ jobs:
                   print(f"[PopupDismisser] Dismissed: {result}")
               return result
 
-          # ------------------------------------------------------------------
-          # PROXY AUTH FILLER — fills Chrome proxy auth sheet with keystroke
-          # (set value is unreliable; keystroke works)
-          # ------------------------------------------------------------------
           def fill_proxy_auth(user, pwd):
-              """
-              Detects Chrome proxy auth sheet and fills username+password
-              using keystroke (reliable) instead of set value (unreliable).
-              """
-              # Step 1: Check if auth sheet exists in Chrome
               check = run_as('''
           tell application "System Events"
             tell process "Google Chrome"
               try
                 if exists sheet 1 of window 1 then
-                  -- Get text to confirm it's auth dialog, not something else
                   set sheetTxt to ""
                   try
                     set sheetTxt to (value of static text 1 of sheet 1 of window 1) as string
@@ -736,35 +723,28 @@ jobs:
 
               print(f"[ProxyAuth] Sheet detected: {check[:80]}")
 
-              # Step 2: Fill via keystroke
               result = run_as(f'''
           tell application "System Events"
             tell process "Google Chrome"
               try
                 set frontmost to true
                 delay 0.5
-                -- Click username field to focus it
                 try
                   click text field 1 of sheet 1 of window 1
                 on error
-                  -- If click fails, tab into the sheet
                   key code 48
                 end try
                 delay 0.4
-                -- Select all existing text and replace
                 keystroke "a" using command down
                 delay 0.1
                 keystroke "{user}"
                 delay 0.4
-                -- Tab to password field
                 key code 48
                 delay 0.4
-                -- Select all and type password
                 keystroke "a" using command down
                 delay 0.1
                 keystroke "{pwd}"
                 delay 0.3
-                -- Press Return to submit
                 key code 36
                 return "proxy_auth_filled"
               on error e
@@ -872,12 +852,10 @@ jobs:
                       op_gx  = any("Opera GX" in a for a in apps)
                       op_one = any("Opera" in a and "Opera GX" not in a for a in apps)
 
-                      # ---- Dismiss system popups every 2s ----
                       if time.time() - last_popup_dismiss > 2:
                           dismiss_system_popups()
                           last_popup_dismiss = time.time()
 
-                      # ---- Proxy auth: fill Chrome sheet (up to 10 attempts) ----
                       if use_proxy and chrome and not proxy_done and proxy_fill_attempts < 10:
                           result = fill_proxy_auth(user, pwd)
                           proxy_fill_attempts += 1
@@ -885,20 +863,17 @@ jobs:
                               proxy_done = True
                               print("[Handler] Proxy auth completed successfully.")
 
-                      # ---- Cookie banner ----
                       if chrome and time.time() - last_cookie > 10:
                           if accept_cookie():
                               last_cookie = time.time()
 
-                      # ---- Download button ----
-                      if chrome and sw_type in["opera_gx","opera_one","dynamic_opera","ad_mvn"]:
+                      if chrome and sw_type in ["opera_gx","opera_one","dynamic_opera","ad_mvn"]:
                           if time.time() - last_dl > 5:
                               r = click_dl_button()
                               if r and "clicked" in r:
                                   last_dl = time.time()
                                   print(f"[Handler] DL btn: {r}")
 
-                      # ---- Close Chrome on download complete ----
                       if not wins_closed and os.path.exists(sentinel):
                           print("[CloseWindow] Sentinel — cleaning up Chrome pages...")
                           for a in range(1, 5):
@@ -908,8 +883,7 @@ jobs:
                                   print(f"[CloseWindow] Clear on #{a}"); break
                           wins_closed = True
 
-                      # ---- Opera GX setup ----
-                      if sw_type in["opera_gx","dynamic_opera","ad_mvn"] and op_gx and not setup_done:
+                      if sw_type in ["opera_gx","dynamic_opera","ad_mvn"] and op_gx and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
                               print("[Handler] Opera GX detected — 15s wait...")
@@ -917,7 +891,6 @@ jobs:
                           if time.time() - op_launch_t > 15:
                               opera_gx_flow(); setup_done = True
 
-                      # ---- Opera One setup ----
                       if sw_type == "opera_one" and op_one and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
@@ -959,12 +932,10 @@ jobs:
           grant_tcc kTCCServiceLocalNetwork  /usr/bin/osascript          1
 
           # ----------------------------------------------------------------
-          # 3. Background AppleScript popup dismisser (bash level, belt+suspenders)
+          # 3. Background AppleScript popup dismisser
           # ----------------------------------------------------------------
           cat > /tmp/popup_dismisser.sh << 'DISMISSEOF'
           #!/bin/bash
-          # Runs every 2s, clicks Allow on any local-network / system permission dialog.
-          # NEVER touches Google Chrome (proxy auth is handled by Python handler).
           while true; do
             osascript << 'ASEOF' 2>/dev/null || true
           tell application "System Events"
@@ -993,7 +964,6 @@ jobs:
                         click button "Allow" of win
                       end try
                     end if
-                    -- Generic Allow/Don't Allow dialog (not accessibility)
                     if combined does not contain "Accessibility" then
                       try
                         if (exists button "Allow" of win) and (exists button "Don't Allow" of win) then
@@ -1035,14 +1005,16 @@ jobs:
             INSTALLED=false
             echo "[Watcher] Monitoring $DL_FOLDER ..."
 
-            while [ "$INSTALLED" = false ] &&[ "$(date +%s)" -lt "$DEADLINE" ]; do
+            # FIX: added space between ']' and '&&' and '['
+            while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
 
               FILE=$(find "$DL_FOLDER" -maxdepth 1 \
                      \( -name "*.dmg" -o -name "*.pkg" \) \
                      ! -name "*.download" ! -name "*.crdownload" ! -name "*.part" \
                      -newer /tmp/watcher_start_marker 2>/dev/null | head -1)
 
-              if[ -z "$FILE" ]; then
+              # FIX: added space between 'if' and '['
+              if [ -z "$FILE" ]; then
                 FILE=$(find "$DL_FOLDER" -maxdepth 1 -type d -name "*.app" \
                        -newer /tmp/watcher_start_marker 2>/dev/null | head -1)
               fi
@@ -1057,7 +1029,8 @@ jobs:
                   PREV=0
                   for i in $(seq 1 30); do
                     SZ=$(stat -f%z "$FILE" 2>/dev/null || \
-                         stat -c%s "$FILE" 2>/dev/null || echo 0)[ "$SZ" = "$PREV" ] && [ "$SZ" -gt 1000000 ] && break
+                         stat -c%s "$FILE" 2>/dev/null || echo 0)
+                    [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 1000000 ] && break
                     PREV=$SZ; sleep 2
                   done
                 else
@@ -1074,7 +1047,8 @@ jobs:
                         | awk '/\/Volumes\// {print $NF}' | head -1)
                   if [ -n "$MNT" ]; then
                     APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -1)
-                    if[ -n "$APP_SRC" ]; then
+                    # FIX: added space between 'if' and '['
+                    if [ -n "$APP_SRC" ]; then
                       AN=$(basename "$APP_SRC")
                       sudo cp -R "$APP_SRC" /Applications/ || true
                       sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
@@ -1091,7 +1065,7 @@ jobs:
                   echo "[Installer] Installing PKG..."
                   sudo installer -pkg "$FILE" -target / -verboseR || true
 
-                elif[ "$EXT" = "app" ]; then
+                elif [ "$EXT" = "app" ]; then
                   echo "[Installer] Direct .app: $BASENAME"
                   sudo cp -R "$FILE" /Applications/ || true
                   sudo xattr -dr com.apple.quarantine "/Applications/$BASENAME" 2>/dev/null || true
@@ -1100,10 +1074,12 @@ jobs:
                 fi
 
                 ACTUAL="$SOFTWARE_TYPE"
-                if[ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
+                # FIX: added space between 'if' and '['
+                if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
                   echo "$BASENAME" | grep -qi "gx" && ACTUAL="opera_gx" || ACTUAL="opera_one"
                 fi
 
+                # FIX: added space between 'if' and '['
                 if [ "$ACTUAL" = "opera_gx" ]; then
                   PATHS=("/Applications/$BASENAME"
                          "/Applications/Opera GX.app"
@@ -1150,7 +1126,6 @@ jobs:
           touch /tmp/watcher_start_marker
           CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
-          # Common flags to suppress Chrome's own permission/UI popups
           CHROME_FLAGS=(
             --no-first-run
             --no-default-browser-check
@@ -1168,7 +1143,8 @@ jobs:
             --use-mock-keychain
           )
 
-          if[ "$USE_PROXY" = "true" ]; then
+          # FIX: added space between 'if' and '['
+          if [ "$USE_PROXY" = "true" ]; then
             PROXY_SRV="residential-proxy.scrapeops.io:8181"
             echo "Launching Chrome WITH proxy -> $TARGET_URL"
             if [ -f "$CHROME_BIN" ]; then
@@ -1196,8 +1172,13 @@ jobs:
           # ----------------------------------------------------------------
           echo "Monitoring for up to $TIMEOUT_SECS seconds..."
           DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
-          while kill -0 $WATCHER_PID 2>/dev/null && [ "$(date +%s)" -lt "$DEADLINE" ]; do[ -f /tmp/handler_output.log ] && \
+          # FIX: moved body of while loop to a new line after 'do'
+          while kill -0 $WATCHER_PID 2>/dev/null && [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            if [ -f /tmp/handler_output.log ]; then
               timeout 10 tail -f /tmp/handler_output.log 2>/dev/null || sleep 10
+            else
+              sleep 10
+            fi
           done
           wait $WATCHER_PID 2>/dev/null || true
           kill $HANDLER_PID 2>/dev/null || true
