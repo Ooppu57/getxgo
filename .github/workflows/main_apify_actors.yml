@@ -114,7 +114,6 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install official Apify Python Client
           pip install requests apify-client
 
       - name: Validate inputs & resolve URL
@@ -217,8 +216,6 @@ jobs:
           print(f"  Country       : {country_code or 'AUTO'}")
           print(f"{'═'*65}\n")
 
-          # We loop and trigger runs sequentially. Each run naturally pulls a 
-          # fresh proxy IP based on your configuration.
           for i in range(NUM_REQUESTS):
               req_num = i + 1
               print(f"\n── Run {req_num}/{NUM_REQUESTS} {'─'*47}")
@@ -236,14 +233,16 @@ jobs:
               # Common Proxy Configuration for Apify Actors
               proxy_config = {"useApifyProxy": True}
               if PROXY_TYPE == "residential":
-                  proxy_config["apifyProxyGroups"] = ["RESIDENTIAL"]
+                  proxy_config["apifyProxyGroups"] =["RESIDENTIAL"]
               if country_code:
                   proxy_config["apifyProxyCountry"] = country_code
 
               try:
                   if ACTOR_ID == "apify/screenshot-url":
                       run_input = {
-                          "url": TARGET_URL,
+                          "urls": [{"url": TARGET_URL}],
+                          "waitUntil": "networkidle2",
+                          "delay": 2000, # Added a short 2s delay post-load to ensure ads/renders catch up
                           "proxyConfiguration": proxy_config
                       }
                       
@@ -270,17 +269,17 @@ jobs:
                           else:
                               print(f"  ❌ Download failed (HTTP {img_resp.status_code})")
                       else:
-                          print("  ❌ No screenshot URL returned in Dataset.")
+                          print("  ❌ No screenshot URL returned in Dataset. Output was:", items)
 
                   elif ACTOR_ID == "apify/web-scraper":
                       # Web Scraper requires a Javascript 'pageFunction' to tell it what to scrape.
-                      # We inject standard JS to grab the fully rendered HTML of the DOM.
                       page_func = """async function pageFunction(context) { 
                           return { html: document.documentElement.outerHTML }; 
                       }"""
                       
                       run_input = {
-                          "startUrls": [{"url": TARGET_URL}],
+                          "runMode": "PRODUCTION",
+                          "startUrls":[{"url": TARGET_URL}],
                           "pageFunction": page_func,
                           "proxyConfiguration": proxy_config
                       }
@@ -299,7 +298,7 @@ jobs:
                           rec["status"] = "200"
                           print(f"  ✅ HTML saved → {html_path} ({len(html_content)} bytes)")
                       else:
-                          print("  ❌ No HTML data returned in Dataset.")
+                          print("  ❌ No HTML data returned in Dataset. Output was:", items)
 
               except Exception as e:
                   print(f"  ⚠️ Error calling Actor API: {e}")
