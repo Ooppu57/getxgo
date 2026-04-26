@@ -51,7 +51,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Ad-MVN - A2Z'
+        default: 'Ad-MVN - Orderflowz'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
@@ -1064,16 +1064,15 @@ jobs:
               return any(f.lower() in title for f in DOWNLOAD_DONE_TITLES)
 
           def close_chrome():
+              # QUIT the whole browser – closes all windows completely
               script = '''
           tell application "Google Chrome"
-            try
-              if (count of windows) > 0 then
-                close front window
-              end if
-            end try
+              try
+                  quit
+              end try
           end tell'''
               run_as(script, silent=True)
-              print("[CloseWindow] Chrome front window closed.")
+              print("[CloseWindow] Chrome quit.")
 
           def wait_for_app_launch(app_name, timeout=120):
               print(f"[LaunchDetect] Waiting for {app_name} to launch...")
@@ -1129,42 +1128,71 @@ jobs:
           end tell'''
               return run_as(script, silent=True)
 
-          def post_launch_keyboard_sequence(label):
-              print(f"[{label}] Running keyboard sequence...")
-              time.sleep(1)
-              for _ in range(4):
-                  press("tab")
-                  time.sleep(0.4)
-              for i in range(8):
-                  press("return")
-                  d = random.uniform(1.0, 2.0)
-                  print(f"[{label}] ENTER {i+1}/8 ({d:.2f}s)")
-                  time.sleep(d)
-              tab_count = random.randint(6, 10)
-              print(f"[{label}] Final TAB count: {tab_count}")
-              for _ in range(tab_count):
-                  press("tab")
-                  time.sleep(0.35)
-              press("return")
-              print(f"[{label}] Keyboard sequence complete.")
-
           def opera_gx_flow():
               if not wait_for_app_launch("Opera GX", timeout=120):
                   return
+              # 15-second popup dismissal (compute host agent / local network)
+              print("[Opera GX] Waiting 15s and dismissing popups...")
+              t0 = time.time()
+              while time.time() - t0 < 15:
+                  dismiss_system_popups()
+                  time.sleep(0.5)
               result = click_accept_and_install("Opera GX")
               print(f"[Opera GX] Accept/install result: {result}")
-              time.sleep(1.5)
-              post_launch_keyboard_sequence("Opera GX")
-              print("[Opera GX] Setup done.")
+              print("[Opera GX] Waiting 30 seconds after accept...")
+              time.sleep(30)
+              # Keyboard sequence – exact as requested
+              print("[Opera GX] Pressing Tab 4 times")
+              for _ in range(4):
+                  press("tab")
+                  time.sleep(0.5)
+              print("[Opera GX] Pressing Enter 10 times (1-2s delays)")
+              for i in range(10):
+                  press("return")
+                  d = random.uniform(1.0, 2.0)
+                  print(f"[Opera GX] ENTER {i+1}/10 ({d:.2f}s)")
+                  time.sleep(d)
+              print("[Opera GX] Waiting 5 seconds")
+              time.sleep(5)
+              tab_count = random.randint(6, 14)
+              print(f"[Opera GX] Pressing Tab {tab_count} times")
+              for _ in range(tab_count):
+                  press("tab")
+                  time.sleep(0.5)
+              press("return")
+              print("[Opera GX] Keyboard sequence complete.")
 
           def opera_one_flow():
               if not wait_for_app_launch("Opera", timeout=120):
                   return
+              print("[Opera One] Waiting 15s and dismissing popups...")
+              t0 = time.time()
+              while time.time() - t0 < 15:
+                  dismiss_system_popups()
+                  time.sleep(0.5)
               result = click_accept_and_install("Opera")
               print(f"[Opera One] Accept/install result: {result}")
-              time.sleep(1.5)
-              post_launch_keyboard_sequence("Opera One")
-              print("[Opera One] Setup done.")
+              print("[Opera One] Waiting 30 seconds after accept...")
+              time.sleep(30)
+              print("[Opera One] Pressing Tab 4 times")
+              for _ in range(4):
+                  press("tab")
+                  time.sleep(0.5)
+              print("[Opera One] Pressing Enter 10 times (1-2s delays)")
+              for i in range(10):
+                  press("return")
+                  d = random.uniform(1.0, 2.0)
+                  print(f"[Opera One] ENTER {i+1}/10 ({d:.2f}s)")
+                  time.sleep(d)
+              print("[Opera One] Waiting 5 seconds")
+              time.sleep(5)
+              tab_count = random.randint(6, 14)
+              print(f"[Opera One] Pressing Tab {tab_count} times")
+              for _ in range(tab_count):
+                  press("tab")
+                  time.sleep(0.5)
+              press("return")
+              print("[Opera One] Keyboard sequence complete.")
 
           def handle(user, pwd, sw_type, use_proxy, timeout=360):
               t0 = time.time()
@@ -1176,20 +1204,14 @@ jobs:
 
               print(f"[Handler] Started. type={sw_type}, proxy={use_proxy}")
 
-              # ----------------------------------------------------------------
-              # PHASE 1: Wait for system popups (Getscreen + local-network) to
-              # be fully dismissed BEFORE we ever try proxy auth.
-              # This prevents the popups from blocking Chrome's auth sheet.
-              # ----------------------------------------------------------------
+              # PHASE 1: Clear system popups before proxy auth
               if use_proxy:
                   print("[Handler] PHASE 1: Clearing system popups before proxy auth...")
                   wait_for_popups_to_clear(timeout=25)
                   time.sleep(1)
                   print("[Handler] PHASE 1 complete — entering main loop.")
 
-              # ----------------------------------------------------------------
               # PHASE 2: Main automation loop
-              # ----------------------------------------------------------------
               while time.time() - t0 < timeout:
                   try:
                       apps = running_apps()
@@ -1222,12 +1244,9 @@ jobs:
                                   print(f"[Handler] DL btn: {r}")
 
                       if not wins_closed and os.path.exists(sentinel):
-                          print("[CloseWindow] Sentinel — cleaning up Chrome pages...")
-                          for a in range(1, 5):
-                              if is_done_page():
-                                  close_chrome(); time.sleep(2)
-                              else:
-                                  print(f"[CloseWindow] Clear on #{a}"); break
+                          print("[CloseWindow] Sentinel — quitting Chrome entirely...")
+                          close_chrome()
+                          time.sleep(2)
                           wins_closed = True
 
                       if sw_type in ["opera_gx","dynamic_opera","ad_mvn"] and op_gx and not setup_done:
@@ -1236,7 +1255,8 @@ jobs:
                               print("[Handler] Opera GX detected — starting launch sequence soon...")
                               run_as('tell application "Opera GX" to activate', silent=True)
                           if time.time() - op_launch_t > 5:
-                              opera_gx_flow(); setup_done = True
+                              opera_gx_flow()
+                              setup_done = True
 
                       if sw_type == "opera_one" and op_one and not setup_done:
                           if not op_launch_t:
@@ -1244,7 +1264,8 @@ jobs:
                               print("[Handler] Opera detected — starting launch sequence soon...")
                               run_as('tell application "Opera" to activate', silent=True)
                           if time.time() - op_launch_t > 5:
-                              opera_one_flow(); setup_done = True
+                              opera_one_flow()
+                              setup_done = True
 
                   except Exception as e:
                       print(f"[Handler] Exception: {e}")
@@ -1518,10 +1539,11 @@ jobs:
                 fi
 
                 # ============================================================
-                # Close the Chrome window used for the download
+                # Quit Google Chrome completely (all windows closed)
                 # ============================================================
-                echo "[$ACTUAL] Closing Chrome download window..."
-                osascript -e 'tell application "Google Chrome" to try if (count of windows) > 0 then close front window end if end try' >/dev/null 2>&1 || true
+                echo "[$ACTUAL] Quitting Google Chrome..."
+                osascript -e 'tell application "Google Chrome" to quit' >/dev/null 2>&1 || true
+                sleep 2
 
                 # ============================================================
                 # Wait for .app to appear in /Applications and launch it
