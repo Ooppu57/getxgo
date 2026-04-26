@@ -52,7 +52,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - James'
+        default: 'Ad-MVN - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -67,7 +67,7 @@ on:
         description: 'Run without proxy'
         required: true
         type: boolean
-        default: false
+        default: true
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -80,7 +80,7 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'Brazil'
+        default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
