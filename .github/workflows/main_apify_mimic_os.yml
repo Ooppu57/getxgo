@@ -204,7 +204,7 @@ jobs:
           UNIQUE_PROXY:    "${{ inputs.unique_proxy }}"
         run: |
           python3 - <<'PYEOF'
-          import os, sys, json, requests, uuid
+          import os, sys, json, requests
           from apify_client import ApifyClient
 
           TARGET_URL   = os.environ["TARGET_URL"].strip()
@@ -224,9 +224,9 @@ jobs:
                   r = requests.get(f"https://api.apify.com/v2/users/me?token={APIFY_TOKEN}")
                   if r.status_code == 200:
                       data = r.json().get("data", {})
+                      usage = data.get("usage", {})
                       limits = data.get("limits", {})
-                      usageUsd = data.get("currentUsageUsd")
-                      if usageUsd is None: usageUsd = data.get("usage", {}).get("currentUsageUsd", "N/A")
+                      usageUsd = usage.get("currentUsageUsd", "N/A")
                       limitUsd = limits.get("monthlyUsageLimitUsd", "N/A")
                       print(f"   💰 Current Monthly Usage: ${usageUsd} / ${limitUsd}")
                   else:
@@ -240,13 +240,11 @@ jobs:
               NAV_PLATFORM = "Win32"
               NAV_PLATFORM_DATA = "Windows"
               SEC_CH_UA_PLATFORM = '"Windows"'
-              PROXY_OS_GROUP = "os-WINDOWS"
           else:
               USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
               NAV_PLATFORM = "MacIntel"
               NAV_PLATFORM_DATA = "macOS"
               SEC_CH_UA_PLATFORM = '"macOS"'
-              PROXY_OS_GROUP = "os-MAC"
 
           PRE_HOOK_JS = f"""[
               async ({{ page }}) => {{
@@ -274,6 +272,8 @@ jobs:
 
           PAGE_FUNC_JS = """async function pageFunction(context) {
               const { page, request } = context;
+              // Add a robust wait explicitly ensuring full JS rendering settles
+              await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
               await page.waitForTimeout(4000); 
               
               const html = await page.content();
@@ -297,14 +297,12 @@ jobs:
           print(f"\n{'═'*65}\n  Apify Deep OS Mimicry via Playwright\n{'═'*65}")
           print(f"  Target OS     : {TARGET_OS}")
           print(f"  Target URL    : {TARGET_URL}")
-          print(f"  Proxy Routing : {PROXY_TYPE} | {PROXY_OS_GROUP}")
+          print(f"  Proxy Routing : {PROXY_TYPE}")
           print(f"  Target Geo    : {country_code if country_code else 'GLOBAL/AUTO'}")
           print(f"  Unique Proxy  : {UNIQUE_PROXY}\n{'═'*65}\n")
 
           # Pre-flight Credit Check
           print_credits("PRE-RUN")
-
-          global_session_id = f"gh_{uuid.uuid4().hex[:8]}"
 
           for i in range(NUM_SESSIONS):
               req_num = i + 1
@@ -318,61 +316,60 @@ jobs:
                   "screenshot_saved": False
               }
 
-              session_id = f"gh_{uuid.uuid4().hex[:8]}" if UNIQUE_PROXY else global_session_id
-              
-              # Proxy builder
-              proxy_parts =[]
+              # NATIVE PROXY CONFIGURATION (Fixes authentication & ERR_TUNNEL failures)
+              proxy_config = { "useApifyProxy": True }
               if PROXY_TYPE == "RESIDENTIAL":
-                  proxy_parts.append("groups-RESIDENTIAL")
-                  proxy_parts.append(PROXY_OS_GROUP)
-              if country_code: proxy_parts.append(f"country-{country_code}")
-              proxy_parts.append(f"session-{session_id}")
-              
-              custom_proxy_url = f"http://{','.join(proxy_parts)}:{APIFY_TOKEN}@proxy.apify.com:8000"
-              proxy_config = { "useApifyProxy": False, "proxyUrls": [custom_proxy_url] }
+                  proxy_config["apifyProxyGroups"] = ["RESIDENTIAL"]
+                  if country_code: 
+                      proxy_config["apifyProxyCountry"] = country_code
 
               run_input = {
                   "runMode": "PRODUCTION",
-                  "startUrls":[{"url": TARGET_URL}],
+                  "startUrls": [{"url": TARGET_URL}],
                   "preNavigationHooks": PRE_HOOK_JS,
                   "pageFunction": PAGE_FUNC_JS,
                   "proxyConfiguration": proxy_config,
                   "useChrome": True,
-                  "ignoreSslErrors": True
+                  "ignoreSslErrors": True,
+                  "maxRequestRetries": 3,
+                  "pageLoadTimeoutSecs": 60
               }
 
               try:
-                  print(f"  🚀 Booting up cloud Playwright Actor (Session: {session_id})...")
+                  print(f"  🚀 Booting up cloud Playwright Actor (Triggering fresh residential IP)...")
                   run = client.actor("apify/playwright-scraper").call(run_input=run_input)
                   
-                  dataset_id = run["defaultDatasetId"]
-                  kvs_id = run["defaultKeyValueStoreId"]
-                  items = list(client.dataset(dataset_id).iterate_items())
+                  dataset_id = run.get("defaultDatasetId")
+                  kvs_id = run.get("defaultKeyValueStoreId")
                   
-                  if items:
-                      data = items[0]
-                      if "html" in data:
-                          html_path = f"results/response_{req_num:03d}.html"
-                          with open(html_path, "w", encoding="utf-8") as f:
-                              f.write(data["html"])
-                          print(f"  💾 HTML saved → {html_path} ({len(data['html'])} bytes)")
-                          rec["status"] = "200"
+                  if dataset_id:
+                      items = list(client.dataset(dataset_id).iterate_items())
+                      if items:
+                          data = items[0]
+                          if "html" in data:
+                              html_path = f"results/response_{req_num:03d}.html"
+                              with open(html_path, "w", encoding="utf-8") as f:
+                                  f.write(data["html"])
+                              print(f"  💾 HTML saved → {html_path} ({len(data['html'])} bytes)")
+                              rec["status"] = "200"
 
-                      if "screenshotKey" in data:
-                          print("  📥 Fetching Screenshot from Key-Value Store...")
-                          img_url = f"https://api.apify.com/v2/key-value-stores/{kvs_id}/records/{data['screenshotKey']}"
-                          img_resp = requests.get(img_url, timeout=60)
-                          
-                          if img_resp.status_code == 200:
-                              png_path = f"screenshots/screenshot_{req_num:03d}.png"
-                              with open(png_path, "wb") as f: f.write(img_resp.content)
-                              rec["screenshot_saved"] = True
-                              rec["screenshot_path"] = png_path
-                              print(f"  ✅ Screenshot saved → {png_path}")
-                          else:
-                              print(f"  ❌ Failed to download screenshot (HTTP {img_resp.status_code})")
+                          if "screenshotKey" in data:
+                              print("  📥 Fetching Screenshot from Key-Value Store...")
+                              img_url = f"https://api.apify.com/v2/key-value-stores/{kvs_id}/records/{data['screenshotKey']}"
+                              img_resp = requests.get(img_url, timeout=60)
+                              
+                              if img_resp.status_code == 200:
+                                  png_path = f"screenshots/screenshot_{req_num:03d}.png"
+                                  with open(png_path, "wb") as f: f.write(img_resp.content)
+                                  rec["screenshot_saved"] = True
+                                  rec["screenshot_path"] = png_path
+                                  print(f"  ✅ Screenshot saved → {png_path}")
+                              else:
+                                  print(f"  ❌ Failed to download screenshot (HTTP {img_resp.status_code})")
+                      else:
+                          print("  ❌ No data returned. Execution failed or got blocked. Check Apify Logs.")
                   else:
-                      print("  ❌ No data returned from Actor execution.")
+                      print("  ❌ Actor execution failed. No valid dataset ID returned.")
 
               except Exception as e:
                   print(f"  ⚠️ Error calling Apify API: {e}")
@@ -404,7 +401,7 @@ jobs:
           pngs = sorted(glob.glob("screenshots/screenshot_???.png"))
           if not pngs: exit(0)
           
-          summary = json.load(open("results/summary.json")) if os.path.exists("results/summary.json") else []
+          summary = json.load(open("results/summary.json")) if os.path.exists("results/summary.json") else[]
           link_key = summary[0].get("link_key", "N/A") if summary else "N/A"
 
           cards = ""
