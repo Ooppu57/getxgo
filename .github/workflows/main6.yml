@@ -12,6 +12,8 @@ on:
           - 'macos-14'
           - 'macos-13'
           - 'macos-15-xlarge'
+          - 'macos-26'
+          - 'macos-26-xlarge'
         default: 'macos-15'
       getscreen_email:
         description: 'Getscreen.me Account Email'
@@ -49,12 +51,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Jimmy'
+        default: 'OperaGX - James'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '2f2622aa-3db7-4033-8b94-f0657bdf0cb3'
+        default: '589109d6-21c7-4f1c-b369-6557eca63d01'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -67,12 +69,12 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'USA'
+        default: 'Brazil'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: false
+        default: true
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
@@ -170,6 +172,8 @@ jobs:
                   "macos-14": "M14",
                   "macos-13": "M13",
                   "macos-15-xlarge": "M15X",
+                  "macos-26": "M26",
+                  "macos-26-xlarge": "M26X",
               }
               return mapping.get(os_ver, "MAC")
 
@@ -307,26 +311,57 @@ jobs:
         run: |
           echo "=== Installing Python UI Automation Dependencies ==="
 
-          # Ensure pip is up to date
-          python3 -m pip install --upgrade pip --quiet
+          # Modern macOS (Homebrew Python) marks the system env as "externally managed"
+          # (PEP 668) so bare `pip install` exits with code 1.
+          # Solution: create a dedicated venv at /tmp/uienv and install everything there.
+          # The handler script is then launched with that venv's python.
 
-          # Install macOS-compatible UI automation libraries
-          # pyobjc for native macOS Accessibility API access
-          # atomacos for high-level macOS UI automation (wraps pyobjc)
-          # Pillow for screenshots, requests for HTTP
-          python3 -m pip install pyobjc-core pyobjc-framework-Cocoa pyobjc-framework-ApplicationServices --quiet || true
-          python3 -m pip install atomacos --quiet || true
-          python3 -m pip install Pillow requests --quiet || true
+          VENV_DIR="/tmp/uienv"
 
-          echo "Python dependencies installed."
+          # Pick the best available python3 binary
+          PYTHON_BIN=""
+          for candidate in python3.12 python3.11 python3.10 python3; do
+            if command -v "$candidate" &>/dev/null; then
+              PYTHON_BIN="$candidate"
+              break
+            fi
+          done
+          echo "Using Python: $PYTHON_BIN ($($PYTHON_BIN --version 2>&1))"
 
-          # Install Homebrew if not present (usually available on GitHub-hosted macOS runners)
+          # Create venv (wipe any stale one first)
+          rm -rf "$VENV_DIR"
+          "$PYTHON_BIN" -m venv "$VENV_DIR"
+          source "$VENV_DIR/bin/activate"
+
+          # Upgrade pip inside the venv — this always works
+          pip install --upgrade pip --quiet
+
+          # Install macOS UI automation stack
+          pip install pyobjc-core \
+                      pyobjc-framework-Cocoa \
+                      pyobjc-framework-ApplicationServices \
+                      --quiet || true
+          pip install atomacos --quiet || true
+          pip install Pillow requests --quiet || true
+
+          deactivate
+
+          # Persist venv path for later steps
+          echo "UIENV_PYTHON=$VENV_DIR/bin/python3" >> "$GITHUB_ENV"
+          echo "Python venv ready at $VENV_DIR"
+
+          # Install Homebrew if not present (usually pre-installed on GH runners)
           if ! command -v brew &>/dev/null; then
-            echo "Homebrew not found, installing..."
-            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" < /dev/null || true
+            echo "Homebrew not found — installing..."
+            NONINTERACTIVE=1 /bin/bash -c \
+              "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
+            # Add brew to PATH for Apple Silicon / macos-26 runners
+            for bp in /opt/homebrew/bin /usr/local/bin; do
+              [ -x "$bp/brew" ] && export PATH="$bp:$PATH" && echo "PATH=$bp:$PATH" >> "$GITHUB_ENV" && break
+            done
           fi
 
-          # Install cliclick for low-level mouse/keyboard simulation
+          # Install cliclick for pixel-level mouse control
           brew install cliclick --quiet || true
 
           echo "All dependencies installed."
@@ -801,8 +836,10 @@ jobs:
           # -------------------------------------------------------------------
           # 3. Start Python UI Handler in background
           # -------------------------------------------------------------------
-          echo "Starting macOS UI automation handler..."
-          python3 -u /tmp/macos_handler.py \
+          # Use the venv python so pyobjc/atomacos imports resolve correctly
+          HANDLER_PYTHON="${UIENV_PYTHON:-python3}"
+          echo "Starting macOS UI automation handler (python: $HANDLER_PYTHON)..."
+          "$HANDLER_PYTHON" -u /tmp/macos_handler.py \
             "$PROXY_USER" "$PROXY_PASS" "$SOFTWARE_TYPE" "$USE_PROXY" \
             > /tmp/handler_output.log 2>&1 &
           HANDLER_PID=$!
