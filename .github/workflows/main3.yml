@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '2'
+        default: '5'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -52,7 +52,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'AVG - B4Books'
+        default: 'OperaGX - James'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
@@ -70,12 +70,12 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'USA'
+        default: 'Brazil'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: false
+        default: true
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
