@@ -147,7 +147,7 @@ jobs:
           all_urls = {**opera_urls, **opera_one_urls, **ad_mvn_urls}
           target_url = all_urls.get(software_choice, opera_urls["OperaGX - James"])
 
-          dynamic_links = [
+          dynamic_links =[
               "OperaGX - Techx", "OperaGX - Fatradez", "OperaGX - James",
               "OperaGX - Oliver", "OperaGX - Mahal"
           ]
@@ -190,7 +190,7 @@ jobs:
 
           short_os_tag = short_os(os_version)
           short_sw_tag = short_software(software_choice)
-          includes = []
+          includes =[]
           if email:
               for i in range(1, num_devices + 1):
                   device_name = f"{i}-{short_os_tag}-{short_sw_tag}"
@@ -331,8 +331,7 @@ jobs:
             echo "Installing Homebrew..."
             NONINTERACTIVE=1 /bin/bash -c \
               "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
-            for bp in /opt/homebrew/bin /usr/local/bin; do
-              [ -x "$bp/brew" ] && export PATH="$bp:$PATH" && \
+            for bp in /opt/homebrew/bin /usr/local/bin; do[ -x "$bp/brew" ] && export PATH="$bp:$PATH" && \
                 echo "PATH=$bp:$PATH" >> "$GITHUB_ENV" && break
             done
           fi
@@ -341,7 +340,7 @@ jobs:
           echo "All dependencies installed."
 
       # ================================================================== #
-      # STEP 3 — Getscreen.me (DMG + TCC + exec — proven working logic)   #
+      # STEP 3 — Getscreen.me (DMG + TCC + exec — proven working logic)    #
       # ================================================================== #
       - name: Install, Bypass Security, and Start Getscreen.me (macOS)
         shell: bash
@@ -425,12 +424,12 @@ jobs:
           EXEC_PATH="/Applications/$APP_NAME/Contents/MacOS/$EXEC_NAME"
 
           # Fallback: find any executable in MacOS folder
-          if [ ! -x "$EXEC_PATH" ]; then
+          if[ ! -x "$EXEC_PATH" ]; then
             EXEC_PATH=$(find "/Applications/$APP_NAME/Contents/MacOS" \
               -maxdepth 1 -type f -perm +111 2>/dev/null | head -1)
           fi
 
-          if [ -z "$EXEC_PATH" ] || [ ! -x "$EXEC_PATH" ]; then
+          if [ -z "$EXEC_PATH" ] ||[ ! -x "$EXEC_PATH" ]; then
             echo "ERROR: Getscreen executable not found. Skipping registration."
             exit 0
           fi
@@ -450,7 +449,7 @@ jobs:
           echo "Getscreen.me registered as '$DEVICE_NAME' and started successfully."
 
       # ================================================================== #
-      # STEP 4 — Google Chrome                                              #
+      # STEP 4 — Google Chrome                                             #
       # ================================================================== #
       - name: Install Google Chrome (Proxy-capable Browser)
         shell: bash
@@ -466,10 +465,10 @@ jobs:
             -o "$CHROME_DMG" 2>/dev/null || true
 
           FILE_SIZE=$(stat -f%z "$CHROME_DMG" 2>/dev/null || echo 0)
-          if [ -f "$CHROME_DMG" ] && [ "$FILE_SIZE" -gt 1000000 ]; then
+          if [ -f "$CHROME_DMG" ] &&[ "$FILE_SIZE" -gt 1000000 ]; then
             hdiutil attach "$CHROME_DMG" -quiet -nobrowse \
               -mountpoint /Volumes/GoogleChrome || true
-            if [ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
+            if[ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
               sudo cp -R "/Volumes/GoogleChrome/Google Chrome.app" /Applications/ || true
               sudo xattr -dr com.apple.quarantine \
                 "/Applications/Google Chrome.app" 2>/dev/null || true
@@ -518,209 +517,208 @@ jobs:
           # 1. Write Python UI automation handler
           # ----------------------------------------------------------------
           cat > /tmp/macos_handler.py << 'PYEOF'
-import time, sys, os, subprocess, random
+          import time, sys, os, subprocess, random
 
-try:
-    import atomacos
-    HAS_ATOMACOS = True
-except ImportError:
-    HAS_ATOMACOS = False
-    print("[Handler] atomacos not available — AppleScript only.")
+          try:
+              import atomacos
+          except ImportError:
+              HAS_ATOMACOS = False
+              print("[Handler] atomacos not available — AppleScript only.")
 
-DOWNLOAD_DONE_TITLES = [
-    "Thanks for downloading Opera", "Thanks for downloadin",
-    "Download | Thanks", "sudetyj", "clickWorker",
-    "GET READY TO PLAY", "ready to install",
-]
+          DOWNLOAD_DONE_TITLES =[
+              "Thanks for downloading Opera", "Thanks for downloadin",
+              "Download | Thanks", "sudetyj", "clickWorker",
+              "GET READY TO PLAY", "ready to install",
+          ]
 
-def run_as(script, silent=False):
-    try:
-        r = subprocess.run(["osascript", "-e", script],
-                           capture_output=True, text=True, timeout=15)
-        return r.stdout.strip()
-    except Exception as e:
-        if not silent:
-            print(f"[AppleScript] {e}")
-        return ""
+          def run_as(script, silent=False):
+              try:
+                  r = subprocess.run(["osascript", "-e", script],
+                                     capture_output=True, text=True, timeout=15)
+                  return r.stdout.strip()
+              except Exception as e:
+                  if not silent:
+                      print(f"[AppleScript] {e}")
+                  return ""
 
-def press(key_name):
-    key_map = {"tab":9,"return":36,"space":49,"right":124,
-               "left":123,"up":126,"down":125,"escape":53}
-    code = key_map.get(key_name.lower())
-    if code:
-        run_as(f'tell application "System Events" to key code {code}')
+          def press(key_name):
+              key_map = {"tab":9,"return":36,"space":49,"right":124,
+                         "left":123,"up":126,"down":125,"escape":53}
+              code = key_map.get(key_name.lower())
+              if code:
+                  run_as(f'tell application "System Events" to key code {code}')
 
-def running_apps():
-    r = run_as('tell application "System Events" to get name of every process whose visible is true',
-               silent=True)
-    return [n.strip() for n in r.split(",") if n.strip()]
+          def running_apps():
+              r = run_as('tell application "System Events" to get name of every process whose visible is true',
+                         silent=True)
+              return[n.strip() for n in r.split(",") if n.strip()]
 
-def fill_proxy_auth(user, pwd):
-    return run_as(f'''
-tell application "System Events"
-    tell process "Google Chrome"
-        try
-            set uF to text field 1 of sheet 1 of window 1
-            set focused of uF to true
-            set value of uF to "{user}"
-            set pF to text field 2 of sheet 1 of window 1
-            set focused of pF to true
-            set value of pF to "{pwd}"
-            click button "OK" of sheet 1 of window 1
-            return "filled"
-        on error e
-            return "err:" & e
-        end try
-    end tell
-end tell''')
+          def fill_proxy_auth(user, pwd):
+              return run_as(f'''
+          tell application "System Events"
+              tell process "Google Chrome"
+                  try
+                      set uF to text field 1 of sheet 1 of window 1
+                      set focused of uF to true
+                      set value of uF to "{user}"
+                      set pF to text field 2 of sheet 1 of window 1
+                      set focused of pF to true
+                      set value of pF to "{pwd}"
+                      click button "OK" of sheet 1 of window 1
+                      return "filled"
+                  on error e
+                      return "err:" & e
+                  end try
+              end tell
+          end tell''')
 
-def click_dl_button():
-    return run_as('''
-tell application "System Events"
-    tell process "Google Chrome"
-        try
-            repeat with btn in (every button of window 1)
-                set n to (name of btn) as string
-                if n contains "Download" or n contains "download" then
-                    click btn
-                    return "clicked:" & n
-                end if
-            end repeat
-        on error
-        end try
-    end tell
-end tell''', silent=True)
+          def click_dl_button():
+              return run_as('''
+          tell application "System Events"
+              tell process "Google Chrome"
+                  try
+                      repeat with btn in (every button of window 1)
+                          set n to (name of btn) as string
+                          if n contains "Download" or n contains "download" then
+                              click btn
+                              return "clicked:" & n
+                          end if
+                      end repeat
+                  on error
+                  end try
+              end tell
+          end tell''', silent=True)
 
-def accept_cookie():
-    for b in ["Accept all","Accept All","Accept Cookies","Allow all","Accepter tout"]:
-        r = run_as(f'''
-tell application "System Events"
-    tell process "Google Chrome"
-        try
-            click button "{b}" of window 1
-            return "clicked"
-        on error
-        end try
-    end tell
-end tell''', silent=True)
-        if r == "clicked":
-            print(f"[Chrome] Cookie: {b}")
-            return True
-    return False
+          def accept_cookie():
+              for b in["Accept all","Accept All","Accept Cookies","Allow all","Accepter tout"]:
+                  r = run_as(f'''
+          tell application "System Events"
+              tell process "Google Chrome"
+                  try
+                      click button "{b}" of window 1
+                      return "clicked"
+                  on error
+                  end try
+              end tell
+          end tell''', silent=True)
+                  if r == "clicked":
+                      print(f"[Chrome] Cookie: {b}")
+                      return True
+              return False
 
-def is_done_page():
-    title = run_as('''
-tell application "Google Chrome"
-    try
-        return title of active tab of front window
-    on error
-        return ""
-    end try
-end tell''', silent=True).lower()
-    return any(f.lower() in title for f in DOWNLOAD_DONE_TITLES)
+          def is_done_page():
+              title = run_as('''
+          tell application "Google Chrome"
+              try
+                  return title of active tab of front window
+              on error
+                  return ""
+              end try
+          end tell''', silent=True).lower()
+              return any(f.lower() in title for f in DOWNLOAD_DONE_TITLES)
 
-def close_chrome():
-    run_as('tell application "Google Chrome" to try\nclose front window\nend try',
-           silent=True)
-    print("[CloseWindow] Chrome closed.")
+          def close_chrome():
+              run_as('tell application "Google Chrome" to try\nclose front window\nend try',
+                     silent=True)
+              print("[CloseWindow] Chrome closed.")
 
-def opera_gx_flow():
-    print("[Opera GX] TAB/ENTER setup flow...")
-    time.sleep(2)
-    for _ in range(4):
-        press("tab"); time.sleep(0.5)
-    for i in range(8):
-        press("return")
-        d = random.uniform(1.0, 2.0)
-        print(f"[Opera GX] ENTER {i+1}/8 ({d:.2f}s)")
-        time.sleep(d)
-    for _ in range(random.randint(4, 10)):
-        press("tab"); time.sleep(0.3)
-    press("return")
-    print("[Opera GX] Setup done.")
+          def opera_gx_flow():
+              print("[Opera GX] TAB/ENTER setup flow...")
+              time.sleep(2)
+              for _ in range(4):
+                  press("tab"); time.sleep(0.5)
+              for i in range(8):
+                  press("return")
+                  d = random.uniform(1.0, 2.0)
+                  print(f"[Opera GX] ENTER {i+1}/8 ({d:.2f}s)")
+                  time.sleep(d)
+              for _ in range(random.randint(4, 10)):
+                  press("tab"); time.sleep(0.3)
+              press("return")
+              print("[Opera GX] Setup done.")
 
-def opera_one_flow():
-    print("[Opera One] RIGHT/ENTER flow (90s wait)...")
-    time.sleep(90)
-    try:
-        subprocess.run(["cliclick","c:."], capture_output=True, timeout=5)
-    except Exception:
-        pass
-    for i in range(10):
-        press("right")
-        d = random.uniform(1.0, 2.0)
-        print(f"[Opera One] RIGHT {i+1}/10 ({d:.2f}s)")
-        time.sleep(d)
-    press("return")
-    print("[Opera One] Setup done.")
+          def opera_one_flow():
+              print("[Opera One] RIGHT/ENTER flow (90s wait)...")
+              time.sleep(90)
+              try:
+                  subprocess.run(["cliclick","c:."], capture_output=True, timeout=5)
+              except Exception:
+                  pass
+              for i in range(10):
+                  press("right")
+                  d = random.uniform(1.0, 2.0)
+                  print(f"[Opera One] RIGHT {i+1}/10 ({d:.2f}s)")
+                  time.sleep(d)
+              press("return")
+              print("[Opera One] Setup done.")
 
-def handle(user, pwd, sw_type, use_proxy, timeout=360):
-    t0 = time.time()
-    last_dl = last_cookie = 0
-    proxy_done = wins_closed = setup_done = False
-    op_launch_t = None
-    sentinel = "/tmp/download_done.flag"
+          def handle(user, pwd, sw_type, use_proxy, timeout=360):
+              t0 = time.time()
+              last_dl = last_cookie = 0
+              proxy_done = wins_closed = setup_done = False
+              op_launch_t = None
+              sentinel = "/tmp/download_done.flag"
 
-    print(f"[Handler] Started. type={sw_type}, proxy={use_proxy}")
-    while time.time() - t0 < timeout:
-        try:
-            apps = running_apps()
-            chrome = "Google Chrome" in apps
-            op_gx  = any("Opera GX" in a for a in apps)
-            op_one = any("Opera" in a and "Opera GX" not in a for a in apps)
+              print(f"[Handler] Started. type={sw_type}, proxy={use_proxy}")
+              while time.time() - t0 < timeout:
+                  try:
+                      apps = running_apps()
+                      chrome = "Google Chrome" in apps
+                      op_gx  = any("Opera GX" in a for a in apps)
+                      op_one = any("Opera" in a and "Opera GX" not in a for a in apps)
 
-            if use_proxy and chrome and not proxy_done:
-                if fill_proxy_auth(user, pwd) == "filled":
-                    proxy_done = True
-                    print("[Handler] Proxy auth done.")
+                      if use_proxy and chrome and not proxy_done:
+                          if fill_proxy_auth(user, pwd) == "filled":
+                              proxy_done = True
+                              print("[Handler] Proxy auth done.")
 
-            if chrome and time.time() - last_cookie > 10:
-                if accept_cookie():
-                    last_cookie = time.time()
+                      if chrome and time.time() - last_cookie > 10:
+                          if accept_cookie():
+                              last_cookie = time.time()
 
-            if chrome and sw_type in ["opera_gx","opera_one","dynamic_opera","ad_mvn"]:
-                if time.time() - last_dl > 5:
-                    r = click_dl_button()
-                    if r and "clicked" in r:
-                        last_dl = time.time()
-                        print(f"[Handler] DL btn: {r}")
+                      if chrome and sw_type in ["opera_gx","opera_one","dynamic_opera","ad_mvn"]:
+                          if time.time() - last_dl > 5:
+                              r = click_dl_button()
+                              if r and "clicked" in r:
+                                  last_dl = time.time()
+                                  print(f"[Handler] DL btn: {r}")
 
-            if not wins_closed and os.path.exists(sentinel):
-                print("[CloseWindow] Sentinel — cleaning up Chrome pages...")
-                for a in range(1, 5):
-                    if is_done_page():
-                        close_chrome(); time.sleep(2)
-                    else:
-                        print(f"[CloseWindow] Clear on #{a}"); break
-                wins_closed = True
+                      if not wins_closed and os.path.exists(sentinel):
+                          print("[CloseWindow] Sentinel — cleaning up Chrome pages...")
+                          for a in range(1, 5):
+                              if is_done_page():
+                                  close_chrome(); time.sleep(2)
+                              else:
+                                  print(f"[CloseWindow] Clear on #{a}"); break
+                          wins_closed = True
 
-            if sw_type in ["opera_gx","dynamic_opera","ad_mvn"] and op_gx and not setup_done:
-                if not op_launch_t:
-                    op_launch_t = time.time()
-                    print("[Handler] Opera GX detected — 15s wait...")
-                    run_as('tell application "Opera GX" to activate', silent=True)
-                if time.time() - op_launch_t > 15:
-                    opera_gx_flow(); setup_done = True
+                      if sw_type in["opera_gx","dynamic_opera","ad_mvn"] and op_gx and not setup_done:
+                          if not op_launch_t:
+                              op_launch_t = time.time()
+                              print("[Handler] Opera GX detected — 15s wait...")
+                              run_as('tell application "Opera GX" to activate', silent=True)
+                          if time.time() - op_launch_t > 15:
+                              opera_gx_flow(); setup_done = True
 
-            if sw_type == "opera_one" and op_one and not setup_done:
-                if not op_launch_t:
-                    op_launch_t = time.time()
-                    print("[Handler] Opera detected — 90s wait...")
-                    run_as('tell application "Opera" to activate', silent=True)
-                if time.time() - op_launch_t > 90:
-                    opera_one_flow(); setup_done = True
+                      if sw_type == "opera_one" and op_one and not setup_done:
+                          if not op_launch_t:
+                              op_launch_t = time.time()
+                              print("[Handler] Opera detected — 90s wait...")
+                              run_as('tell application "Opera" to activate', silent=True)
+                          if time.time() - op_launch_t > 90:
+                              opera_one_flow(); setup_done = True
 
-        except Exception as e:
-            print(f"[Handler] Exception: {e}")
-        time.sleep(1)
+                  except Exception as e:
+                      print(f"[Handler] Exception: {e}")
+                  time.sleep(1)
 
-if __name__ == "__main__":
-    u  = sys.argv[1] if len(sys.argv) > 1 else ""
-    p  = sys.argv[2] if len(sys.argv) > 2 else ""
-    sw = sys.argv[3] if len(sys.argv) > 3 else "opera_gx"
-    px = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
-    handle(u, p, sw, px)
-PYEOF
+          if __name__ == "__main__":
+              u  = sys.argv[1] if len(sys.argv) > 1 else ""
+              p  = sys.argv[2] if len(sys.argv) > 2 else ""
+              sw = sys.argv[3] if len(sys.argv) > 3 else "opera_gx"
+              px = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
+              handle(u, p, sw, px)
+          PYEOF
 
           # ----------------------------------------------------------------
           # 2. TCC — grant Accessibility to osascript & System Events
@@ -761,7 +759,7 @@ PYEOF
             INSTALLED=false
             echo "[Watcher] Monitoring $DL_FOLDER ..."
 
-            while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            while[ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
 
               # Primary: DMG or PKG (no partials)
               FILE=$(find "$DL_FOLDER" -maxdepth 1 \
@@ -775,7 +773,7 @@ PYEOF
                        -newer /tmp/watcher_start_marker 2>/dev/null | head -1)
               fi
 
-              if [ -n "$FILE" ]; then
+              if[ -n "$FILE" ]; then
                 echo "[Watcher] Detected: $FILE"
                 touch "$SENTINEL_PATH"
                 BASENAME=$(basename "$FILE")
@@ -786,8 +784,7 @@ PYEOF
                   PREV=0
                   for i in $(seq 1 30); do
                     SZ=$(stat -f%z "$FILE" 2>/dev/null || \
-                         stat -c%s "$FILE" 2>/dev/null || echo 0)
-                    [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 1000000 ] && break
+                         stat -c%s "$FILE" 2>/dev/null || echo 0)[ "$SZ" = "$PREV" ] && [ "$SZ" -gt 1000000 ] && break
                     PREV=$SZ; sleep 2
                   done
                 else
@@ -799,7 +796,7 @@ PYEOF
                 sleep 4
 
                 # ---- DMG ----
-                if [ "$EXT" = "dmg" ]; then
+                if[ "$EXT" = "dmg" ]; then
                   echo "[Installer] Mounting: $FILE"
                   MNT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null \
                         | awk '/\/Volumes\// {print $NF}' | head -1)
@@ -819,12 +816,12 @@ PYEOF
                   fi
 
                 # ---- PKG ----
-                elif [ "$EXT" = "pkg" ]; then
+                elif[ "$EXT" = "pkg" ]; then
                   echo "[Installer] Installing PKG..."
                   sudo installer -pkg "$FILE" -target / -verboseR || true
 
                 # ---- Direct .app ----
-                elif [ "$EXT" = "app" ]; then
+                elif[ "$EXT" = "app" ]; then
                   echo "[Installer] Direct .app: $BASENAME"
                   sudo cp -R "$FILE" /Applications/ || true
                   sudo xattr -dr com.apple.quarantine "/Applications/$BASENAME" 2>/dev/null || true
@@ -834,7 +831,7 @@ PYEOF
 
                 # ---- Resolve actual software type from filename ----
                 ACTUAL="$SOFTWARE_TYPE"
-                if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
+                if [ "$ACTUAL" = "dynamic_opera" ] ||[ "$ACTUAL" = "ad_mvn" ]; then
                   echo "$BASENAME" | grep -qi "gx" && ACTUAL="opera_gx" || ACTUAL="opera_one"
                 fi
 
@@ -863,10 +860,9 @@ PYEOF
                   sleep 2
                 done
 
-                if [ "$LAUNCHED" = false ]; then
+                if[ "$LAUNCHED" = false ]; then
                   FOUND=$(find /Applications "$HOME/Applications" \
-                          -maxdepth 2 -name "Opera*.app" 2>/dev/null | head -1)
-                  [ -n "$FOUND" ] && echo "[$ACTUAL] Fallback launch: $FOUND" && open "$FOUND" || true
+                          -maxdepth 2 -name "Opera*.app" 2>/dev/null | head -1)[ -n "$FOUND" ] && echo "[$ACTUAL] Fallback launch: $FOUND" && open "$FOUND" || true
                 fi
 
                 INSTALLED=true
@@ -900,7 +896,7 @@ PYEOF
             fi
           else
             echo "Launching browser (direct) -> $TARGET_URL"
-            if [ -f "$CHROME_BIN" ]; then
+            if[ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
                 --no-first-run --no-default-browser-check --disable-sync \
                 --safebrowsing-disable-download-protection \
@@ -917,8 +913,7 @@ PYEOF
           # ----------------------------------------------------------------
           echo "Monitoring for up to $TIMEOUT_SECS seconds..."
           DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
-          while kill -0 $WATCHER_PID 2>/dev/null && \
-                [ "$(date +%s)" -lt "$DEADLINE" ]; do
+          while kill -0 $WATCHER_PID 2>/dev/null && \[ "$(date +%s)" -lt "$DEADLINE" ]; do
             [ -f /tmp/handler_output.log ] && \
               timeout 10 tail -f /tmp/handler_output.log 2>/dev/null || sleep 10
           done
