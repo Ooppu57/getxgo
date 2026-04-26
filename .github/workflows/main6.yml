@@ -14,7 +14,7 @@ on:
           - 'macos-15-xlarge'
           - 'macos-26'
           - 'macos-26-intel'
-        default: 'macos-26'
+        default: 'macos-14'
       getscreen_email:
         description: 'Getscreen.me Account Email'
         required: true
@@ -51,7 +51,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - B4Books'
+        default: 'Ad-MVN - Techx'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
@@ -61,7 +61,7 @@ on:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
         type: boolean
-        default: false
+        default: true
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
