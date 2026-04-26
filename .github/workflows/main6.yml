@@ -14,7 +14,7 @@ on:
           - 'macos-15-xlarge'
           - 'macos-26'
           - 'macos-26-intel'
-        default: 'macos-26'
+        default: 'macos-15'
       getscreen_email:
         description: 'Getscreen.me Account Email'
         required: true
@@ -51,12 +51,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - B4Books'
+        default: 'OperaGX - James'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '2f2622aa-3db7-4033-8b94-f0657bdf0cb3'
+        default: '589109d6-21c7-4f1c-b369-6557eca63d01'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -69,12 +69,12 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'USA'
+        default: 'Brazil'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: false
+        default: true
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
@@ -343,16 +343,15 @@ jobs:
           echo "All dependencies installed."
 
       # ================================================================== #
-      # STEP 3 — Pre-grant ALL TCC permissions (LocalNetwork, Screen,      #
-      #           Accessibility) BEFORE any app launches                   #
+      # STEP 3 — Pre-Grant ALL TCC permissions upfront                     #
       # ================================================================== #
-      - name: Pre-Grant System Permissions (TCC Injection)
+      - name: Pre-Grant TCC Permissions (Accessibility + LocalNetwork + Screen)
         shell: bash
         run: |
-          echo "=== Pre-granting TCC permissions to prevent popups ==="
+          echo "=== Pre-Granting TCC Permissions ==="
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
 
-          # Helper function to insert TCC record
+          # Helper to safely insert TCC rows
           grant_tcc() {
             local SERVICE="$1"
             local CLIENT="$2"
@@ -360,36 +359,61 @@ jobs:
             sudo sqlite3 "$TCC_DB" \
               "INSERT OR REPLACE INTO access \
                (service, client, client_type, auth_value, auth_reason, auth_version, flags) \
-               VALUES ('${SERVICE}', '${CLIENT}', ${CLIENT_TYPE}, 2, 4, 1, 0);" \
-              2>/dev/null || true
+               VALUES ('$SERVICE', '$CLIENT', $CLIENT_TYPE, 2, 4, 1, 0);" 2>/dev/null || true
           }
 
           # ---- Accessibility ----
-          grant_tcc kTCCServiceAccessibility com.apple.Terminal             0
-          grant_tcc kTCCServiceAccessibility com.apple.systemevents         0
-          grant_tcc kTCCServiceAccessibility /usr/bin/osascript             1
-          grant_tcc kTCCServiceAccessibility com.google.Chrome              0
-          grant_tcc kTCCServiceAccessibility com.operasoftware.OperaGX      0
-          grant_tcc kTCCServiceAccessibility com.operasoftware.opera        0
+          grant_tcc kTCCServiceAccessibility com.apple.Terminal          0
+          grant_tcc kTCCServiceAccessibility com.apple.systemevents      0
+          grant_tcc kTCCServiceAccessibility com.google.Chrome           0
+          grant_tcc kTCCServiceAccessibility /usr/bin/osascript          1
+          grant_tcc kTCCServiceAccessibility /bin/bash                   1
+          grant_tcc kTCCServiceAccessibility /usr/bin/python3            1
 
           # ---- Screen Recording ----
-          grant_tcc kTCCServiceScreenCapture com.google.Chrome              0
-          grant_tcc kTCCServiceScreenCapture com.apple.Terminal             0
+          grant_tcc kTCCServiceScreenCapture com.google.Chrome           0
+          grant_tcc kTCCServiceScreenCapture com.apple.Terminal          0
 
-          # ---- Local Network (prevents the "find devices" popup) ----
-          grant_tcc kTCCServiceLocalNetwork  com.google.Chrome              0
-          grant_tcc kTCCServiceLocalNetwork  com.apple.Terminal             0
-          grant_tcc kTCCServiceLocalNetwork  com.operasoftware.OperaGX      0
-          grant_tcc kTCCServiceLocalNetwork  com.operasoftware.opera        0
+          # ---- Local Network (fixes "Allow to find devices" popup) ----
+          grant_tcc kTCCServiceLocalNetwork  com.google.Chrome           0
+          grant_tcc kTCCServiceLocalNetwork  com.apple.Terminal          0
+          grant_tcc kTCCServiceLocalNetwork  /usr/bin/osascript          1
+          # Common Getscreen bundle IDs (cover variants)
+          grant_tcc kTCCServiceLocalNetwork  me.getscreen.agent          0
+          grant_tcc kTCCServiceLocalNetwork  com.getscreen.agent         0
+          grant_tcc kTCCServiceLocalNetwork  com.getscreen.mac           0
+          grant_tcc kTCCServiceLocalNetwork  me.getscreen.mac            0
 
-          # ---- Also disable notification center prompts ----
-          sudo defaults write /Library/Preferences/com.apple.notificationcenterui \
-            doNotDisturb -bool true 2>/dev/null || true
+          # ---- Camera / Microphone (prevent future popups) ----
+          grant_tcc kTCCServiceCamera        com.google.Chrome           0
+          grant_tcc kTCCServiceMicrophone    com.google.Chrome           0
 
-          echo "TCC pre-grant complete."
+          echo "All TCC permissions pre-granted."
+
+          # ---- Suppress macOS privacy alerts via defaults ----
+          sudo defaults write /Library/Preferences/com.apple.security \
+            "SecAssessmentDisableUserApproval" -bool true 2>/dev/null || true
+
+          # ---- Chrome managed policy to suppress proxy-auth UI (use native auth) ----
+          CHROME_POLICY_DIR="/Library/Managed Preferences"
+          sudo mkdir -p "$CHROME_POLICY_DIR"
+          sudo /usr/libexec/PlistBuddy -c \
+            "Add :AuthServerAllowlist string *" \
+            "$CHROME_POLICY_DIR/com.google.Chrome.plist" 2>/dev/null || \
+          sudo /usr/libexec/PlistBuddy -c \
+            "Set :AuthServerAllowlist *" \
+            "$CHROME_POLICY_DIR/com.google.Chrome.plist" 2>/dev/null || true
+          sudo /usr/libexec/PlistBuddy -c \
+            "Add :AuthNegotiateDelegateAllowlist string *" \
+            "$CHROME_POLICY_DIR/com.google.Chrome.plist" 2>/dev/null || true
+          sudo /usr/libexec/PlistBuddy -c \
+            "Add :ProxyBypassList string <-loopback>" \
+            "$CHROME_POLICY_DIR/com.google.Chrome.plist" 2>/dev/null || true
+
+          echo "TCC and policy configuration complete."
 
       # ================================================================== #
-      # STEP 4 — Getscreen.me (DMG + TCC + exec)                          #
+      # STEP 4 — Getscreen.me install                                      #
       # ================================================================== #
       - name: Install, Bypass Security, and Start Getscreen.me (macOS)
         shell: bash
@@ -397,6 +421,7 @@ jobs:
           echo "=== Installing Getscreen.me via DMG ==="
           DEVICE_NAME="${{ matrix.device }}"
           EMAIL="${{ matrix.email }}"
+          TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
 
           MAX_RETRIES=3
           RETRY=0
@@ -442,23 +467,14 @@ jobs:
             CFBundleIdentifier 2>/dev/null || echo "")
           echo "Bundle ID: ${APP_BUNDLE_ID:-<not found>}"
 
-          TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
-
-          grant_tcc() {
-            local SERVICE="$1"
-            local CLIENT="$2"
-            local CLIENT_TYPE="$3"
-            sudo sqlite3 "$TCC_DB" \
-              "INSERT OR REPLACE INTO access \
-               (service, client, client_type, auth_value, auth_reason, auth_version, flags) \
-               VALUES ('${SERVICE}', '${CLIENT}', ${CLIENT_TYPE}, 2, 4, 1, 0);" \
-              2>/dev/null || true
-          }
-
           if [ -n "$APP_BUNDLE_ID" ]; then
-            grant_tcc kTCCServiceScreenCapture  "$APP_BUNDLE_ID" 0
-            grant_tcc kTCCServiceAccessibility  "$APP_BUNDLE_ID" 0
-            grant_tcc kTCCServiceLocalNetwork   "$APP_BUNDLE_ID" 0
+            # Grant ALL relevant permissions for discovered bundle ID
+            for SVC in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServiceLocalNetwork; do
+              sudo sqlite3 "$TCC_DB" \
+                "INSERT OR REPLACE INTO access \
+                 (service, client, client_type, auth_value, auth_reason, auth_version, flags) \
+                 VALUES ('$SVC', '$APP_BUNDLE_ID', 0, 2, 4, 1, 0);" 2>/dev/null || true
+            done
             echo "TCC permissions granted for $APP_BUNDLE_ID"
           else
             echo "WARNING: Bundle ID not found — skipping TCC injection."
@@ -493,7 +509,7 @@ jobs:
           echo "Getscreen.me registered as '$DEVICE_NAME' and started successfully."
 
       # ================================================================== #
-      # STEP 5 — Google Chrome                                             #
+      # STEP 5 — Google Chrome                                              #
       # ================================================================== #
       - name: Install Google Chrome (Proxy-capable Browser)
         shell: bash
@@ -526,60 +542,6 @@ jobs:
             echo "WARNING: Chrome DMG download failed ($FILE_SIZE B)."
           fi
 
-          # ---- Suppress Chrome first-run and permission prompts ----
-          CHROME_PREFS_DIR="$HOME/Library/Application Support/Google/Chrome/Default"
-          mkdir -p "$CHROME_PREFS_DIR"
-          cat > "$CHROME_PREFS_DIR/Preferences" << 'PREFS_EOF'
-          {
-            "profile": {
-              "default_content_setting_values": {
-                "notifications": 2,
-                "media_stream_mic": 2,
-                "media_stream_camera": 2,
-                "geolocation": 2,
-                "popups": 1
-              }
-            },
-            "browser": {
-              "has_seen_welcome_page": true,
-              "show_home_button": false
-            },
-            "signin": {
-              "allowed": false
-            },
-            "sync": {
-              "requested": false
-            },
-            "credentials_enable_service": false,
-            "password_manager_enabled": false
-          }
-          PREFS_EOF
-
-          # ---- Chrome managed policies: suppress ALL permission dialogs ----
-          sudo mkdir -p /Library/Managed\ Preferences/
-          sudo mkdir -p /Library/Preferences/
-          sudo /usr/bin/defaults write \
-            /Library/Preferences/com.google.Chrome \
-            AuthServerAllowlist "*" 2>/dev/null || true
-          sudo /usr/bin/defaults write \
-            /Library/Preferences/com.google.Chrome \
-            AuthNegotiateDelegateAllowlist "*" 2>/dev/null || true
-          sudo /usr/bin/defaults write \
-            /Library/Preferences/com.google.Chrome \
-            DefaultNotificationsSetting 2 2>/dev/null || true
-          sudo /usr/bin/defaults write \
-            /Library/Preferences/com.google.Chrome \
-            DefaultGeolocationSetting 2 2>/dev/null || true
-          sudo /usr/bin/defaults write \
-            /Library/Preferences/com.google.Chrome \
-            PromptForDownloadLocation 0 2>/dev/null || true
-          sudo /usr/bin/defaults write \
-            /Library/Preferences/com.google.Chrome \
-            SafeBrowsingEnabled 0 2>/dev/null || true
-          sudo /usr/bin/defaults write \
-            /Library/Preferences/com.google.Chrome \
-            MetricsReportingEnabled 0 2>/dev/null || true
-
           if [ -d "/Applications/Google Chrome.app" ]; then
             echo "CHROME_AVAILABLE=true" >> "$GITHUB_ENV"
           else
@@ -603,7 +565,7 @@ jobs:
           echo "============================================================"
           echo " Zero-Touch Downloader & Installer Active (macOS)"
           echo " Category  : $SOFTWARE_TYPE"
-          [ "$USE_PROXY" = "true" ] && echo " Mode      : Proxy-enabled (credentials embedded)" \
+          [ "$USE_PROXY" = "true" ] && echo " Mode      : Proxy-enabled" \
                                     || echo " Mode      : Direct (no proxy)"
           echo "============================================================"
 
@@ -612,77 +574,10 @@ jobs:
           TIMEOUT_SECS=360
 
           # ----------------------------------------------------------------
-          # Build proxy URL with embedded credentials
-          # (avoids Chrome auth dialog entirely)
-          # URL-encode '=' as '%3D' in the username field
-          # ----------------------------------------------------------------
-          if [ "$USE_PROXY" = "true" ]; then
-            PROXY_USER_ENC=$(echo "$PROXY_USER" | python3 -c \
-              "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip(), safe='.-_'))")
-            PROXY_PASS_ENC=$(echo "$PROXY_PASS" | python3 -c \
-              "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip(), safe='.-_'))")
-            PROXY_URL_WITH_CREDS="http://${PROXY_USER_ENC}:${PROXY_PASS_ENC}@residential-proxy.scrapeops.io:8181"
-            echo "Proxy URL (creds embedded): http://***:***@residential-proxy.scrapeops.io:8181"
-          fi
-
-          # ----------------------------------------------------------------
-          # 1. Write dialog dismisser (runs in background, auto-clicks Allow)
-          # ----------------------------------------------------------------
-          cat > /tmp/dialog_dismisser.sh << 'DISMISS_EOF'
-          #!/bin/bash
-          # Auto-click Allow/OK on any macOS system dialog that appears
-          DEADLINE=$(($(date +%s) + 400))
-          echo "[Dismisser] Started — will auto-allow system dialogs"
-
-          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-            # Auto-click "Allow" on any visible system dialog
-            osascript << 'ASEOF' 2>/dev/null
-          try
-            tell application "System Events"
-              set allProcs to every process whose visible is true
-              repeat with proc in allProcs
-                try
-                  set procName to name of proc
-                  tell proc
-                    repeat with w in every window
-                      try
-                        set btnNames to name of every button of w
-                        -- Click Allow if present
-                        if "Allow" is in btnNames then
-                          click button "Allow" of w
-                          log "[Dismisser] Clicked Allow in " & procName
-                        end if
-                        -- Click OK if present and no Allow
-                        if "OK" is in btnNames and "Allow" is not in btnNames then
-                          click button "OK" of w
-                          log "[Dismisser] Clicked OK in " & procName
-                        end if
-                        -- Dismiss "Don't Allow" situations by preferring Allow
-                        if "Don't Allow" is in btnNames and "Allow" is in btnNames then
-                          click button "Allow" of w
-                        end if
-                      end try
-                    end repeat
-                  end tell
-                end try
-              end repeat
-            end tell
-          end try
-          ASEOF
-            sleep 2
-          done
-          echo "[Dismisser] Exiting."
-          DISMISS_EOF
-          chmod +x /tmp/dialog_dismisser.sh
-          /tmp/dialog_dismisser.sh > /tmp/dismisser.log 2>&1 &
-          DISMISSER_PID=$!
-          echo "Dialog dismisser PID: $DISMISSER_PID"
-
-          # ----------------------------------------------------------------
-          # 2. Write Python UI automation handler
+          # 1. Write Python UI automation handler
           # ----------------------------------------------------------------
           cat > /tmp/macos_handler.py << 'PYEOF'
-          import time, sys, os, subprocess, random
+          import time, sys, os, subprocess, random, threading
 
           try:
               import atomacos
@@ -695,6 +590,13 @@ jobs:
               "Thanks for downloading Opera", "Thanks for downloadin",
               "Download | Thanks", "sudetyj", "clickWorker",
               "GET READY TO PLAY", "ready to install",
+          ]
+
+          # Popup button labels we auto-allow (local network, notifications, etc.)
+          # "Allow" is clicked ONLY for these known non-auth dialogs
+          AUTO_ALLOW_KEYWORDS = [
+              "local network", "local networks", "find devices",
+              "notifications", "incoming network connections",
           ]
 
           def run_as(script, silent=False):
@@ -716,77 +618,195 @@ jobs:
 
           def running_apps():
               r = run_as(
-                  'tell application "System Events" to get name of every process whose visible is true',
-                  silent=True)
+                  'tell application "System Events" to get name of every process '
+                  'whose visible is true', silent=True)
               return [n.strip() for n in r.split(",") if n.strip()]
 
-          def dismiss_all_system_dialogs():
-              """Click Allow/OK on any system permission dialog."""
-              run_as('''
-          try
-            tell application "System Events"
-              set allProcs to every process whose visible is true
-              repeat with proc in allProcs
+          # ------------------------------------------------------------------
+          # POPUP DISMISSER — clicks Allow on system permission dialogs ONLY
+          # (local network, incoming connections, etc.)
+          # Does NOT touch Chrome proxy auth dialog
+          # ------------------------------------------------------------------
+          def dismiss_system_popups():
+              """
+              Scans all visible processes for permission-style dialogs
+              and clicks Allow/OK — but NEVER touches Chrome proxy auth sheets.
+              """
+              script = r'''
+          tell application "System Events"
+            set popupClicked to ""
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc
+              -- Skip Chrome entirely; its auth sheet is handled separately
+              if pName is "Google Chrome" then
+              else
                 try
-                  tell proc
-                    repeat with w in every window
+                  repeat with win in (every window of proc)
+                    try
+                      set winDesc to ""
                       try
-                        set btnNames to name of every button of w
-                        if "Allow" is in btnNames then
-                          click button "Allow" of w
-                        else if "OK" is in btnNames then
-                          click button "OK" of w
-                        end if
+                        set winDesc to (description of win) as string
                       end try
-                    end repeat
-                  end tell
+                      set winTitle to ""
+                      try
+                        set winTitle to (title of win) as string
+                      end try
+                      set combinedText to (winDesc & " " & winTitle) as string
+
+                      -- Check for known permission dialog keywords
+                      if combinedText contains "local network" or ¬
+                         combinedText contains "Local Network" or ¬
+                         combinedText contains "find devices" or ¬
+                         combinedText contains "incoming network" or ¬
+                         combinedText contains "Incoming Network" then
+                        try
+                          click button "Allow" of win
+                          set popupClicked to "local_network_allowed"
+                        end try
+                      end if
+
+                      -- Generic: any floating dialog with both Allow/Don't Allow
+                      -- (but only if it's NOT an accessibility dialog)
+                      if combinedText does not contain "Accessibility" and ¬
+                         combinedText does not contain "accessibility" then
+                        try
+                          if (exists button "Allow" of win) and ¬
+                             (exists button "Don't Allow" of win) then
+                            click button "Allow" of win
+                            set popupClicked to "generic_allowed"
+                          end if
+                        end try
+                      end if
+
+                    end try
+                  end repeat
                 end try
-              end repeat
+              end if
+            end repeat
+            return popupClicked
+          end tell
+          '''
+              result = run_as(script, silent=True)
+              if result and result != "":
+                  print(f"[PopupDismisser] Dismissed: {result}")
+              return result
+
+          # ------------------------------------------------------------------
+          # PROXY AUTH FILLER — fills Chrome proxy auth sheet with keystroke
+          # (set value is unreliable; keystroke works)
+          # ------------------------------------------------------------------
+          def fill_proxy_auth(user, pwd):
+              """
+              Detects Chrome proxy auth sheet and fills username+password
+              using keystroke (reliable) instead of set value (unreliable).
+              """
+              # Step 1: Check if auth sheet exists in Chrome
+              check = run_as('''
+          tell application "System Events"
+            tell process "Google Chrome"
+              try
+                if exists sheet 1 of window 1 then
+                  -- Get text to confirm it's auth dialog, not something else
+                  set sheetTxt to ""
+                  try
+                    set sheetTxt to (value of static text 1 of sheet 1 of window 1) as string
+                  end try
+                  return "sheet:" & sheetTxt
+                end if
+              on error e
+                return "err:" & e
+              end try
+              return "none"
             end tell
-          end try''', silent=True)
+          end tell''', silent=True)
+
+              if not check or not check.startswith("sheet:"):
+                  return "no_sheet"
+
+              print(f"[ProxyAuth] Sheet detected: {check[:80]}")
+
+              # Step 2: Fill via keystroke
+              result = run_as(f'''
+          tell application "System Events"
+            tell process "Google Chrome"
+              try
+                set frontmost to true
+                delay 0.5
+                -- Click username field to focus it
+                try
+                  click text field 1 of sheet 1 of window 1
+                on error
+                  -- If click fails, tab into the sheet
+                  key code 48
+                end try
+                delay 0.4
+                -- Select all existing text and replace
+                keystroke "a" using command down
+                delay 0.1
+                keystroke "{user}"
+                delay 0.4
+                -- Tab to password field
+                key code 48
+                delay 0.4
+                -- Select all and type password
+                keystroke "a" using command down
+                delay 0.1
+                keystroke "{pwd}"
+                delay 0.3
+                -- Press Return to submit
+                key code 36
+                return "proxy_auth_filled"
+              on error e
+                return "err:" & e
+              end try
+            end tell
+          end tell''')
+
+              print(f"[ProxyAuth] Result: {result}")
+              return result
 
           def click_dl_button():
               return run_as('''
           tell application "System Events"
-              tell process "Google Chrome"
-                  try
-                      repeat with btn in (every button of window 1)
-                          set n to (name of btn) as string
-                          if n contains "Download" or n contains "download" then
-                              click btn
-                              return "clicked:" & n
-                          end if
-                      end repeat
-                  on error
-                  end try
-              end tell
+            tell process "Google Chrome"
+              try
+                repeat with btn in (every button of window 1)
+                  set n to (name of btn) as string
+                  if n contains "Download" or n contains "download" then
+                    click btn
+                    return "clicked:" & n
+                  end if
+                end repeat
+              on error
+              end try
+            end tell
           end tell''', silent=True)
 
           def accept_cookie():
               for b in ["Accept all","Accept All","Accept Cookies","Allow all","Accepter tout"]:
                   r = run_as(f'''
           tell application "System Events"
-              tell process "Google Chrome"
-                  try
-                      click button "{b}" of window 1
-                      return "clicked"
-                  on error
-                  end try
-              end tell
+            tell process "Google Chrome"
+              try
+                click button "{b}" of window 1
+                return "clicked"
+              on error
+              end try
+            end tell
           end tell''', silent=True)
                   if r == "clicked":
-                      print(f"[Chrome] Cookie: {b}")
+                      print(f"[Chrome] Cookie btn: {b}")
                       return True
               return False
 
           def is_done_page():
               title = run_as('''
           tell application "Google Chrome"
-              try
-                  return title of active tab of front window
-              on error
-                  return ""
-              end try
+            try
+              return title of active tab of front window
+            on error
+              return ""
+            end try
           end tell''', silent=True).lower()
               return any(f.lower() in title for f in DOWNLOAD_DONE_TITLES)
 
@@ -827,30 +847,39 @@ jobs:
 
           def handle(user, pwd, sw_type, use_proxy, timeout=360):
               t0 = time.time()
-              last_dl = last_cookie = last_dismiss = 0
-              wins_closed = setup_done = False
+              last_dl = last_cookie = last_popup_dismiss = 0
+              proxy_done = wins_closed = setup_done = False
+              proxy_fill_attempts = 0
               op_launch_t = None
               sentinel = "/tmp/download_done.flag"
 
               print(f"[Handler] Started. type={sw_type}, proxy={use_proxy}")
-              print(f"[Handler] Note: proxy auth handled via embedded URL credentials.")
-
               while time.time() - t0 < timeout:
                   try:
-                      # Always dismiss system dialogs every 3 seconds
-                      if time.time() - last_dismiss > 3:
-                          dismiss_all_system_dialogs()
-                          last_dismiss = time.time()
-
                       apps = running_apps()
                       chrome = "Google Chrome" in apps
                       op_gx  = any("Opera GX" in a for a in apps)
                       op_one = any("Opera" in a and "Opera GX" not in a for a in apps)
 
+                      # ---- Dismiss system popups every 2s ----
+                      if time.time() - last_popup_dismiss > 2:
+                          dismiss_system_popups()
+                          last_popup_dismiss = time.time()
+
+                      # ---- Proxy auth: fill Chrome sheet (up to 10 attempts) ----
+                      if use_proxy and chrome and not proxy_done and proxy_fill_attempts < 10:
+                          result = fill_proxy_auth(user, pwd)
+                          proxy_fill_attempts += 1
+                          if result == "proxy_auth_filled":
+                              proxy_done = True
+                              print("[Handler] Proxy auth completed successfully.")
+
+                      # ---- Cookie banner ----
                       if chrome and time.time() - last_cookie > 10:
                           if accept_cookie():
                               last_cookie = time.time()
 
+                      # ---- Download button ----
                       if chrome and sw_type in ["opera_gx","opera_one","dynamic_opera","ad_mvn"]:
                           if time.time() - last_dl > 5:
                               r = click_dl_button()
@@ -858,6 +887,7 @@ jobs:
                                   last_dl = time.time()
                                   print(f"[Handler] DL btn: {r}")
 
+                      # ---- Close Chrome on download complete ----
                       if not wins_closed and os.path.exists(sentinel):
                           print("[CloseWindow] Sentinel — cleaning up Chrome pages...")
                           for a in range(1, 5):
@@ -867,6 +897,7 @@ jobs:
                                   print(f"[CloseWindow] Clear on #{a}"); break
                           wins_closed = True
 
+                      # ---- Opera GX setup ----
                       if sw_type in ["opera_gx","dynamic_opera","ad_mvn"] and op_gx and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
@@ -875,6 +906,7 @@ jobs:
                           if time.time() - op_launch_t > 15:
                               opera_gx_flow(); setup_done = True
 
+                      # ---- Opera One setup ----
                       if sw_type == "opera_one" and op_one and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
@@ -896,26 +928,85 @@ jobs:
           PYEOF
 
           # ----------------------------------------------------------------
-          # 3. TCC — grant Accessibility to osascript & System Events
+          # 2. Pre-grant TCC for osascript / Terminal / systemevents
           # ----------------------------------------------------------------
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
-          sudo sqlite3 "$TCC_DB" \
-            "INSERT OR REPLACE INTO access \
-             VALUES('kTCCServiceAccessibility','com.apple.Terminal',\
-             0,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,1687786800);" 2>/dev/null || true
-          sudo sqlite3 "$TCC_DB" \
-            "INSERT OR REPLACE INTO access \
-             (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
-             VALUES('kTCCServiceAccessibility','/usr/bin/osascript',1,2,4,1,0);" \
-            2>/dev/null || true
-          sudo sqlite3 "$TCC_DB" \
-            "INSERT OR REPLACE INTO access \
-             (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
-             VALUES('kTCCServiceAccessibility','com.apple.systemevents',0,2,4,1,0);" \
-            2>/dev/null || true
+
+          grant_tcc() {
+            sudo sqlite3 "$TCC_DB" \
+              "INSERT OR REPLACE INTO access \
+               (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
+               VALUES('$1','$2',$3,2,4,1,0);" 2>/dev/null || true
+          }
+
+          grant_tcc kTCCServiceAccessibility com.apple.Terminal          0
+          grant_tcc kTCCServiceAccessibility com.apple.systemevents      0
+          grant_tcc kTCCServiceAccessibility com.google.Chrome           0
+          grant_tcc kTCCServiceAccessibility /usr/bin/osascript          1
+          grant_tcc kTCCServiceLocalNetwork  com.google.Chrome           0
+          grant_tcc kTCCServiceLocalNetwork  com.apple.Terminal          0
+          grant_tcc kTCCServiceLocalNetwork  /usr/bin/osascript          1
 
           # ----------------------------------------------------------------
-          # 4. Start UI handler in background
+          # 3. Background AppleScript popup dismisser (bash level, belt+suspenders)
+          # ----------------------------------------------------------------
+          cat > /tmp/popup_dismisser.sh << 'DISMISSEOF'
+          #!/bin/bash
+          # Runs every 2s, clicks Allow on any local-network / system permission dialog.
+          # NEVER touches Google Chrome (proxy auth is handled by Python handler).
+          while true; do
+            osascript << 'ASEOF' 2>/dev/null || true
+          tell application "System Events"
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName is not "Google Chrome" then
+                try
+                  repeat with win in (every window of proc)
+                    try
+                      set wTitle to title of win as string
+                    on error
+                      set wTitle to ""
+                    end try
+                    try
+                      set wDesc to description of win as string
+                    on error
+                      set wDesc to ""
+                    end try
+                    set combined to wTitle & " " & wDesc
+                    if combined contains "local network" or ¬
+                       combined contains "Local Network" or ¬
+                       combined contains "find devices" or ¬
+                       combined contains "incoming network" or ¬
+                       combined contains "Incoming Network" then
+                      try
+                        click button "Allow" of win
+                      end try
+                    end if
+                    -- Generic Allow/Don't Allow dialog (not accessibility)
+                    if combined does not contain "Accessibility" then
+                      try
+                        if (exists button "Allow" of win) and (exists button "Don't Allow" of win) then
+                          click button "Allow" of win
+                        end if
+                      end try
+                    end if
+                  end repeat
+                end try
+              end if
+            end repeat
+          end tell
+          ASEOF
+            sleep 2
+          done
+          DISMISSEOF
+          chmod +x /tmp/popup_dismisser.sh
+
+          /tmp/popup_dismisser.sh > /tmp/popup_dismisser.log 2>&1 &
+          DISMISSER_PID=$!
+          echo "Popup dismisser PID: $DISMISSER_PID"
+
+          # ----------------------------------------------------------------
+          # 4. Start Python UI handler in background
           # ----------------------------------------------------------------
           HANDLER_PYTHON="${UIENV_PYTHON:-python3}"
           echo "Starting UI handler ($HANDLER_PYTHON)..."
@@ -1044,30 +1135,36 @@ jobs:
           echo "Watcher PID: $WATCHER_PID"
 
           # ----------------------------------------------------------------
-          # 6. Launch Chrome with proxy credentials embedded in URL
+          # 6. Launch Chrome with popup-suppression flags
           # ----------------------------------------------------------------
           touch /tmp/watcher_start_marker
           CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
+          # Common flags to suppress Chrome's own permission/UI popups
           CHROME_FLAGS=(
             --no-first-run
             --no-default-browser-check
             --disable-sync
-            --disable-extensions-except=
+            --disable-translate
+            --disable-infobars
+            --disable-notifications
+            --disable-background-networking
+            --disable-client-side-phishing-detection
             --safebrowsing-disable-download-protection
-            --disable-features=SafeBrowsingEnhancedProtection
-            --disable-features=PrivacySandboxSettings4
-            --no-service-autorun
+            --disable-features=SafeBrowsingEnhancedProtection,MediaRouter,DialMediaRouteProvider
+            --disable-extensions
+            --disable-default-apps
             --password-store=basic
             --use-mock-keychain
           )
 
           if [ "$USE_PROXY" = "true" ]; then
-            echo "Launching Chrome WITH embedded-credential proxy -> $TARGET_URL"
+            PROXY_SRV="residential-proxy.scrapeops.io:8181"
+            echo "Launching Chrome WITH proxy -> $TARGET_URL"
             if [ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
                 "${CHROME_FLAGS[@]}" \
-                --proxy-server="$PROXY_URL_WITH_CREDS" \
+                --proxy-server="http://$PROXY_SRV" \
                 "$TARGET_URL" &
             else
               echo "ERROR: Chrome required for proxy mode but not found."; exit 1
