@@ -1,0 +1,394 @@
+name: Apify Actors Scraper
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  FILE: main_apify_actors.yml                                                 ║
+# ║                                                                              ║
+# ║  SECRETS REQUIRED (repo → Settings → Secrets and variables → Actions):     ║
+# ║    GH_PAT  — Personal Access Token with full `repo` scope                  ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+on:
+  workflow_dispatch:
+    inputs:
+
+      software_category:
+        description: "① Software category"
+        required: true
+        default: "AVG"
+        type: choice
+        options:
+          - "AVG"
+          - "Opera-One"
+          - "OperaGX"
+          - "Ad-Maven"
+
+      affiliate_link:
+        description: "② Affiliate link (must match category above)"
+        required: true
+        default: "AVG » Trader"
+        type: choice
+        options:
+          - "AVG » Trader"
+          - "AVG » MlzYT"
+          - "AVG » F.ahmad"
+          - "AVG » B4Books"
+          - "Opera-One » Esmeel"
+          - "Opera-One » Harrari"
+          - "Opera-One » Chloe"
+          - "Opera-One » Daisy"
+          - "Opera-One » Jimmy"
+          - "OperaGX » B4Books"
+          - "OperaGX » Techx"
+          - "OperaGX » Fatradez"
+          - "OperaGX » James"
+          - "OperaGX » Oliver"
+          - "OperaGX » Mahal"
+          - "Ad-Maven » Techx"
+          - "Ad-Maven » B4Books"
+          - "Ad-Maven » Orderflowz"
+          - "Ad-Maven » A2Z"
+
+      apify_api_token:
+        description: "🔑 Apify API Token (Starts with apify_api_...)"
+        required: true
+        type: string
+
+      apify_actor:
+        description: "🤖 Select Apify Actor to run"
+        required: true
+        default: "apify/screenshot-url (Best for Screenshots)"
+        type: choice
+        options:
+          - "apify/screenshot-url (Best for Screenshots)"
+          - "apify/web-scraper (Best for Raw HTML)"
+
+      country:
+        description: "🌍 Geo-target country"
+        required: true
+        default: "us — United States"
+        type: choice
+        options:
+          - "auto — No preference"
+          - "us — United States"
+          - "gb — United Kingdom"
+          - "ca — Canada"
+          - "de — Germany"
+          - "fr — France"
+          - "it — Italy"
+          - "es — Spain"
+          - "br — Brazil"
+          - "in — India"
+          - "jp — Japan"
+
+      num_requests:
+        description: "🔢 Number of runs (1–50)"
+        required: true
+        default: "1"
+        type: string
+
+      proxy_type:
+        description: "🔀 Proxy type"
+        required: true
+        default: "datacenter"
+        type: choice
+        options:
+          - "datacenter"
+          - "residential"
+
+jobs:
+  scrape:
+    name: "[${{ inputs.software_category }}] ${{ inputs.affiliate_link }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          # Install official Apify Python Client
+          pip install requests apify-client
+
+      - name: Validate inputs & resolve URL
+        id: resolve
+        env:
+          CATEGORY:     "${{ inputs.software_category }}"
+          LINK_KEY:     "${{ inputs.affiliate_link }}"
+          NUM_REQUESTS: "${{ inputs.num_requests }}"
+        run: |
+          python3 - <<'PYEOF'
+          import os, sys
+
+          CATEGORY     = os.environ["CATEGORY"].strip()
+          LINK_KEY     = os.environ["LINK_KEY"].strip()
+          NUM_REQUESTS = os.environ["NUM_REQUESTS"].strip()
+
+          if not NUM_REQUESTS.isdigit() or not (1 <= int(NUM_REQUESTS) <= 50):
+              print(f"::error::num_requests must be an integer between 1 and 50.")
+              sys.exit(1)
+
+          LINK_MAP = {
+              "AVG » Trader":              "https://u.to/a-trdr/xDh4Ig",
+              "AVG » MlzYT":               "https://u.to/a-mlz/Agt3Ig",
+              "AVG » F.ahmad":             "https://u.to/a-fah/4Qp3Ig",
+              "AVG » B4Books":             "https://u.to/a-b4b/7wp3Ig",
+              "Opera-One » Esmeel":        "https://u.to/esmlxopo/cTOGIg",
+              "Opera-One » Harrari":       "https://u.to/hararixopo/zTOGIg",
+              "Opera-One » Chloe":         "https://u.to/chloexopo/_DOGIg",
+              "Opera-One » Daisy":         "https://u.to/daisyxopo/LjSGIg",
+              "Opera-One » Jimmy":         "https://u.to/jmy/mUZ4Ig",
+              "OperaGX » B4Books":         "https://u.to/opx-b4b/2nh4Ig",
+              "OperaGX » Techx":           "https://u.to/techxsm/xVyFIg",
+              "OperaGX » Fatradez":        "https://u.to/fatradezsm/cF2FIg",
+              "OperaGX » James":           "https://u.to/jamesxsm/eV2FIg",
+              "OperaGX » Oliver":          "https://u.to/oliverxsm/f12FIg",
+              "OperaGX » Mahal":           "https://u.to/mahalxsm/iF2FIg",
+              "Ad-Maven » Techx":          "https://u.to/techxadmvnxsmrt/gvd7Ig",
+              "Ad-Maven » B4Books":        "https://u.to/b4bxadmvnxsmrt/5-h7Ig",
+              "Ad-Maven » Orderflowz":     "https://u.to/ordrflzadmvnxsmrt/-fZ7Ig",
+              "Ad-Maven » A2Z":            "https://u.to/a2zadmvnxsmrt/Y-t7Ig",
+          }
+
+          if LINK_KEY not in LINK_MAP:
+              print(f"::error::Link key '{LINK_KEY}' not found in LINK_MAP.")
+              sys.exit(1)
+
+          target_url = LINK_MAP[LINK_KEY]
+          print(f"✅ Target URL: {target_url}")
+
+          gh_out = os.environ.get("GITHUB_OUTPUT", "_tmp_out.txt")
+          with open(gh_out, "a") as f:
+              f.write(f"target_url={target_url}\n")
+          PYEOF
+
+      - name: Trigger Apify Actor Runs
+        id: scraper
+        env:
+          TARGET_URL:      "${{ steps.resolve.outputs.target_url }}"
+          APIFY_TOKEN:     "${{ inputs.apify_api_token }}"
+          COUNTRY_RAW:     "${{ inputs.country }}"
+          NUM_REQUESTS:    "${{ inputs.num_requests }}"
+          PROXY_TYPE:      "${{ inputs.proxy_type }}"
+          APIFY_ACTOR:     "${{ inputs.apify_actor }}"
+          LINK_KEY:        "${{ inputs.affiliate_link }}"
+          CATEGORY:        "${{ inputs.software_category }}"
+        run: |
+          python3 - <<'PYEOF'
+          import os, sys, json, requests
+          from apify_client import ApifyClient
+
+          TARGET_URL      = os.environ["TARGET_URL"].strip()
+          APIFY_TOKEN     = os.environ["APIFY_TOKEN"].strip()
+          COUNTRY_RAW     = os.environ["COUNTRY_RAW"].strip()
+          NUM_REQUESTS    = int(os.environ["NUM_REQUESTS"])
+          PROXY_TYPE      = os.environ["PROXY_TYPE"].strip()
+          LINK_KEY        = os.environ["LINK_KEY"].strip()
+          CATEGORY        = os.environ["CATEGORY"].strip()
+          
+          # Clean the dropdown string to get just the actor name (e.g. "apify/web-scraper")
+          ACTOR_ID = os.environ["APIFY_ACTOR"].split(" ")[0].strip()
+
+          # Parse ISO 2-letter country code
+          country_part = COUNTRY_RAW.split("—")[0].strip().upper()
+          country_code = "" if country_part == "AUTO" else country_part
+
+          os.makedirs("results", exist_ok=True)
+          os.makedirs("screenshots", exist_ok=True)
+
+          # Initialize the Apify SDK
+          client = ApifyClient(APIFY_TOKEN)
+          summary =[]
+
+          print(f"\n{'═'*65}")
+          print(f"  Apify Cloud Actors Integration")
+          print(f"{'═'*65}")
+          print(f"  Actor         : {ACTOR_ID}")
+          print(f"  Target URL    : {TARGET_URL}")
+          print(f"  Requests      : {NUM_REQUESTS}")
+          print(f"  Proxy type    : {PROXY_TYPE}")
+          print(f"  Country       : {country_code or 'AUTO'}")
+          print(f"{'═'*65}\n")
+
+          # We loop and trigger runs sequentially. Each run naturally pulls a 
+          # fresh proxy IP based on your configuration.
+          for i in range(NUM_REQUESTS):
+              req_num = i + 1
+              print(f"\n── Run {req_num}/{NUM_REQUESTS} {'─'*47}")
+              
+              rec = {
+                  "request": req_num,
+                  "actor": ACTOR_ID,
+                  "category": CATEGORY,
+                  "link_key": LINK_KEY,
+                  "target_url": TARGET_URL,
+                  "status": "FAILED",
+                  "screenshot_saved": False
+              }
+
+              # Common Proxy Configuration for Apify Actors
+              proxy_config = {"useApifyProxy": True}
+              if PROXY_TYPE == "residential":
+                  proxy_config["apifyProxyGroups"] = ["RESIDENTIAL"]
+              if country_code:
+                  proxy_config["apifyProxyCountry"] = country_code
+
+              try:
+                  if ACTOR_ID == "apify/screenshot-url":
+                      run_input = {
+                          "url": TARGET_URL,
+                          "proxyConfiguration": proxy_config
+                      }
+                      
+                      print(f"  🚀 Calling {ACTOR_ID} (waiting for cloud execution...)")
+                      run = client.actor(ACTOR_ID).call(run_input=run_input)
+                      
+                      # Fetch results from the Actor's Dataset
+                      dataset_id = run["defaultDatasetId"]
+                      items = list(client.dataset(dataset_id).iterate_items())
+                      
+                      if items and "screenshotUrl" in items[0]:
+                          screenshot_url = items[0]["screenshotUrl"]
+                          print(f"  📥 Result ready! Downloading PNG from Apify KVS...")
+                          
+                          img_resp = requests.get(screenshot_url, timeout=60)
+                          if img_resp.status_code == 200:
+                              png_path = f"screenshots/screenshot_{req_num:03d}.png"
+                              with open(png_path, "wb") as f:
+                                  f.write(img_resp.content)
+                              rec["screenshot_saved"] = True
+                              rec["screenshot_path"] = png_path
+                              rec["status"] = "200"
+                              print(f"  ✅ Screenshot saved → {png_path}")
+                          else:
+                              print(f"  ❌ Download failed (HTTP {img_resp.status_code})")
+                      else:
+                          print("  ❌ No screenshot URL returned in Dataset.")
+
+                  elif ACTOR_ID == "apify/web-scraper":
+                      # Web Scraper requires a Javascript 'pageFunction' to tell it what to scrape.
+                      # We inject standard JS to grab the fully rendered HTML of the DOM.
+                      page_func = """async function pageFunction(context) { 
+                          return { html: document.documentElement.outerHTML }; 
+                      }"""
+                      
+                      run_input = {
+                          "startUrls": [{"url": TARGET_URL}],
+                          "pageFunction": page_func,
+                          "proxyConfiguration": proxy_config
+                      }
+                      
+                      print(f"  🚀 Calling {ACTOR_ID} (waiting for cloud execution...)")
+                      run = client.actor(ACTOR_ID).call(run_input=run_input)
+                      
+                      dataset_id = run["defaultDatasetId"]
+                      items = list(client.dataset(dataset_id).iterate_items())
+                      
+                      if items and "html" in items[0]:
+                          html_content = items[0]["html"]
+                          html_path = f"results/response_{req_num:03d}.html"
+                          with open(html_path, "w", encoding="utf-8") as f:
+                              f.write(html_content)
+                          rec["status"] = "200"
+                          print(f"  ✅ HTML saved → {html_path} ({len(html_content)} bytes)")
+                      else:
+                          print("  ❌ No HTML data returned in Dataset.")
+
+              except Exception as e:
+                  print(f"  ⚠️ Error calling Actor API: {e}")
+              
+              summary.append(rec)
+              
+          # Save summary json
+          with open("results/summary.json", "w") as fh:
+              json.dump(summary, fh, indent=2)
+
+          passed = sum(1 for r in summary if r["status"] == "200")
+          failed = len(summary) - passed
+          ss_ok  = sum(1 for r in summary if r["screenshot_saved"])
+
+          print(f"\n  RESULTS: ✅ Succeeded: {passed} | ❌ Failed: {failed} | 📸 Screenshots: {ss_ok}\n")
+
+          # Export to GH env
+          gh_out = os.environ.get("GITHUB_OUTPUT", "_tmp_out.txt")
+          with open(gh_out, "a") as f:
+              f.write(f"passed={passed}\n")
+              f.write(f"failed={failed}\n")
+              f.write(f"screenshots_taken={ss_ok}\n")
+
+          if failed > 0:
+              sys.exit(1)
+          PYEOF
+
+      - name: Build screenshot HTML viewer
+        if: contains(inputs.apify_actor, 'screenshot')
+        run: |
+          python3 - <<'PYEOF'
+          import os, base64, glob, json
+          pngs = sorted(glob.glob("screenshots/screenshot_???.png"))
+          if not pngs: exit(0)
+          
+          summary = json.load(open("results/summary.json")) if os.path.exists("results/summary.json") else []
+          link_key = summary[0].get("link_key", "N/A") if summary else "N/A"
+
+          cards = ""
+          for png in pngs:
+              name = os.path.basename(png)
+              b64 = base64.b64encode(open(png, "rb").read()).decode()
+              cards += f"""<div style="margin-bottom:20px;border:1px solid #ccc;padding:10px;">
+                <h3>{name}</h3><img src="data:image/png;base64,{b64}" style="max-width:100%;">
+              </div>"""
+
+          html = f"<html><body><h1>Screenshots — {link_key}</h1>{cards}</body></html>"
+          with open("screenshots/screenshots_viewer.html", "w") as fh: fh.write(html)
+          PYEOF
+
+      - name: "📦 Upload: HTML results"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: "html-results-run-${{ github.run_number }}"
+          path: results/
+          retention-days: 30
+
+      - name: "📦 Upload: Raw PNG screenshots"
+        if: contains(inputs.apify_actor, 'screenshot')
+        uses: actions/upload-artifact@v4
+        with:
+          name: "screenshots-run-${{ github.run_number }}"
+          path: "screenshots/screenshot_*.png"
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: "📦 Upload: Screenshot viewer (HTML)"
+        if: contains(inputs.apify_actor, 'screenshot')
+        uses: actions/upload-artifact@v4
+        with:
+          name: "screenshot-viewer-run-${{ github.run_number }}"
+          path: "screenshots/screenshots_viewer.html"
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Write job summary
+        if: always()
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << SUMMARY
+          ## 🤖 Apify Actors — Run #${{ github.run_number }}
+          | Setting | Value |
+          |---------|-------|
+          | 🤖 Actor Used | ${{ inputs.apify_actor }} |
+          | 🔗 Link | ${{ inputs.affiliate_link }} |
+          | 🔢 Requests | ${{ inputs.num_requests }} |
+          | 🌍 Country | ${{ inputs.country }} |
+          | 🔀 Proxy Type | ${{ inputs.proxy_type }} |
+          | ✅ Passed | ${{ steps.scraper.outputs.passed }} |
+          | ❌ Failed | ${{ steps.scraper.outputs.failed }} |
+          | 📸 Screenshots saved | ${{ steps.scraper.outputs.screenshots_taken }} |
+          SUMMARY
