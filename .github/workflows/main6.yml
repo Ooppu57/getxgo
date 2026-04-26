@@ -347,7 +347,6 @@ jobs:
             echo "Installing Homebrew..."
             NONINTERACTIVE=1 /bin/bash -c \
               "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
-            # FIX: added space between 'if' and '['
             for bp in /opt/homebrew/bin /usr/local/bin; do
               if [ -x "$bp/brew" ]; then
                 export PATH="$bp:$PATH"
@@ -361,12 +360,12 @@ jobs:
           echo "All dependencies installed."
 
       # ================================================================== #
-      # STEP 3 — Pre-Grant ALL TCC permissions upfront                     #
+      # STEP 3 — Pre-Grant ALL TCC permissions upfront (CLI-first)         #
       # ================================================================== #
-      - name: Pre-Grant TCC Permissions (Accessibility + LocalNetwork + Screen)
+      - name: Pre-Grant TCC Permissions (CLI-first, comprehensive)
         shell: bash
         run: |
-          echo "=== Pre-Granting TCC Permissions ==="
+          echo "=== Pre-Granting TCC Permissions via SQLite (CLI) ==="
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
 
           grant_tcc() {
@@ -390,8 +389,15 @@ jobs:
           # ---- Screen Recording ----
           grant_tcc kTCCServiceScreenCapture com.google.Chrome           0
           grant_tcc kTCCServiceScreenCapture com.apple.Terminal          0
+          # Getscreen bundle IDs (all known variants)
+          grant_tcc kTCCServiceScreenCapture me.getscreen.agent          0
+          grant_tcc kTCCServiceScreenCapture com.getscreen.agent         0
+          grant_tcc kTCCServiceScreenCapture com.getscreen.mac           0
+          grant_tcc kTCCServiceScreenCapture me.getscreen.mac            0
+          grant_tcc kTCCServiceScreenCapture me.getscreen.desktop        0
+          grant_tcc kTCCServiceScreenCapture com.getscreen.desktop       0
 
-          # ---- Local Network ----
+          # ---- Local Network (hosted-compute runner + getscreen + chrome) ----
           grant_tcc kTCCServiceLocalNetwork  com.google.Chrome           0
           grant_tcc kTCCServiceLocalNetwork  com.apple.Terminal          0
           grant_tcc kTCCServiceLocalNetwork  /usr/bin/osascript          1
@@ -399,12 +405,38 @@ jobs:
           grant_tcc kTCCServiceLocalNetwork  com.getscreen.agent         0
           grant_tcc kTCCServiceLocalNetwork  com.getscreen.mac           0
           grant_tcc kTCCServiceLocalNetwork  me.getscreen.mac            0
+          grant_tcc kTCCServiceLocalNetwork  me.getscreen.desktop        0
+          grant_tcc kTCCServiceLocalNetwork  com.getscreen.desktop       0
+
+          # ---- Dynamically find and grant GitHub runner processes ----
+          echo "--- Scanning for GitHub runner process paths ---"
+          for RUNNER_DIR in /Users/runner /home/runner /opt/hostedtoolcache; do
+            if [ -d "$RUNNER_DIR" ]; then
+              for BIN_NAME in Runner.Worker Runner.Listener Runner.PluginHost run.sh; do
+                FOUND_PATH=$(find "$RUNNER_DIR" -name "$BIN_NAME" -maxdepth 6 2>/dev/null | head -1)
+                if [ -n "$FOUND_PATH" ]; then
+                  echo "Granting LocalNetwork TCC to runner binary: $FOUND_PATH"
+                  grant_tcc kTCCServiceLocalNetwork "$FOUND_PATH" 1
+                  grant_tcc kTCCServiceScreenCapture "$FOUND_PATH" 1
+                fi
+              done
+            fi
+          done
+
+          # Grant to currently running processes that include "runner" or "hosted" in path
+          ps aux 2>/dev/null | awk '{print $11}' | grep -iE "(runner|hosted|compute)" | sort -u | while read -r PROC_PATH; do
+            if [ -x "$PROC_PATH" ]; then
+              echo "Granting TCC to live process: $PROC_PATH"
+              grant_tcc kTCCServiceLocalNetwork  "$PROC_PATH" 1
+              grant_tcc kTCCServiceScreenCapture "$PROC_PATH" 1
+            fi
+          done
 
           # ---- Camera / Microphone ----
           grant_tcc kTCCServiceCamera        com.google.Chrome           0
           grant_tcc kTCCServiceMicrophone    com.google.Chrome           0
 
-          echo "All TCC permissions pre-granted."
+          echo "All TCC permissions pre-granted via CLI."
 
           sudo defaults write /Library/Preferences/com.apple.security \
             "SecAssessmentDisableUserApproval" -bool true 2>/dev/null || true
@@ -441,13 +473,11 @@ jobs:
           RETRY=0
           SUCCESS=false
 
-          # FIX: added space between 'while' and '['
           while [ $RETRY -lt $MAX_RETRIES ]; do
             curl -L -o getscreen.dmg "https://getscreen.me/download/getscreen.dmg" \
               --retry 3 --retry-delay 5 --silent --show-error
             FILE_SIZE=$(stat -f%z getscreen.dmg 2>/dev/null || \
                         stat -c%s getscreen.dmg 2>/dev/null || echo 0)
-            # FIX: added space between ']' and '&&' and '['
             if [ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
               SUCCESS=true
               break
@@ -496,18 +526,27 @@ jobs:
             echo "WARNING: Bundle ID not found — skipping TCC injection."
           fi
 
+          # Also grant by executable path (covers path-based TCC checks)
           EXEC_NAME=$(defaults read \
             "/Applications/$APP_NAME/Contents/Info.plist" \
             CFBundleExecutable 2>/dev/null || echo "")
           EXEC_PATH="/Applications/$APP_NAME/Contents/MacOS/$EXEC_NAME"
 
-          # FIX: added space between 'if' and '['
           if [ ! -x "$EXEC_PATH" ]; then
             EXEC_PATH=$(find "/Applications/$APP_NAME/Contents/MacOS" \
               -maxdepth 1 -type f -perm +111 2>/dev/null | head -1)
           fi
 
-          # FIX: added space between ']' and '||' and '['
+          if [ -n "$EXEC_PATH" ] && [ -x "$EXEC_PATH" ]; then
+            for SVC in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServiceLocalNetwork; do
+              sudo sqlite3 "$TCC_DB" \
+                "INSERT OR REPLACE INTO access \
+                 (service, client, client_type, auth_value, auth_reason, auth_version, flags) \
+                 VALUES ('$SVC', '$EXEC_PATH', 1, 2, 4, 1, 0);" 2>/dev/null || true
+            done
+            echo "TCC path-based permissions granted for $EXEC_PATH"
+          fi
+
           if [ -z "$EXEC_PATH" ] || [ ! -x "$EXEC_PATH" ]; then
             echo "ERROR: Getscreen executable not found. Skipping registration."
             exit 0
@@ -527,6 +566,142 @@ jobs:
           echo "Getscreen.me registered as '$DEVICE_NAME' and started successfully."
 
       # ================================================================== #
+      # STEP 4.5 — Aggressively dismiss Getscreen + LocalNet popups EARLY  #
+      # Must run BEFORE Chrome so proxy auth isn't blocked by these popups  #
+      # ================================================================== #
+      - name: Pre-Dismiss Getscreen & LocalNetwork Popups (CLI + GUI)
+        shell: bash
+        run: |
+          echo "=== Pre-dismissing known system popups via CLI + GUI ==="
+          TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
+
+          # ---- CLI pass: re-scan all running processes and grant TCC ----
+          echo "--- CLI: Re-scanning live processes for LocalNetwork/ScreenCapture ---"
+          ps aux 2>/dev/null | awk '{print $11}' | sort -u | while read -r PROC_PATH; do
+            if echo "$PROC_PATH" | grep -qiE "(getscreen|runner|hosted|compute|agent)"; then
+              if [ -x "$PROC_PATH" ]; then
+                echo "  Granting TCC to: $PROC_PATH"
+                sudo sqlite3 "$TCC_DB" \
+                  "INSERT OR REPLACE INTO access (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
+                   VALUES('kTCCServiceLocalNetwork','$PROC_PATH',1,2,4,1,0);" 2>/dev/null || true
+                sudo sqlite3 "$TCC_DB" \
+                  "INSERT OR REPLACE INTO access (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
+                   VALUES('kTCCServiceScreenCapture','$PROC_PATH',1,2,4,1,0);" 2>/dev/null || true
+              fi
+            fi
+          done
+
+          # ---- GUI pass: AppleScript to click Allow on specific dialogs ----
+          echo "--- GUI: Running AppleScript popup dismisser for 20 seconds ---"
+          cat > /tmp/early_popup_dismiss.applescript << 'ASEOF'
+          set maxRuns to 40
+          set runCount to 0
+          repeat while runCount < maxRuns
+            set runCount to runCount + 1
+            try
+              tell application "System Events"
+                -- -------------------------------------------------------
+                -- 1. Handle Getscreen.me's OWN permission request dialog
+                --    (the blue "Allow" button in their custom UI window)
+                -- -------------------------------------------------------
+                repeat with proc in (every process whose visible is true)
+                  set pName to name of proc as string
+                  if pName contains "getscreen" or pName contains "Getscreen" then
+                    try
+                      repeat with win in (every window of proc)
+                        try
+                          if exists button "Allow" of win then
+                            click button "Allow" of win
+                            log "Clicked Allow in Getscreen window"
+                          end if
+                        end try
+                      end repeat
+                    end try
+                  end if
+                end repeat
+
+                -- -------------------------------------------------------
+                -- 2. Handle macOS system TCC dialogs (LocalNetwork, Screen)
+                --    These appear as sheets or windows on various processes
+                -- -------------------------------------------------------
+                repeat with proc in (every process whose visible is true)
+                  set pName to name of proc as string
+                  -- Skip Chrome (proxy auth is inside Chrome — don't touch it)
+                  if pName is not "Google Chrome" then
+                    try
+                      repeat with win in (every window of proc)
+                        set winHandled to false
+                        set winTitle to ""
+                        set winDesc to ""
+                        try
+                          set winTitle to (title of win) as string
+                        end try
+                        try
+                          set winDesc to (description of win) as string
+                        end try
+                        set combinedText to (winTitle & " " & winDesc) as string
+
+                        -- Target: "hosted-compute" local network popup
+                        if combinedText contains "local network" or \
+                           combinedText contains "Local Network" or \
+                           combinedText contains "hosted-compute" or \
+                           combinedText contains "find devices" or \
+                           combinedText contains "discover" then
+                          try
+                            click button "Allow" of win
+                            set winHandled to true
+                            log "Clicked Allow on LocalNetwork dialog in: " & pName
+                          end try
+                        end if
+
+                        -- Target: Getscreen screen-recording / bypass dialog
+                        if combinedText contains "Getscreen" or \
+                           combinedText contains "getscreen" or \
+                           combinedText contains "screen and audio" or \
+                           combinedText contains "bypass the system" or \
+                           combinedText contains "window picker" then
+                          try
+                            click button "Allow" of win
+                            set winHandled to true
+                            log "Clicked Allow on Getscreen screen-recording dialog"
+                          end try
+                        end if
+
+                        -- Target: generic "Allow" / "Don't Allow" pair
+                        --         (catches any remaining system permission dialogs)
+                        --         EXCLUDING accessibility dialogs (those need manual action)
+                        if not winHandled then
+                          if combinedText does not contain "Accessibility" and \
+                             combinedText does not contain "accessibility" then
+                            try
+                              if (exists button "Allow" of win) and \
+                                 (exists button "Don't Allow" of win) then
+                                click button "Allow" of win
+                                log "Clicked Allow on generic dialog in: " & pName
+                              end if
+                            end try
+                          end if
+                        end if
+                      end repeat
+                    end try
+                  end if
+                end repeat
+              end tell
+            end try
+            delay 0.5
+          end repeat
+          ASEOF
+
+          osascript /tmp/early_popup_dismiss.applescript > /tmp/early_dismiss.log 2>&1 &
+          EARLY_DISMISS_PID=$!
+          echo "Early popup dismisser PID: $EARLY_DISMISS_PID (running 20s)"
+
+          # Wait for it to finish (40 iterations × 0.5s = 20 seconds)
+          wait $EARLY_DISMISS_PID 2>/dev/null || true
+          echo "Early popup dismisser complete."
+          cat /tmp/early_dismiss.log 2>/dev/null | grep -i "clicked" || true
+
+      # ================================================================== #
       # STEP 5 — Google Chrome                                              #
       # ================================================================== #
       - name: Install Google Chrome (Proxy-capable Browser)
@@ -544,11 +719,9 @@ jobs:
 
           FILE_SIZE=$(stat -f%z "$CHROME_DMG" 2>/dev/null || echo 0)
 
-          # FIX: added space between 'if' and '['
           if [ -f "$CHROME_DMG" ] && [ "$FILE_SIZE" -gt 1000000 ]; then
             hdiutil attach "$CHROME_DMG" -quiet -nobrowse \
               -mountpoint /Volumes/GoogleChrome || true
-            # FIX: added space between 'if' and '['
             if [ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
               sudo cp -R "/Volumes/GoogleChrome/Google Chrome.app" /Applications/ || true
               sudo xattr -dr com.apple.quarantine \
@@ -563,7 +736,6 @@ jobs:
             echo "WARNING: Chrome DMG download failed ($FILE_SIZE B)."
           fi
 
-          # FIX: added space between 'if' and '['
           if [ -d "/Applications/Google Chrome.app" ]; then
             echo "CHROME_AVAILABLE=true" >> "$GITHUB_ENV"
           else
@@ -587,7 +759,6 @@ jobs:
           echo "============================================================"
           echo " Zero-Touch Downloader & Installer Active (macOS)"
           echo " Category  : $SOFTWARE_TYPE"
-          # FIX: separated echo from conditional onto its own line
           if [ "$USE_PROXY" = "true" ]; then
             echo " Mode      : Proxy-enabled"
           else
@@ -618,9 +789,18 @@ jobs:
               "GET READY TO PLAY", "ready to install",
           ]
 
-          AUTO_ALLOW_KEYWORDS = [
+          # Keywords that indicate a SYSTEM popup (not proxy auth) — dismiss these
+          SYSTEM_POPUP_KEYWORDS = [
               "local network", "local networks", "find devices",
               "notifications", "incoming network connections",
+              "getscreen", "screen and audio", "bypass the system",
+              "window picker", "hosted-compute",
+          ]
+
+          # Keywords that indicate a PROXY AUTH sheet inside Chrome — DO NOT dismiss
+          PROXY_AUTH_KEYWORDS = [
+              "proxy", "scrapeops", "residential", "authentication required",
+              "sign in", "username", "password",
           ]
 
           def run_as(script, silent=False):
@@ -647,46 +827,78 @@ jobs:
               return [n.strip() for n in r.split(",") if n.strip()]
 
           def dismiss_system_popups():
+              """
+              Dismiss ONLY Getscreen and hosted-compute local-network popups.
+              Explicitly skips Chrome entirely (proxy auth lives there).
+              Returns True if something was dismissed.
+              """
               script = r'''
           tell application "System Events"
             set popupClicked to ""
             repeat with proc in (every process whose visible is true)
-              set pName to name of proc
-              if pName is "Google Chrome" then
-              else
+              set pName to name of proc as string
+              -- CRITICAL: Never touch Chrome — proxy auth sheet is inside Chrome
+              if pName is not "Google Chrome" then
                 try
                   repeat with win in (every window of proc)
+                    set winTitle to ""
+                    set winDesc to ""
                     try
-                      set winDesc to ""
-                      try
-                        set winDesc to (description of win) as string
-                      end try
-                      set winTitle to ""
-                      try
-                        set winTitle to (title of win) as string
-                      end try
-                      set combinedText to (winDesc & " " & winTitle) as string
-                      if combinedText contains "local network" or ¬
-                         combinedText contains "Local Network" or ¬
-                         combinedText contains "find devices" or ¬
-                         combinedText contains "incoming network" or ¬
-                         combinedText contains "Incoming Network" then
-                        try
-                          click button "Allow" of win
-                          set popupClicked to "local_network_allowed"
-                        end try
-                      end if
-                      if combinedText does not contain "Accessibility" and ¬
-                         combinedText does not contain "accessibility" then
-                        try
-                          if (exists button "Allow" of win) and ¬
-                             (exists button "Don't Allow" of win) then
-                            click button "Allow" of win
-                            set popupClicked to "generic_allowed"
-                          end if
-                        end try
-                      end if
+                      set winTitle to (title of win) as string
                     end try
+                    try
+                      set winDesc to (description of win) as string
+                    end try
+                    set combinedText to (winTitle & " " & winDesc) as string
+
+                    -- Getscreen's own permission dialog
+                    if pName contains "getscreen" or pName contains "Getscreen" then
+                      try
+                        if exists button "Allow" of win then
+                          click button "Allow" of win
+                          set popupClicked to "getscreen_allowed"
+                        end if
+                      end try
+                    end if
+
+                    -- macOS local network popup (hosted-compute runner)
+                    if combinedText contains "local network" or ¬
+                       combinedText contains "Local Network" or ¬
+                       combinedText contains "hosted-compute" or ¬
+                       combinedText contains "find devices" or ¬
+                       combinedText contains "incoming network" or ¬
+                       combinedText contains "Incoming Network" then
+                      try
+                        click button "Allow" of win
+                        set popupClicked to "local_network_allowed"
+                      end try
+                    end if
+
+                    -- Getscreen screen recording dialog
+                    if combinedText contains "screen and audio" or ¬
+                       combinedText contains "bypass the system" or ¬
+                       combinedText contains "window picker" or ¬
+                       combinedText contains "Getscreen.me" then
+                      try
+                        click button "Allow" of win
+                        set popupClicked to "getscreen_screen_allowed"
+                      end try
+                    end if
+
+                    -- Generic Allow/Don't Allow system dialog
+                    -- (skip if it looks like an accessibility dialog)
+                    if combinedText does not contain "Accessibility" and ¬
+                       combinedText does not contain "accessibility" then
+                      try
+                        if (exists button "Allow" of win) and ¬
+                           (exists button "Don't Allow" of win) then
+                          click button "Allow" of win
+                          if popupClicked is "" then
+                            set popupClicked to "generic_allowed_in_" & pName
+                          end if
+                        end if
+                      end try
+                    end if
                   end repeat
                 end try
               end if
@@ -697,7 +909,57 @@ jobs:
               result = run_as(script, silent=True)
               if result and result != "":
                   print(f"[PopupDismisser] Dismissed: {result}")
-              return result
+                  return True
+              return False
+
+          def are_system_popups_visible():
+              """Check if Getscreen or local-network popups are still on screen."""
+              result = run_as(r'''
+          tell application "System Events"
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName is not "Google Chrome" then
+                try
+                  repeat with win in (every window of proc)
+                    set winTitle to ""
+                    try
+                      set winTitle to (title of win) as string
+                    end try
+                    set winDesc to ""
+                    try
+                      set winDesc to (description of win) as string
+                    end try
+                    set combined to (winTitle & " " & winDesc) as string
+                    if combined contains "local network" or combined contains "hosted-compute" or ¬
+                       combined contains "Getscreen.me" or combined contains "screen and audio" or ¬
+                       combined contains "bypass the system" then
+                      return "popups_visible"
+                    end if
+                  end repeat
+                end try
+              end if
+            end repeat
+            return "clear"
+          end tell
+          ''', silent=True)
+              return result == "popups_visible"
+
+          def wait_for_popups_to_clear(timeout=30):
+              """
+              Wait for Getscreen + local-network popups to be gone before
+              attempting proxy auth. Actively dismisses them while waiting.
+              Returns True when clear, False if timed out.
+              """
+              print("[Handler] Waiting for system popups to clear before proxy auth...")
+              t0 = time.time()
+              while time.time() - t0 < timeout:
+                  dismiss_system_popups()
+                  if not are_system_popups_visible():
+                      print("[Handler] System popups cleared — proxy auth can proceed.")
+                      return True
+                  time.sleep(1)
+              print(f"[Handler] Popups did not clear after {timeout}s — proceeding anyway.")
+              return False
 
           def fill_proxy_auth(user, pwd):
               check = run_as('''
@@ -845,6 +1107,21 @@ jobs:
               sentinel = "/tmp/download_done.flag"
 
               print(f"[Handler] Started. type={sw_type}, proxy={use_proxy}")
+
+              # ----------------------------------------------------------------
+              # PHASE 1: Wait for system popups (Getscreen + local-network) to
+              # be fully dismissed BEFORE we ever try proxy auth.
+              # This prevents the popups from blocking Chrome's auth sheet.
+              # ----------------------------------------------------------------
+              if use_proxy:
+                  print("[Handler] PHASE 1: Clearing system popups before proxy auth...")
+                  wait_for_popups_to_clear(timeout=25)
+                  time.sleep(1)
+                  print("[Handler] PHASE 1 complete — entering main loop.")
+
+              # ----------------------------------------------------------------
+              # PHASE 2: Main automation loop
+              # ----------------------------------------------------------------
               while time.time() - t0 < timeout:
                   try:
                       apps = running_apps()
@@ -852,10 +1129,12 @@ jobs:
                       op_gx  = any("Opera GX" in a for a in apps)
                       op_one = any("Opera" in a and "Opera GX" not in a for a in apps)
 
+                      # Continuously dismiss non-Chrome system popups
                       if time.time() - last_popup_dismiss > 2:
                           dismiss_system_popups()
                           last_popup_dismiss = time.time()
 
+                      # Proxy auth — only after system popups are gone
                       if use_proxy and chrome and not proxy_done and proxy_fill_attempts < 10:
                           result = fill_proxy_auth(user, pwd)
                           proxy_fill_attempts += 1
@@ -932,31 +1211,46 @@ jobs:
           grant_tcc kTCCServiceLocalNetwork  /usr/bin/osascript          1
 
           # ----------------------------------------------------------------
-          # 3. Background AppleScript popup dismisser
+          # 3. Background popup dismisser (targeted — skips Chrome entirely)
           # ----------------------------------------------------------------
           cat > /tmp/popup_dismisser.sh << 'DISMISSEOF'
           #!/bin/bash
+          # This dismisser is specifically tuned for:
+          #   (a) Getscreen.me's own "Allow" dialog for screen access
+          #   (b) macOS "hosted-compute" local network permission dialog
+          # It NEVER touches Google Chrome (proxy auth lives there).
           while true; do
             osascript << 'ASEOF' 2>/dev/null || true
           tell application "System Events"
             repeat with proc in (every process whose visible is true)
               set pName to name of proc as string
+              -- Skip Chrome entirely — proxy auth sheet is inside Chrome
               if pName is not "Google Chrome" then
                 try
                   repeat with win in (every window of proc)
+                    set winTitle to ""
+                    set winDesc to ""
                     try
-                      set wTitle to title of win as string
-                    on error
-                      set wTitle to ""
+                      set winTitle to (title of win) as string
                     end try
                     try
-                      set wDesc to description of win as string
-                    on error
-                      set wDesc to ""
+                      set winDesc to (description of win) as string
                     end try
-                    set combined to wTitle & " " & wDesc
+                    set combined to (winTitle & " " & winDesc) as string
+
+                    -- Getscreen's own dialog
+                    if pName contains "etscreen" then
+                      try
+                        if exists button "Allow" of win then
+                          click button "Allow" of win
+                        end if
+                      end try
+                    end if
+
+                    -- Local network dialogs (hosted-compute runner)
                     if combined contains "local network" or ¬
                        combined contains "Local Network" or ¬
+                       combined contains "hosted-compute" or ¬
                        combined contains "find devices" or ¬
                        combined contains "incoming network" or ¬
                        combined contains "Incoming Network" then
@@ -964,7 +1258,20 @@ jobs:
                         click button "Allow" of win
                       end try
                     end if
-                    if combined does not contain "Accessibility" then
+
+                    -- Getscreen screen/audio access dialog
+                    if combined contains "screen and audio" or ¬
+                       combined contains "bypass the system" or ¬
+                       combined contains "window picker" or ¬
+                       combined contains "Getscreen.me" then
+                      try
+                        click button "Allow" of win
+                      end try
+                    end if
+
+                    -- Generic Allow/Don't Allow (non-Accessibility, non-Chrome)
+                    if combined does not contain "Accessibility" and ¬
+                       combined does not contain "accessibility" then
                       try
                         if (exists button "Allow" of win) and (exists button "Don't Allow" of win) then
                           click button "Allow" of win
@@ -986,6 +1293,11 @@ jobs:
           DISMISSER_PID=$!
           echo "Popup dismisser PID: $DISMISSER_PID"
 
+          # Give the dismisser 5 seconds to clear any lingering popups
+          # before Chrome launches (so proxy auth isn't blocked)
+          echo "Waiting 5s for pre-Chrome popup dismissal..."
+          sleep 5
+
           # ----------------------------------------------------------------
           # 4. Start Python UI handler in background
           # ----------------------------------------------------------------
@@ -999,21 +1311,24 @@ jobs:
 
           # ----------------------------------------------------------------
           # 5. Background watcher: detect download → install → launch
+          #    Handles: .dmg, .pkg, .zip (with .app inside), and direct .app
           # ----------------------------------------------------------------
+          touch /tmp/watcher_start_marker
+
           (
             DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
             INSTALLED=false
-            echo "[Watcher] Monitoring $DL_FOLDER ..."
+            echo "[Watcher] Monitoring $DL_FOLDER for DMG / ZIP / PKG / APP..."
 
-            # FIX: added space between ']' and '&&' and '['
             while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
 
+              # Detect: .dmg, .zip, .pkg (fully downloaded — not partial)
               FILE=$(find "$DL_FOLDER" -maxdepth 1 \
-                     \( -name "*.dmg" -o -name "*.pkg" \) \
+                     \( -name "*.dmg" -o -name "*.zip" -o -name "*.pkg" \) \
                      ! -name "*.download" ! -name "*.crdownload" ! -name "*.part" \
                      -newer /tmp/watcher_start_marker 2>/dev/null | head -1)
 
-              # FIX: added space between 'if' and '['
+              # Fallback: direct .app folder
               if [ -z "$FILE" ]; then
                 FILE=$(find "$DL_FOLDER" -maxdepth 1 -type d -name "*.app" \
                        -newer /tmp/watcher_start_marker 2>/dev/null | head -1)
@@ -1025,12 +1340,13 @@ jobs:
                 BASENAME=$(basename "$FILE")
                 EXT="${BASENAME##*.}"
 
+                # Wait for download to finish (stable file size)
                 if [ "$EXT" != "app" ]; then
                   PREV=0
                   for i in $(seq 1 30); do
                     SZ=$(stat -f%z "$FILE" 2>/dev/null || \
                          stat -c%s "$FILE" 2>/dev/null || echo 0)
-                    [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 1000000 ] && break
+                    [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 500000 ] && break
                     PREV=$SZ; sleep 2
                   done
                 else
@@ -1041,28 +1357,74 @@ jobs:
                 echo "[Watcher] 4s cleanup delay..."
                 sleep 4
 
+                # ============================================================
+                # Install based on file type
+                # ============================================================
+                INSTALLED_APP_NAME=""
+
                 if [ "$EXT" = "dmg" ]; then
-                  echo "[Installer] Mounting: $FILE"
+                  echo "[Installer] Mounting DMG: $FILE"
                   MNT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null \
                         | awk '/\/Volumes\// {print $NF}' | head -1)
                   if [ -n "$MNT" ]; then
                     APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -1)
-                    # FIX: added space between 'if' and '['
                     if [ -n "$APP_SRC" ]; then
                       AN=$(basename "$APP_SRC")
                       sudo cp -R "$APP_SRC" /Applications/ || true
                       sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
                       echo "[Installer] $AN installed from DMG."
+                      INSTALLED_APP_NAME="$AN"
                     else
                       echo "[Installer] WARNING: No .app in DMG."
                     fi
                     hdiutil detach "$MNT" -quiet || true
                   else
-                    echo "[Installer] ERROR: Mount failed."
+                    echo "[Installer] ERROR: DMG mount failed."
+                  fi
+
+                elif [ "$EXT" = "zip" ]; then
+                  # ----------------------------------------------------------
+                  # ZIP handling: extract → find .app → install → codesign
+                  # ----------------------------------------------------------
+                  echo "[Installer] ZIP detected: $FILE — extracting..."
+                  EXTRACT_DIR="${DL_FOLDER}/extracted_$(date +%s)"
+                  mkdir -p "$EXTRACT_DIR"
+
+                  unzip -q "$FILE" -d "$EXTRACT_DIR" 2>/dev/null || {
+                    echo "[Installer] WARNING: unzip failed, trying ditto..."
+                    ditto -xk "$FILE" "$EXTRACT_DIR" 2>/dev/null || true
+                  }
+
+                  # Remove macOS metadata junk
+                  find "$EXTRACT_DIR" -name "__MACOSX" -exec rm -rf {} + 2>/dev/null || true
+                  find "$EXTRACT_DIR" -name ".DS_Store" -delete 2>/dev/null || true
+
+                  APP_IN_ZIP=$(find "$EXTRACT_DIR" -maxdepth 3 -name "*.app" \
+                               ! -path "*/__MACOSX/*" | head -1)
+
+                  if [ -n "$APP_IN_ZIP" ]; then
+                    AN=$(basename "$APP_IN_ZIP")
+                    echo "[Installer] Found app in ZIP: $AN"
+                    sudo cp -R "$APP_IN_ZIP" /Applications/ || true
+                    sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
+                    sudo codesign --force --deep --sign - "/Applications/$AN" 2>/dev/null || true
+                    echo "[Installer] $AN installed from ZIP."
+                    INSTALLED_APP_NAME="$AN"
+                    rm -rf "$EXTRACT_DIR" 2>/dev/null || true
+                  else
+                    echo "[Installer] WARNING: No .app found inside ZIP."
+                    # Try to find any executable that might be a launcher
+                    EXEC_IN_ZIP=$(find "$EXTRACT_DIR" -maxdepth 3 -type f -perm +111 \
+                                  ! -name "*.sh" | head -1)
+                    if [ -n "$EXEC_IN_ZIP" ]; then
+                      echo "[Installer] Found executable in ZIP: $EXEC_IN_ZIP — running..."
+                      chmod +x "$EXEC_IN_ZIP"
+                      "$EXEC_IN_ZIP" &
+                    fi
                   fi
 
                 elif [ "$EXT" = "pkg" ]; then
-                  echo "[Installer] Installing PKG..."
+                  echo "[Installer] Installing PKG: $FILE"
                   sudo installer -pkg "$FILE" -target / -verboseR || true
 
                 elif [ "$EXT" = "app" ]; then
@@ -1071,34 +1433,54 @@ jobs:
                   sudo xattr -dr com.apple.quarantine "/Applications/$BASENAME" 2>/dev/null || true
                   sudo codesign --force --deep --sign - "/Applications/$BASENAME" 2>/dev/null || true
                   echo "[Installer] $BASENAME installed."
+                  INSTALLED_APP_NAME="$BASENAME"
                 fi
 
+                # ============================================================
+                # Determine actual software type (for ZIP/dynamic downloads
+                # we may not know if it was GX or One until we see the filename)
+                # ============================================================
                 ACTUAL="$SOFTWARE_TYPE"
-                # FIX: added space between 'if' and '['
                 if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
-                  echo "$BASENAME" | grep -qi "gx" && ACTUAL="opera_gx" || ACTUAL="opera_one"
+                  if echo "$INSTALLED_APP_NAME$BASENAME" | grep -qi "gx"; then
+                    ACTUAL="opera_gx"
+                  else
+                    ACTUAL="opera_one"
+                  fi
                 fi
 
-                # FIX: added space between 'if' and '['
+                # ============================================================
+                # Wait for .app to appear in /Applications and launch it
+                # ============================================================
                 if [ "$ACTUAL" = "opera_gx" ]; then
-                  PATHS=("/Applications/$BASENAME"
-                         "/Applications/Opera GX.app"
-                         "$HOME/Applications/Opera GX.app")
+                  SEARCH_PATHS=(
+                    "/Applications/$INSTALLED_APP_NAME"
+                    "/Applications/Opera GX.app"
+                    "$HOME/Applications/Opera GX.app"
+                  )
                 else
-                  PATHS=("/Applications/$BASENAME"
-                         "/Applications/Opera.app"
-                         "$HOME/Applications/Opera.app")
+                  SEARCH_PATHS=(
+                    "/Applications/$INSTALLED_APP_NAME"
+                    "/Applications/Opera.app"
+                    "$HOME/Applications/Opera.app"
+                  )
                 fi
 
-                echo "[$ACTUAL] Waiting for app..."
+                echo "[$ACTUAL] Waiting for installed app to appear..."
                 LAUNCHED=false
                 for i in $(seq 1 60); do
-                  for P in "${PATHS[@]}"; do
+                  for P in "${SEARCH_PATHS[@]}"; do
                     if [ -d "$P" ]; then
                       sleep 3
                       echo "[$ACTUAL] Launching: $P"
+                      # Wait until app window is visible before declaring done
                       open "$P" || true
-                      LAUNCHED=true; break 2
+                      sleep 5
+                      # Verify the app is running
+                      APP_RUNNING=$(osascript -e "tell application \"System Events\" to (name of every process) contains \"$(basename "$P" .app)\"" 2>/dev/null || echo "false")
+                      echo "[$ACTUAL] App running: $APP_RUNNING"
+                      LAUNCHED=true
+                      break 2
                     fi
                   done
                   sleep 2
@@ -1107,7 +1489,10 @@ jobs:
                 if [ "$LAUNCHED" = false ]; then
                   FOUND=$(find /Applications "$HOME/Applications" \
                           -maxdepth 2 -name "Opera*.app" 2>/dev/null | head -1)
-                  [ -n "$FOUND" ] && echo "[$ACTUAL] Fallback launch: $FOUND" && open "$FOUND" || true
+                  if [ -n "$FOUND" ]; then
+                    echo "[$ACTUAL] Fallback launch: $FOUND"
+                    open "$FOUND" || true
+                  fi
                 fi
 
                 INSTALLED=true
@@ -1122,8 +1507,8 @@ jobs:
 
           # ----------------------------------------------------------------
           # 6. Launch Chrome with popup-suppression flags
+          #    (popup dismisser already ran 5s above — Chrome launches clean)
           # ----------------------------------------------------------------
-          touch /tmp/watcher_start_marker
           CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
           CHROME_FLAGS=(
@@ -1143,7 +1528,6 @@ jobs:
             --use-mock-keychain
           )
 
-          # FIX: added space between 'if' and '['
           if [ "$USE_PROXY" = "true" ]; then
             PROXY_SRV="residential-proxy.scrapeops.io:8181"
             echo "Launching Chrome WITH proxy -> $TARGET_URL"
@@ -1172,7 +1556,6 @@ jobs:
           # ----------------------------------------------------------------
           echo "Monitoring for up to $TIMEOUT_SECS seconds..."
           DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
-          # FIX: moved body of while loop to a new line after 'do'
           while kill -0 $WATCHER_PID 2>/dev/null && [ "$(date +%s)" -lt "$DEADLINE" ]; do
             if [ -f /tmp/handler_output.log ]; then
               timeout 10 tail -f /tmp/handler_output.log 2>/dev/null || sleep 10
