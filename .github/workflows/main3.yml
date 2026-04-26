@@ -52,7 +52,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Chloe'
+        default: 'Opera-One - Daisy'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
