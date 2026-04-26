@@ -14,7 +14,7 @@ on:
           - 'macos-15-xlarge'
           - 'macos-26'
           - 'macos-26-intel'
-        default: 'macos-26'
+        default: 'macos-15'
       getscreen_email:
         description: 'Getscreen.me Account Email'
         required: true
@@ -51,12 +51,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - B4Books'
+        default: 'OperaGX - James'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '2f2622aa-3db7-4033-8b94-f0657bdf0cb3'
+        default: '589109d6-21c7-4f1c-b369-6557eca63d01'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -69,12 +69,12 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'USA'
+        default: 'Brazil'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: false
+        default: true
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
@@ -340,7 +340,7 @@ jobs:
           echo "All dependencies installed."
 
       # ================================================================== #
-      # STEP 3 — Getscreen.me (DMG + TCC + exec — proven working logic)    #
+      # STEP 3 — Getscreen.me (DMG + TCC + exec — proven working logic)   #
       # ================================================================== #
       - name: Install, Bypass Security, and Start Getscreen.me (macOS)
         shell: bash
@@ -358,7 +358,7 @@ jobs:
               --retry 3 --retry-delay 5 --silent --show-error
             FILE_SIZE=$(stat -f%z getscreen.dmg 2>/dev/null || \
                         stat -c%s getscreen.dmg 2>/dev/null || echo 0)
-            if [ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
+            if[ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
               SUCCESS=true
               break
             fi
@@ -401,7 +401,7 @@ jobs:
 
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
 
-          if [ -n "$APP_BUNDLE_ID" ]; then
+          if[ -n "$APP_BUNDLE_ID" ]; then
             sudo sqlite3 "$TCC_DB" \
               "INSERT OR REPLACE INTO access \
                (service, client, client_type, auth_value, auth_reason, auth_version, flags) \
@@ -449,7 +449,7 @@ jobs:
           echo "Getscreen.me registered as '$DEVICE_NAME' and started successfully."
 
       # ================================================================== #
-      # STEP 4 — Google Chrome                                             #
+      # STEP 4 — Google Chrome                                              #
       # ================================================================== #
       - name: Install Google Chrome (Proxy-capable Browser)
         shell: bash
@@ -465,7 +465,7 @@ jobs:
             -o "$CHROME_DMG" 2>/dev/null || true
 
           FILE_SIZE=$(stat -f%z "$CHROME_DMG" 2>/dev/null || echo 0)
-          if [ -f "$CHROME_DMG" ] &&[ "$FILE_SIZE" -gt 1000000 ]; then
+          if[ -f "$CHROME_DMG" ] &&[ "$FILE_SIZE" -gt 1000000 ]; then
             hdiutil attach "$CHROME_DMG" -quiet -nobrowse \
               -mountpoint /Volumes/GoogleChrome || true
             if[ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
@@ -521,6 +521,7 @@ jobs:
 
           try:
               import atomacos
+              HAS_ATOMACOS = True
           except ImportError:
               HAS_ATOMACOS = False
               print("[Handler] atomacos not available — AppleScript only.")
@@ -676,7 +677,7 @@ jobs:
                           if accept_cookie():
                               last_cookie = time.time()
 
-                      if chrome and sw_type in ["opera_gx","opera_one","dynamic_opera","ad_mvn"]:
+                      if chrome and sw_type in["opera_gx","opera_one","dynamic_opera","ad_mvn"]:
                           if time.time() - last_dl > 5:
                               r = click_dl_button()
                               if r and "clicked" in r:
@@ -759,7 +760,7 @@ jobs:
             INSTALLED=false
             echo "[Watcher] Monitoring $DL_FOLDER ..."
 
-            while[ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            while [ "$INSTALLED" = false ] &&[ "$(date +%s)" -lt "$DEADLINE" ]; do
 
               # Primary: DMG or PKG (no partials)
               FILE=$(find "$DL_FOLDER" -maxdepth 1 \
@@ -773,14 +774,14 @@ jobs:
                        -newer /tmp/watcher_start_marker 2>/dev/null | head -1)
               fi
 
-              if[ -n "$FILE" ]; then
+              if [ -n "$FILE" ]; then
                 echo "[Watcher] Detected: $FILE"
                 touch "$SENTINEL_PATH"
                 BASENAME=$(basename "$FILE")
                 EXT="${BASENAME##*.}"
 
                 # Wait for file to stabilise (skip for .app directories)
-                if [ "$EXT" != "app" ]; then
+                if[ "$EXT" != "app" ]; then
                   PREV=0
                   for i in $(seq 1 30); do
                     SZ=$(stat -f%z "$FILE" 2>/dev/null || \
@@ -796,11 +797,11 @@ jobs:
                 sleep 4
 
                 # ---- DMG ----
-                if[ "$EXT" = "dmg" ]; then
+                if [ "$EXT" = "dmg" ]; then
                   echo "[Installer] Mounting: $FILE"
                   MNT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null \
                         | awk '/\/Volumes\// {print $NF}' | head -1)
-                  if [ -n "$MNT" ]; then
+                  if[ -n "$MNT" ]; then
                     APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -1)
                     if [ -n "$APP_SRC" ]; then
                       AN=$(basename "$APP_SRC")
@@ -816,12 +817,12 @@ jobs:
                   fi
 
                 # ---- PKG ----
-                elif[ "$EXT" = "pkg" ]; then
+                elif [ "$EXT" = "pkg" ]; then
                   echo "[Installer] Installing PKG..."
                   sudo installer -pkg "$FILE" -target / -verboseR || true
 
                 # ---- Direct .app ----
-                elif[ "$EXT" = "app" ]; then
+                elif [ "$EXT" = "app" ]; then
                   echo "[Installer] Direct .app: $BASENAME"
                   sudo cp -R "$FILE" /Applications/ || true
                   sudo xattr -dr com.apple.quarantine "/Applications/$BASENAME" 2>/dev/null || true
@@ -860,9 +861,10 @@ jobs:
                   sleep 2
                 done
 
-                if[ "$LAUNCHED" = false ]; then
+                if [ "$LAUNCHED" = false ]; then
                   FOUND=$(find /Applications "$HOME/Applications" \
-                          -maxdepth 2 -name "Opera*.app" 2>/dev/null | head -1)[ -n "$FOUND" ] && echo "[$ACTUAL] Fallback launch: $FOUND" && open "$FOUND" || true
+                          -maxdepth 2 -name "Opera*.app" 2>/dev/null | head -1)
+                  [ -n "$FOUND" ] && echo "[$ACTUAL] Fallback launch: $FOUND" && open "$FOUND" || true
                 fi
 
                 INSTALLED=true
@@ -896,7 +898,7 @@ jobs:
             fi
           else
             echo "Launching browser (direct) -> $TARGET_URL"
-            if[ -f "$CHROME_BIN" ]; then
+            if [ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
                 --no-first-run --no-default-browser-check --disable-sync \
                 --safebrowsing-disable-download-protection \
@@ -913,8 +915,7 @@ jobs:
           # ----------------------------------------------------------------
           echo "Monitoring for up to $TIMEOUT_SECS seconds..."
           DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
-          while kill -0 $WATCHER_PID 2>/dev/null && \[ "$(date +%s)" -lt "$DEADLINE" ]; do
-            [ -f /tmp/handler_output.log ] && \
+          while kill -0 $WATCHER_PID 2>/dev/null && \[ "$(date +%s)" -lt "$DEADLINE" ]; do[ -f /tmp/handler_output.log ] && \
               timeout 10 tail -f /tmp/handler_output.log 2>/dev/null || sleep 10
           done
           wait $WATCHER_PID 2>/dev/null || true
