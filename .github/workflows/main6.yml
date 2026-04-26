@@ -13,7 +13,7 @@ on:
           - 'macos-13'
           - 'macos-15-xlarge'
           - 'macos-26'
-          - 'macos-26-xlarge'
+          - 'macos-26-intel'
         default: 'macos-15'
       getscreen_email:
         description: 'Getscreen.me Account Email'
@@ -51,12 +51,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Harrari'
+        default: 'OperaGX - James'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '2f2622aa-3db7-4033-8b94-f0657bdf0cb3'
+        default: '589109d6-21c7-4f1c-b369-6557eca63d01'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -69,12 +69,12 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'USA'
+        default: 'Brazil'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: false
+        default: true
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
@@ -123,7 +123,6 @@ jobs:
           }
           cc = country_map.get(country_input, "us")
 
-          # Software URL Mappings (macOS-compatible links)
           opera_urls = {
               "OperaGX - B4Books":  "https://u.to/opx-b4b/2nh4Ig",
               "OperaGX - Techx":    "https://u.to/techxsm/xVyFIg",
@@ -148,7 +147,6 @@ jobs:
           all_urls = {**opera_urls, **opera_one_urls, **ad_mvn_urls}
           target_url = all_urls.get(software_choice, opera_urls["OperaGX - James"])
 
-          # Determine software type and macOS dmg/pkg filter
           dynamic_links = [
               "OperaGX - Techx", "OperaGX - Fatradez", "OperaGX - James",
               "OperaGX - Oliver", "OperaGX - Mahal"
@@ -168,12 +166,12 @@ jobs:
 
           def short_os(os_ver):
               mapping = {
-                  "macos-15": "M15",
-                  "macos-14": "M14",
-                  "macos-13": "M13",
+                  "macos-15":        "M15",
+                  "macos-14":        "M14",
+                  "macos-13":        "M13",
                   "macos-15-xlarge": "M15X",
-                  "macos-26": "M26",
-                  "macos-26-xlarge": "M26X",
+                  "macos-26":        "M26",
+                  "macos-26-intel":  "M26I",
               }
               return mapping.get(os_ver, "MAC")
 
@@ -208,18 +206,18 @@ jobs:
                       proxy_user = ""
                       proxy_pass = ""
                   includes.append({
-                      "device": device_name,
-                      "email": email,
-                      "os": os_version,
-                      "use_proxy": str(use_proxy).lower(),
-                      "proxy_user": proxy_user,
-                      "proxy_pass": proxy_pass,
-                      "target_url": target_url,
+                      "device":        device_name,
+                      "email":         email,
+                      "os":            os_version,
+                      "use_proxy":     str(use_proxy).lower(),
+                      "proxy_user":    proxy_user,
+                      "proxy_pass":    proxy_pass,
+                      "target_url":    target_url,
                       "software_type": software_type,
-                      "dmg_filter": dmg_filter,
+                      "dmg_filter":    dmg_filter,
                   })
           if not includes:
-              print("Error: Valid configuration could not be generated. Exiting.")
+              print("Error: Valid configuration could not be generated.")
               exit(1)
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"matrix={json.dumps({'include': includes})}\n")
@@ -249,13 +247,13 @@ jobs:
                   global content
                   pattern = r"(" + input_name + r":[\s\S]*?default:\s*)(true|false)"
                   content = re.sub(pattern, rf"\g<1>{new_val.lower()}", content, count=1)
-              update_default_str("os_version", os.environ.get("OS_VERSION"))
-              update_default_str("getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
-              update_default_str("num_devices", os.environ.get("NUM_DEVICES"))
-              update_default_str("software_choice", os.environ.get("SOFTWARE_CHOICE"))
+              update_default_str("os_version",       os.environ.get("OS_VERSION"))
+              update_default_str("getscreen_email",  os.environ.get("GETSCREEN_EMAIL"))
+              update_default_str("num_devices",      os.environ.get("NUM_DEVICES"))
+              update_default_str("software_choice",  os.environ.get("SOFTWARE_CHOICE"))
               update_default_str("scrapeops_api_key", os.environ.get("API_KEY"))
-              update_default_str("proxy_country", os.environ.get("COUNTRY"))
-              update_default_bool("mobile_proxies", os.environ.get("MOBILE"))
+              update_default_str("proxy_country",    os.environ.get("COUNTRY"))
+              update_default_bool("mobile_proxies",  os.environ.get("MOBILE"))
               update_default_bool("sticky_sessions", os.environ.get("STICKY"))
               with open(file_path, "w") as f:
                   f.write(content)
@@ -267,7 +265,8 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .github/workflows/main6.yml
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs[skip ci]" && git push)
+          git diff --quiet && git diff --staged --quiet || \
+            (git commit -m "Update last used inputs[skip ci]" && git push)
 
   remote_session:
     name: Remote Session ${{ matrix.device }}
@@ -280,45 +279,32 @@ jobs:
       matrix: ${{ fromJson(needs.prepare_matrix.outputs.matrix) }}
 
     steps:
+      # ================================================================== #
+      # STEP 1 — Disable Gatekeeper & macOS security                       #
+      # ================================================================== #
       - name: Disable Gatekeeper & Configure macOS Security
         shell: bash
         run: |
           echo "=== Configuring macOS Security Settings ==="
-
-          # Disable Gatekeeper to allow unsigned/unnotarized app installations
           sudo spctl --master-disable || true
           sudo defaults write /Library/Preferences/com.apple.security GKAutoRearm -bool false || true
-
-          # Allow apps from anywhere in System Preferences
           sudo defaults write /Library/Preferences/com.apple.security AssessmentEnable -bool false || true
-
-          # Disable quarantine attribute auto-assignment for downloads
           defaults write com.apple.LaunchServices LSQuarantine -bool false || true
-
-          # Allow Safari to open "safe" files automatically
           defaults write com.apple.Safari AutoOpenSafeDownloads -bool true || true
-
-          # Disable Safari download warnings
           defaults write com.apple.Safari DownloadValidation -bool false || true
-
-          # Allow running apps from unidentified developers
           sudo spctl --global-disable || true
-
           echo "macOS security configuration complete."
 
+      # ================================================================== #
+      # STEP 2 — Python venv + Homebrew + cliclick                         #
+      # ================================================================== #
       - name: Install Dependencies (Python + Browser Tools)
         shell: bash
         run: |
           echo "=== Installing Python UI Automation Dependencies ==="
 
-          # Modern macOS (Homebrew Python) marks the system env as "externally managed"
-          # (PEP 668) so bare `pip install` exits with code 1.
-          # Solution: create a dedicated venv at /tmp/uienv and install everything there.
-          # The handler script is then launched with that venv's python.
-
+          # PEP 668: use a venv to bypass externally-managed-environment error
           VENV_DIR="/tmp/uienv"
-
-          # Pick the best available python3 binary
           PYTHON_BIN=""
           for candidate in python3.12 python3.11 python3.10 python3; do
             if command -v "$candidate" &>/dev/null; then
@@ -328,661 +314,559 @@ jobs:
           done
           echo "Using Python: $PYTHON_BIN ($($PYTHON_BIN --version 2>&1))"
 
-          # Create venv (wipe any stale one first)
           rm -rf "$VENV_DIR"
           "$PYTHON_BIN" -m venv "$VENV_DIR"
           source "$VENV_DIR/bin/activate"
-
-          # Upgrade pip inside the venv — this always works
           pip install --upgrade pip --quiet
-
-          # Install macOS UI automation stack
-          pip install pyobjc-core \
-                      pyobjc-framework-Cocoa \
-                      pyobjc-framework-ApplicationServices \
-                      --quiet || true
+          pip install pyobjc-core pyobjc-framework-Cocoa \
+                      pyobjc-framework-ApplicationServices --quiet || true
           pip install atomacos --quiet || true
           pip install Pillow requests --quiet || true
-
           deactivate
 
-          # Persist venv path for later steps
           echo "UIENV_PYTHON=$VENV_DIR/bin/python3" >> "$GITHUB_ENV"
           echo "Python venv ready at $VENV_DIR"
 
-          # Install Homebrew if not present (usually pre-installed on GH runners)
           if ! command -v brew &>/dev/null; then
-            echo "Homebrew not found — installing..."
+            echo "Installing Homebrew..."
             NONINTERACTIVE=1 /bin/bash -c \
               "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
-            # Add brew to PATH for Apple Silicon / macos-26 runners
             for bp in /opt/homebrew/bin /usr/local/bin; do
-              [ -x "$bp/brew" ] && export PATH="$bp:$PATH" && echo "PATH=$bp:$PATH" >> "$GITHUB_ENV" && break
+              [ -x "$bp/brew" ] && export PATH="$bp:$PATH" && \
+                echo "PATH=$bp:$PATH" >> "$GITHUB_ENV" && break
             done
           fi
 
-          # Install cliclick for pixel-level mouse control
           brew install cliclick --quiet || true
-
           echo "All dependencies installed."
 
-      - name: Install and Start Getscreen.me (macOS)
+      # ================================================================== #
+      # STEP 3 — Getscreen.me (DMG + TCC + exec — proven working logic)   #
+      # ================================================================== #
+      - name: Install, Bypass Security, and Start Getscreen.me (macOS)
         shell: bash
         run: |
-          echo "=== Downloading Getscreen.me macOS Agent ==="
+          echo "=== Installing Getscreen.me via DMG ==="
           DEVICE_NAME="${{ matrix.device }}"
           EMAIL="${{ matrix.email }}"
 
-          # Download the macOS PKG installer for Getscreen.me
+          # --- Download with retries ---
           MAX_RETRIES=3
           RETRY=0
           SUCCESS=false
           while [ $RETRY -lt $MAX_RETRIES ]; do
-            curl -fsSL "https://getscreen.me/download/getscreen.pkg" -o getscreen.pkg 2>/dev/null
-            if [ -f "getscreen.pkg" ] && [ $(stat -f%z getscreen.pkg 2>/dev/null || stat -c%s getscreen.pkg 2>/dev/null) -gt 102400 ]; then
+            curl -L -o getscreen.dmg "https://getscreen.me/download/getscreen.dmg" \
+              --retry 3 --retry-delay 5 --silent --show-error
+            FILE_SIZE=$(stat -f%z getscreen.dmg 2>/dev/null || \
+                        stat -c%s getscreen.dmg 2>/dev/null || echo 0)
+            if [ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
               SUCCESS=true
               break
             fi
-            echo "Download attempt $((RETRY+1)) failed, retrying..."
+            echo "Download attempt $((RETRY+1)) failed (${FILE_SIZE}B), retrying in 5s..."
             sleep 5
             RETRY=$((RETRY+1))
           done
 
           if [ "$SUCCESS" = false ]; then
-            echo "ERROR: Getscreen.me download failed after $MAX_RETRIES attempts."
-            # Non-fatal: continue so software install can still run
-          else
-            # Install the PKG silently
-            sudo installer -pkg getscreen.pkg -target / -verboseR || true
+            echo "ERROR: Getscreen.me DMG failed to download. Skipping (non-fatal)."
+            exit 0
+          fi
+          echo "Downloaded getscreen.dmg (${FILE_SIZE}B). Mounting..."
 
-            # Attempt to register the agent via CLI if available
-            GSME_BIN=$(find /Applications /usr/local/bin /opt -name "getscreen*" -type f 2>/dev/null | head -1 || true)
-            if [ -n "$GSME_BIN" ]; then
-              "$GSME_BIN" --register "$EMAIL" --name "$DEVICE_NAME" --autostart true --control true || true
-              echo "Getscreen.me registered as: $DEVICE_NAME"
-            else
-              echo "Getscreen.me binary not found at expected path. Skipping registration."
-            fi
+          # --- Mount ---
+          hdiutil attach getscreen.dmg -mountpoint /Volumes/getscreen -nobrowse -quiet
+
+          # --- Find .app inside DMG ---
+          APP_PATH=$(find /Volumes/getscreen -maxdepth 1 -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app found inside Getscreen DMG. Detaching."
+            hdiutil detach /Volumes/getscreen -quiet -force || true
+            exit 0
+          fi
+          APP_NAME=$(basename "$APP_PATH")
+          echo "Found: $APP_NAME"
+
+          # --- Install to /Applications ---
+          sudo cp -R "$APP_PATH" /Applications/
+          sudo xattr -dr com.apple.quarantine "/Applications/$APP_NAME" 2>/dev/null || true
+
+          # --- Detach ---
+          hdiutil detach /Volumes/getscreen -quiet -force || true
+
+          # --- Grant TCC permissions (ScreenCapture + Accessibility) ---
+          APP_BUNDLE_ID=$(defaults read \
+            "/Applications/$APP_NAME/Contents/Info.plist" \
+            CFBundleIdentifier 2>/dev/null || echo "")
+          echo "Bundle ID: ${APP_BUNDLE_ID:-<not found>}"
+
+          TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
+
+          if [ -n "$APP_BUNDLE_ID" ]; then
+            sudo sqlite3 "$TCC_DB" \
+              "INSERT OR REPLACE INTO access \
+               (service, client, client_type, auth_value, auth_reason, auth_version, flags) \
+               VALUES ('kTCCServiceScreenCapture', \
+                       '$APP_BUNDLE_ID', 0, 2, 4, 1, 0);" 2>/dev/null || true
+            sudo sqlite3 "$TCC_DB" \
+              "INSERT OR REPLACE INTO access \
+               (service, client, client_type, auth_value, auth_reason, auth_version, flags) \
+               VALUES ('kTCCServiceAccessibility', \
+                       '$APP_BUNDLE_ID', 0, 2, 4, 1, 0);" 2>/dev/null || true
+            echo "TCC permissions granted for $APP_BUNDLE_ID"
+          else
+            echo "WARNING: Bundle ID not found — skipping TCC injection."
           fi
 
-          echo "Getscreen.me setup step complete."
+          # --- Find executable ---
+          EXEC_NAME=$(defaults read \
+            "/Applications/$APP_NAME/Contents/Info.plist" \
+            CFBundleExecutable 2>/dev/null || echo "")
+          EXEC_PATH="/Applications/$APP_NAME/Contents/MacOS/$EXEC_NAME"
 
+          # Fallback: find any executable in MacOS folder
+          if [ ! -x "$EXEC_PATH" ]; then
+            EXEC_PATH=$(find "/Applications/$APP_NAME/Contents/MacOS" \
+              -maxdepth 1 -type f -perm +111 2>/dev/null | head -1)
+          fi
+
+          if [ -z "$EXEC_PATH" ] || [ ! -x "$EXEC_PATH" ]; then
+            echo "ERROR: Getscreen executable not found. Skipping registration."
+            exit 0
+          fi
+          echo "Executable: $EXEC_PATH"
+
+          # --- Register, configure, start ---
+          sudo "$EXEC_PATH" -install 2>/dev/null || true
+          sleep 2
+          sudo "$EXEC_PATH" -register "$EMAIL" 2>/dev/null || true
+          sleep 1
+          sudo "$EXEC_PATH" -config \
+            "name='$DEVICE_NAME' autostart=true nonadmin=true control=true disable_confirmation=true" \
+            2>/dev/null || true
+          sleep 1
+          sudo "$EXEC_PATH" -start 2>/dev/null || true
+
+          echo "Getscreen.me registered as '$DEVICE_NAME' and started successfully."
+
+      # ================================================================== #
+      # STEP 4 — Google Chrome                                              #
+      # ================================================================== #
       - name: Install Google Chrome (Proxy-capable Browser)
         shell: bash
         run: |
-          echo "=== Installing Google Chrome for macOS ==="
-          # Safari does not support command-line proxy server flags robustly.
-          # Chrome is used for proxy support and better automation compatibility.
-
+          echo "=== Installing Google Chrome ==="
           CHROME_DMG="$HOME/Downloads/googlechrome.dmg"
-          curl -fsSL "https://dl.google.com/chrome/mac/stable/GGRO/googlechrome.dmg" -o "$CHROME_DMG" || \
-          curl -fsSL "https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg" -o "$CHROME_DMG" || true
 
-          if [ -f "$CHROME_DMG" ] && [ $(stat -f%z "$CHROME_DMG" 2>/dev/null) -gt 1000000 ]; then
-            hdiutil attach "$CHROME_DMG" -quiet -nobrowse -mountpoint /Volumes/GoogleChrome || true
+          curl -fsSL \
+            "https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg" \
+            -o "$CHROME_DMG" 2>/dev/null || \
+          curl -fsSL \
+            "https://dl.google.com/chrome/mac/stable/GGRO/googlechrome.dmg" \
+            -o "$CHROME_DMG" 2>/dev/null || true
+
+          FILE_SIZE=$(stat -f%z "$CHROME_DMG" 2>/dev/null || echo 0)
+          if [ -f "$CHROME_DMG" ] && [ "$FILE_SIZE" -gt 1000000 ]; then
+            hdiutil attach "$CHROME_DMG" -quiet -nobrowse \
+              -mountpoint /Volumes/GoogleChrome || true
             if [ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
               sudo cp -R "/Volumes/GoogleChrome/Google Chrome.app" /Applications/ || true
+              sudo xattr -dr com.apple.quarantine \
+                "/Applications/Google Chrome.app" 2>/dev/null || true
               hdiutil detach /Volumes/GoogleChrome -quiet || true
-              echo "Google Chrome installed successfully."
+              echo "Google Chrome installed."
             else
               hdiutil detach /Volumes/GoogleChrome -quiet || true
-              echo "WARNING: Chrome DMG mounted but app not found."
+              echo "WARNING: Chrome DMG mounted but .app not found."
             fi
           else
-            echo "WARNING: Chrome download failed or file too small. Will attempt using Safari."
+            echo "WARNING: Chrome DMG download failed ($FILE_SIZE B)."
           fi
 
-          # Confirm installation
           if [ -d "/Applications/Google Chrome.app" ]; then
-            echo "CHROME_AVAILABLE=true" >> $GITHUB_ENV
-            echo "Chrome is available at /Applications/Google Chrome.app"
+            echo "CHROME_AVAILABLE=true" >> "$GITHUB_ENV"
           else
-            echo "CHROME_AVAILABLE=false" >> $GITHUB_ENV
-            echo "Chrome not available — will fall back to Safari."
+            echo "CHROME_AVAILABLE=false" >> "$GITHUB_ENV"
+            echo "Chrome unavailable — Safari will be used for direct-mode only."
           fi
 
+      # ================================================================== #
+      # STEP 5 — Download, Install & Automate Software                     #
+      # ================================================================== #
       - name: Setup Auto-Downloader & Software Installation (macOS)
         shell: bash
         env:
-          USE_PROXY: ${{ matrix.use_proxy }}
-          PROXY_USER: ${{ matrix.proxy_user }}
-          PROXY_PASS: ${{ matrix.proxy_pass }}
-          TARGET_URL: ${{ matrix.target_url }}
+          USE_PROXY:     ${{ matrix.use_proxy }}
+          PROXY_USER:    ${{ matrix.proxy_user }}
+          PROXY_PASS:    ${{ matrix.proxy_pass }}
+          TARGET_URL:    ${{ matrix.target_url }}
           SOFTWARE_TYPE: ${{ matrix.software_type }}
-          DMG_FILTER: ${{ matrix.dmg_filter }}
+          DMG_FILTER:    ${{ matrix.dmg_filter }}
         run: |
           echo "============================================================"
           echo " Zero-Touch Downloader & Installer Active (macOS)"
           echo " Category  : $SOFTWARE_TYPE"
-          if [ "$USE_PROXY" = "true" ]; then
-            echo " Mode      : Proxy-enabled"
-          else
-            echo " Mode      : Direct (no proxy)"
-          fi
+          [ "$USE_PROXY" = "true" ] && echo " Mode      : Proxy-enabled" \
+                                    || echo " Mode      : Direct (no proxy)"
           echo "============================================================"
 
           DL_FOLDER="$HOME/Downloads"
           SENTINEL_PATH="/tmp/download_done.flag"
           TIMEOUT_SECS=360
 
-          # -------------------------------------------------------------------
-          # 1. Write the Python UI Automation Handler (macOS / atomacos based)
-          # -------------------------------------------------------------------
+          # ----------------------------------------------------------------
+          # 1. Write Python UI automation handler
+          # ----------------------------------------------------------------
           cat > /tmp/macos_handler.py << 'PYEOF'
-          import time, sys, os, subprocess, random, threading
+import time, sys, os, subprocess, random
 
-          # Try atomacos for macOS Accessibility API automation
-          try:
-              import atomacos
-              HAS_ATOMACOS = True
-          except ImportError:
-              HAS_ATOMACOS = False
-              print("[Handler] atomacos not available — falling back to AppleScript only.")
+try:
+    import atomacos
+    HAS_ATOMACOS = True
+except ImportError:
+    HAS_ATOMACOS = False
+    print("[Handler] atomacos not available — AppleScript only.")
 
-          DOWNLOAD_DONE_TITLES = [
-              "Thanks for downloading Opera",
-              "Thanks for downloadin",
-              "Download | Thanks",
-              "sudetyj",
-              "clickWorker",
-              "GET READY TO PLAY",
-              "ready to install",
-          ]
+DOWNLOAD_DONE_TITLES = [
+    "Thanks for downloading Opera", "Thanks for downloadin",
+    "Download | Thanks", "sudetyj", "clickWorker",
+    "GET READY TO PLAY", "ready to install",
+]
 
-          def run_applescript(script, silent=False):
-              """Execute an AppleScript string and return stdout."""
-              try:
-                  result = subprocess.run(
-                      ["osascript", "-e", script],
-                      capture_output=True, text=True, timeout=15
-                  )
-                  return result.stdout.strip()
-              except Exception as e:
-                  if not silent:
-                      print(f"[AppleScript] Error: {e}")
-                  return ""
+def run_as(script, silent=False):
+    try:
+        r = subprocess.run(["osascript", "-e", script],
+                           capture_output=True, text=True, timeout=15)
+        return r.stdout.strip()
+    except Exception as e:
+        if not silent:
+            print(f"[AppleScript] {e}")
+        return ""
 
-          def click_button_applescript(app_name, button_name):
-              """Click a named button in a running app via AppleScript."""
-              script = f'''
-              tell application "{app_name}"
-                  activate
-              end tell
-              delay 0.5
-              tell application "System Events"
-                  tell process "{app_name}"
-                      try
-                          click button "{button_name}" of window 1
-                          return "clicked"
-                      on error
-                          return "not found"
-                      end try
-                  end tell
-              end tell
-              '''
-              return run_applescript(script)
+def press(key_name):
+    key_map = {"tab":9,"return":36,"space":49,"right":124,
+               "left":123,"up":126,"down":125,"escape":53}
+    code = key_map.get(key_name.lower())
+    if code:
+        run_as(f'tell application "System Events" to key code {code}')
 
-          def type_text_applescript(text):
-              """Type text using System Events keystroke."""
-              escaped = text.replace('"', '\\"').replace('\\', '\\\\')
-              script = f'tell application "System Events" to keystroke "{escaped}"'
-              run_applescript(script)
+def running_apps():
+    r = run_as('tell application "System Events" to get name of every process whose visible is true',
+               silent=True)
+    return [n.strip() for n in r.split(",") if n.strip()]
 
-          def press_key_applescript(key):
-              """Press a key using System Events (tab, return, space, etc.)."""
-              script = f'tell application "System Events" to key code {key}'
-              run_applescript(script)
+def fill_proxy_auth(user, pwd):
+    return run_as(f'''
+tell application "System Events"
+    tell process "Google Chrome"
+        try
+            set uF to text field 1 of sheet 1 of window 1
+            set focused of uF to true
+            set value of uF to "{user}"
+            set pF to text field 2 of sheet 1 of window 1
+            set focused of pF to true
+            set value of pF to "{pwd}"
+            click button "OK" of sheet 1 of window 1
+            return "filled"
+        on error e
+            return "err:" & e
+        end try
+    end tell
+end tell''')
 
-          def press_named_key(key_name):
-              """Press a named key: tab, return, space, right, left, etc."""
-              script = f'tell application "System Events" to key code (key code of key "{key_name}")'
-              # Use keystroke for named keys
-              script2 = f'tell application "System Events" to keystroke (key string of key code (key code of ("{key_name}")))'
-              # Simpler approach:
-              key_map = {
-                  "tab":    9,
-                  "return": 36,
-                  "space":  49,
-                  "right":  124,
-                  "left":   123,
-                  "up":     126,
-                  "down":   125,
-                  "escape": 53,
-              }
-              code = key_map.get(key_name.lower())
-              if code:
-                  run_applescript(f'tell application "System Events" to key code {code}')
+def click_dl_button():
+    return run_as('''
+tell application "System Events"
+    tell process "Google Chrome"
+        try
+            repeat with btn in (every button of window 1)
+                set n to (name of btn) as string
+                if n contains "Download" or n contains "download" then
+                    click btn
+                    return "clicked:" & n
+                end if
+            end repeat
+        on error
+        end try
+    end tell
+end tell''', silent=True)
 
-          def get_running_app_names():
-              """Get list of visible running application names."""
-              script = '''
-              tell application "System Events"
-                  get name of every process whose visible is true
-              end tell
-              '''
-              result = run_applescript(script, silent=True)
-              return [n.strip() for n in result.split(",") if n.strip()]
+def accept_cookie():
+    for b in ["Accept all","Accept All","Accept Cookies","Allow all","Accepter tout"]:
+        r = run_as(f'''
+tell application "System Events"
+    tell process "Google Chrome"
+        try
+            click button "{b}" of window 1
+            return "clicked"
+        on error
+        end try
+    end tell
+end tell''', silent=True)
+        if r == "clicked":
+            print(f"[Chrome] Cookie: {b}")
+            return True
+    return False
 
-          def get_frontmost_window_title():
-              """Get the title of the frontmost window."""
-              script = '''
-              tell application "System Events"
-                  try
-                      set frontApp to first application process whose frontmost is true
-                      set winTitle to name of first window of frontApp
-                      return winTitle
-                  on error
-                      return ""
-                  end try
-              end tell
-              '''
-              return run_applescript(script, silent=True)
+def is_done_page():
+    title = run_as('''
+tell application "Google Chrome"
+    try
+        return title of active tab of front window
+    on error
+        return ""
+    end try
+end tell''', silent=True).lower()
+    return any(f.lower() in title for f in DOWNLOAD_DONE_TITLES)
 
-          def close_window_applescript(app_name):
-              """Close the front window of an application."""
-              script = f'''
-              tell application "System Events"
-                  tell process "{app_name}"
-                      try
-                          click button 1 of window 1
-                      end try
-                  end tell
-              end tell
-              '''
-              run_applescript(script, silent=True)
+def close_chrome():
+    run_as('tell application "Google Chrome" to try\nclose front window\nend try',
+           silent=True)
+    print("[CloseWindow] Chrome closed.")
 
-          def fill_proxy_auth_chrome(username, password):
-              """Fill Chrome proxy auth dialog using AppleScript."""
-              script = f'''
-              tell application "System Events"
-                  tell process "Google Chrome"
-                      try
-                          set uField to text field 1 of sheet 1 of window 1
-                          set focused of uField to true
-                          set value of uField to "{username}"
-                          set pField to text field 2 of sheet 1 of window 1
-                          set focused of pField to true
-                          set value of pField to "{password}"
-                          click button "OK" of sheet 1 of window 1
-                          return "filled"
-                      on error errMsg
-                          return "error: " & errMsg
-                      end try
-                  end tell
-              end tell
-              '''
-              return run_applescript(script)
+def opera_gx_flow():
+    print("[Opera GX] TAB/ENTER setup flow...")
+    time.sleep(2)
+    for _ in range(4):
+        press("tab"); time.sleep(0.5)
+    for i in range(8):
+        press("return")
+        d = random.uniform(1.0, 2.0)
+        print(f"[Opera GX] ENTER {i+1}/8 ({d:.2f}s)")
+        time.sleep(d)
+    for _ in range(random.randint(4, 10)):
+        press("tab"); time.sleep(0.3)
+    press("return")
+    print("[Opera GX] Setup done.")
 
-          def click_download_button_chrome(software_type):
-              """Click the final download button in Chrome."""
-              dl_keywords = ["download opera", "download now", "télécharger", "baixar",
-                             "herunterladen", "descargar", "download"]
-              script = f'''
-              tell application "System Events"
-                  tell process "Google Chrome"
-                      try
-                          set btns to every button of window 1
-                          repeat with btn in btns
-                              set btnName to (name of btn) as string
-                              if btnName contains "Download" or btnName contains "download" then
-                                  click btn
-                                  return "clicked: " & btnName
-                              end if
-                          end repeat
-                      on error
-                      end try
-                  end tell
-              end tell
-              '''
-              return run_applescript(script, silent=True)
+def opera_one_flow():
+    print("[Opera One] RIGHT/ENTER flow (90s wait)...")
+    time.sleep(90)
+    try:
+        subprocess.run(["cliclick","c:."], capture_output=True, timeout=5)
+    except Exception:
+        pass
+    for i in range(10):
+        press("right")
+        d = random.uniform(1.0, 2.0)
+        print(f"[Opera One] RIGHT {i+1}/10 ({d:.2f}s)")
+        time.sleep(d)
+    press("return")
+    print("[Opera One] Setup done.")
 
-          def accept_cookie_chrome():
-              """Try to accept cookie consent banners in Chrome."""
-              for btn_name in ["Accept all", "Accept All", "Accept Cookies",
-                               "Allow all", "Allow All", "Accepter tout"]:
-                  script = f'''
-                  tell application "System Events"
-                      tell process "Google Chrome"
-                          try
-                              click button "{btn_name}" of window 1
-                              return "clicked"
-                          on error
-                          end try
-                      end tell
-                  end tell
-                  '''
-                  result = run_applescript(script, silent=True)
-                  if result == "clicked":
-                      print(f"[Chrome] Cookie consent clicked: {btn_name}")
-                      return True
-              return False
+def handle(user, pwd, sw_type, use_proxy, timeout=360):
+    t0 = time.time()
+    last_dl = last_cookie = 0
+    proxy_done = wins_closed = setup_done = False
+    op_launch_t = None
+    sentinel = "/tmp/download_done.flag"
 
-          def is_download_done_page():
-              """Check if Chrome is on a 'download done' / thank-you page."""
-              script = '''
-              tell application "Google Chrome"
-                  try
-                      set t to title of active tab of front window
-                      return t
-                  on error
-                      return ""
-                  end try
-              end tell
-              '''
-              title = run_applescript(script, silent=True).lower()
-              return any(frag.lower() in title for frag in DOWNLOAD_DONE_TITLES)
+    print(f"[Handler] Started. type={sw_type}, proxy={use_proxy}")
+    while time.time() - t0 < timeout:
+        try:
+            apps = running_apps()
+            chrome = "Google Chrome" in apps
+            op_gx  = any("Opera GX" in a for a in apps)
+            op_one = any("Opera" in a and "Opera GX" not in a for a in apps)
 
-          def close_chrome_window():
-              """Close the front Chrome window."""
-              script = '''
-              tell application "Google Chrome"
-                  try
-                      close front window
-                  end try
-              end tell
-              '''
-              run_applescript(script, silent=True)
-              print("[CloseWindow] Chrome front window closed.")
+            if use_proxy and chrome and not proxy_done:
+                if fill_proxy_auth(user, pwd) == "filled":
+                    proxy_done = True
+                    print("[Handler] Proxy auth done.")
 
-          def opera_gx_post_install_flow():
-              """TAB/ENTER automation for Opera GX first-launch setup."""
-              print("[Opera GX] Starting post-install TAB/ENTER automation flow...")
-              time.sleep(2)
-              for _ in range(4):
-                  press_named_key("tab")
-                  time.sleep(0.5)
-              print("[Opera GX] Pressed TAB 4 times.")
-              for i in range(8):
-                  press_named_key("return")
-                  delay = random.uniform(1.0, 2.0)
-                  print(f"[Opera GX] ENTER {i+1}/8, waiting {delay:.2f}s")
-                  time.sleep(delay)
-              random_tabs = random.randint(4, 10)
-              for _ in range(random_tabs):
-                  press_named_key("tab")
-                  time.sleep(0.3)
-              press_named_key("return")
-              print("[Opera GX] Setup automation completed.")
+            if chrome and time.time() - last_cookie > 10:
+                if accept_cookie():
+                    last_cookie = time.time()
 
-          def opera_one_post_install_flow():
-              """RIGHT/ENTER automation for Opera One first-launch setup."""
-              print("[Opera One] Starting post-install RIGHT/ENTER automation flow (90s delay)...")
-              time.sleep(90)
-              # Click center of screen via cliclick if available
-              try:
-                  result = subprocess.run(
-                      ["cliclick", "c:."],
-                      capture_output=True, text=True, timeout=5
-                  )
-                  print("[Opera One] Center click via cliclick.")
-              except Exception:
-                  # Fallback: use AppleScript to click center
-                  script = '''
-                  tell application "System Events"
-                      set screenSize to {(first item of (get size of window 1 of (first process whose frontmost is true))),
-                                         (second item of (get size of window 1 of (first process whose frontmost is true)))}
-                  end tell
-                  '''
-                  run_applescript(script, silent=True)
+            if chrome and sw_type in ["opera_gx","opera_one","dynamic_opera","ad_mvn"]:
+                if time.time() - last_dl > 5:
+                    r = click_dl_button()
+                    if r and "clicked" in r:
+                        last_dl = time.time()
+                        print(f"[Handler] DL btn: {r}")
 
-              for i in range(10):
-                  press_named_key("right")
-                  delay = random.uniform(1.0, 2.0)
-                  print(f"[Opera One] RIGHT {i+1}/10, waiting {delay:.2f}s")
-                  time.sleep(delay)
-              press_named_key("return")
-              print("[Opera One] Setup automation completed.")
+            if not wins_closed and os.path.exists(sentinel):
+                print("[CloseWindow] Sentinel — cleaning up Chrome pages...")
+                for a in range(1, 5):
+                    if is_done_page():
+                        close_chrome(); time.sleep(2)
+                    else:
+                        print(f"[CloseWindow] Clear on #{a}"); break
+                wins_closed = True
 
-          def handle_automation(username, password, software_type, use_proxy, timeout=360):
-              start_time = time.time()
-              last_dl_click_time = 0
-              last_cookie_click_time = 0
-              proxy_auth_done = False
-              download_windows_closed = False
-              opera_launched = False
-              opera_launched_time = None
-              opera_setup_done = False
-              sentinel_path = "/tmp/download_done.flag"
+            if sw_type in ["opera_gx","dynamic_opera","ad_mvn"] and op_gx and not setup_done:
+                if not op_launch_t:
+                    op_launch_t = time.time()
+                    print("[Handler] Opera GX detected — 15s wait...")
+                    run_as('tell application "Opera GX" to activate', silent=True)
+                if time.time() - op_launch_t > 15:
+                    opera_gx_flow(); setup_done = True
 
-              print(f"[Handler] Starting macOS automation. software_type={software_type}, use_proxy={use_proxy}")
+            if sw_type == "opera_one" and op_one and not setup_done:
+                if not op_launch_t:
+                    op_launch_t = time.time()
+                    print("[Handler] Opera detected — 90s wait...")
+                    run_as('tell application "Opera" to activate', silent=True)
+                if time.time() - op_launch_t > 90:
+                    opera_one_flow(); setup_done = True
 
-              while time.time() - start_time < timeout:
-                  try:
-                      running_apps = get_running_app_names()
-                      chrome_running = "Google Chrome" in running_apps
-                      opera_gx_running = any("Opera GX" in a for a in running_apps)
-                      opera_running = any(
-                          ("Opera" in a and "Opera GX" not in a) for a in running_apps
-                      )
+        except Exception as e:
+            print(f"[Handler] Exception: {e}")
+        time.sleep(1)
 
-                      # A. Proxy Auth Dialog (Chrome sheet/dialog)
-                      if use_proxy and chrome_running and not proxy_auth_done:
-                          result = fill_proxy_auth_chrome(username, password)
-                          if result == "filled":
-                              proxy_auth_done = True
-                              print("[Handler] Proxy authentication filled.")
+if __name__ == "__main__":
+    u  = sys.argv[1] if len(sys.argv) > 1 else ""
+    p  = sys.argv[2] if len(sys.argv) > 2 else ""
+    sw = sys.argv[3] if len(sys.argv) > 3 else "opera_gx"
+    px = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
+    handle(u, p, sw, px)
+PYEOF
 
-                      # B. Cookie Consent
-                      if chrome_running and (time.time() - last_cookie_click_time > 10):
-                          if accept_cookie_chrome():
-                              last_cookie_click_time = time.time()
-
-                      # C. Final Download Button Click
-                      if chrome_running and software_type in ["opera_gx", "opera_one", "dynamic_opera", "ad_mvn"]:
-                          if time.time() - last_dl_click_time > 5:
-                              r = click_download_button_chrome(software_type)
-                              if r and "clicked" in r:
-                                  last_dl_click_time = time.time()
-                                  print(f"[Handler] Download button clicked: {r}")
-
-                      # D. Close download-done / thank-you page once sentinel file exists
-                      if not download_windows_closed and os.path.exists(sentinel_path):
-                          print("[CloseWindow] Sentinel detected — closing Chrome download pages...")
-                          for attempt in range(1, 5):
-                              if is_download_done_page():
-                                  close_chrome_window()
-                                  time.sleep(2)
-                              else:
-                                  print(f"[CloseWindow] No more download pages on attempt #{attempt}.")
-                                  break
-                          download_windows_closed = True
-
-                      # E. Opera GX post-install automation
-                      if software_type in ["opera_gx", "dynamic_opera", "ad_mvn"] and opera_gx_running and not opera_setup_done:
-                          if not opera_launched_time:
-                              opera_launched_time = time.time()
-                              print(f"[Handler] Opera GX window detected. Waiting 15s for full render...")
-                              # Bring Opera GX to foreground
-                              script = 'tell application "Opera GX" to activate'
-                              run_applescript(script, silent=True)
-                          if time.time() - opera_launched_time > 15:
-                              opera_gx_post_install_flow()
-                              opera_setup_done = True
-
-                      # F. Opera One post-install automation
-                      if software_type in ["opera_one"] and opera_running and not opera_setup_done:
-                          if not opera_launched_time:
-                              opera_launched_time = time.time()
-                              print(f"[Handler] Opera window detected. Starting 90s wait for full render...")
-                              script = 'tell application "Opera" to activate'
-                              run_applescript(script, silent=True)
-                          if time.time() - opera_launched_time > 90:
-                              opera_one_post_install_flow()
-                              opera_setup_done = True
-
-                  except Exception as e:
-                      print(f"[Handler] Exception: {e}")
-
-                  time.sleep(1)
-
-          if __name__ == "__main__":
-              username      = sys.argv[1] if len(sys.argv) > 1 else ""
-              password      = sys.argv[2] if len(sys.argv) > 2 else ""
-              software_type = sys.argv[3] if len(sys.argv) > 3 else "opera_gx"
-              use_proxy     = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
-              handle_automation(username, password, software_type, use_proxy)
-          PYEOF
-
-          # -------------------------------------------------------------------
-          # 2. Grant Accessibility permissions for osascript / Python automation
-          # -------------------------------------------------------------------
-          # On GitHub Actions macOS runners, Accessibility access can be granted via tccutil
+          # ----------------------------------------------------------------
+          # 2. TCC — grant Accessibility to osascript & System Events
+          # ----------------------------------------------------------------
           sudo tccutil reset Accessibility 2>/dev/null || true
-          # Pre-approve osascript and Python for Accessibility
-          PYTHON_BIN=$(which python3)
-          sudo sqlite3 /Library/Application\ Support/com.apple.TCC/TCC.db \
-            "INSERT OR REPLACE INTO access VALUES('kTCCServiceAccessibility','com.apple.Terminal',0,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,1687786800);" 2>/dev/null || true
+          TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
+          sudo sqlite3 "$TCC_DB" \
+            "INSERT OR REPLACE INTO access \
+             VALUES('kTCCServiceAccessibility','com.apple.Terminal',\
+             0,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,1687786800);" 2>/dev/null || true
+          sudo sqlite3 "$TCC_DB" \
+            "INSERT OR REPLACE INTO access \
+             (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
+             VALUES('kTCCServiceAccessibility','/usr/bin/osascript',1,2,4,1,0);" \
+            2>/dev/null || true
+          sudo sqlite3 "$TCC_DB" \
+            "INSERT OR REPLACE INTO access \
+             (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
+             VALUES('kTCCServiceAccessibility','com.apple.systemevents',0,2,4,1,0);" \
+            2>/dev/null || true
 
-          # -------------------------------------------------------------------
-          # 3. Start Python UI Handler in background
-          # -------------------------------------------------------------------
-          # Use the venv python so pyobjc/atomacos imports resolve correctly
+          # ----------------------------------------------------------------
+          # 3. Start UI handler in background
+          # ----------------------------------------------------------------
           HANDLER_PYTHON="${UIENV_PYTHON:-python3}"
-          echo "Starting macOS UI automation handler (python: $HANDLER_PYTHON)..."
+          echo "Starting UI handler ($HANDLER_PYTHON)..."
           "$HANDLER_PYTHON" -u /tmp/macos_handler.py \
             "$PROXY_USER" "$PROXY_PASS" "$SOFTWARE_TYPE" "$USE_PROXY" \
             > /tmp/handler_output.log 2>&1 &
           HANDLER_PID=$!
           echo "Handler PID: $HANDLER_PID"
 
-          # -------------------------------------------------------------------
-          # 4. Background job: Watch Downloads folder for .dmg/.pkg then install
-          # -------------------------------------------------------------------
+          # ----------------------------------------------------------------
+          # 4. Background watcher: detect download → install → launch
+          # ----------------------------------------------------------------
           (
             DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
             INSTALLED=false
-            echo "[Watcher] Watching $DL_FOLDER for $DMG_FILTER ..."
-            while [ "$INSTALLED" = false ] && [ $(date +%s) -lt $DEADLINE ]; do
-              # Find completed DMG or PKG (exclude partial downloads)
-              FILE=$(find "$DL_FOLDER" -maxdepth 1 \( -name "*.dmg" -o -name "*.pkg" \) \
+            echo "[Watcher] Monitoring $DL_FOLDER ..."
+
+            while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
+
+              # Primary: DMG or PKG (no partials)
+              FILE=$(find "$DL_FOLDER" -maxdepth 1 \
+                     \( -name "*.dmg" -o -name "*.pkg" \) \
                      ! -name "*.download" ! -name "*.crdownload" ! -name "*.part" \
                      -newer /tmp/watcher_start_marker 2>/dev/null | head -1)
-              # If no dmg/pkg yet, check for a bare .app bundle dropped directly into Downloads
+
+              # Fallback: bare .app bundle
               if [ -z "$FILE" ]; then
                 FILE=$(find "$DL_FOLDER" -maxdepth 1 -type d -name "*.app" \
                        -newer /tmp/watcher_start_marker 2>/dev/null | head -1)
               fi
 
               if [ -n "$FILE" ]; then
-                echo "[Watcher] Download found: $FILE"
-                # Write sentinel so Python handler closes browser download page
+                echo "[Watcher] Detected: $FILE"
                 touch "$SENTINEL_PATH"
-                echo "[Watcher] Sentinel written."
-
                 BASENAME=$(basename "$FILE")
                 EXT="${BASENAME##*.}"
 
-                # For DMG/PKG: wait until file stops growing (fully written)
-                # For .app: it's a directory — just give it a moment to finish extracting
+                # Wait for file to stabilise (skip for .app directories)
                 if [ "$EXT" != "app" ]; then
-                  PREV_SIZE=0
+                  PREV=0
                   for i in $(seq 1 30); do
-                    CURR_SIZE=$(stat -f%z "$FILE" 2>/dev/null || stat -c%s "$FILE" 2>/dev/null || echo 0)
-                    if [ "$CURR_SIZE" = "$PREV_SIZE" ] && [ "$CURR_SIZE" -gt 1000000 ]; then
-                      break
-                    fi
-                    PREV_SIZE=$CURR_SIZE
-                    sleep 2
+                    SZ=$(stat -f%z "$FILE" 2>/dev/null || \
+                         stat -c%s "$FILE" 2>/dev/null || echo 0)
+                    [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 1000000 ] && break
+                    PREV=$SZ; sleep 2
                   done
                 else
-                  echo "[Watcher] .app bundle detected — waiting 5s for extraction to settle..."
                   sleep 5
                 fi
 
-                # Remove quarantine attribute so macOS allows launch
                 xattr -dr com.apple.quarantine "$FILE" 2>/dev/null || true
-
-                echo "[Watcher] Waiting 4s for browser cleanup before installing..."
+                echo "[Watcher] 4s cleanup delay..."
                 sleep 4
 
+                # ---- DMG ----
                 if [ "$EXT" = "dmg" ]; then
-                  echo "[Installer] Mounting DMG: $FILE"
-                  MOUNT_POINT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null | awk '/\/Volumes\// {print $NF}' | head -1)
-                  if [ -n "$MOUNT_POINT" ]; then
-                    echo "[Installer] Mounted at: $MOUNT_POINT"
-                    # Find the .app inside the DMG
-                    APP_IN_DMG=$(find "$MOUNT_POINT" -maxdepth 2 -name "*.app" | head -1)
-                    if [ -n "$APP_IN_DMG" ]; then
-                      APP_NAME=$(basename "$APP_IN_DMG")
-                      echo "[Installer] Copying $APP_NAME to /Applications..."
-                      sudo cp -R "$APP_IN_DMG" /Applications/ || true
-                      sudo xattr -dr com.apple.quarantine "/Applications/$APP_NAME" 2>/dev/null || true
-                      echo "[Installer] $APP_NAME installed from DMG."
+                  echo "[Installer] Mounting: $FILE"
+                  MNT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null \
+                        | awk '/\/Volumes\// {print $NF}' | head -1)
+                  if [ -n "$MNT" ]; then
+                    APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -1)
+                    if [ -n "$APP_SRC" ]; then
+                      AN=$(basename "$APP_SRC")
+                      sudo cp -R "$APP_SRC" /Applications/ || true
+                      sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
+                      echo "[Installer] $AN installed from DMG."
                     else
-                      echo "[Installer] WARNING: No .app found in DMG."
+                      echo "[Installer] WARNING: No .app in DMG."
                     fi
-                    hdiutil detach "$MOUNT_POINT" -quiet || true
+                    hdiutil detach "$MNT" -quiet || true
                   else
-                    echo "[Installer] ERROR: Failed to mount DMG."
+                    echo "[Installer] ERROR: Mount failed."
                   fi
 
+                # ---- PKG ----
                 elif [ "$EXT" = "pkg" ]; then
-                  echo "[Installer] Installing PKG: $FILE"
+                  echo "[Installer] Installing PKG..."
                   sudo installer -pkg "$FILE" -target / -verboseR || true
-                  echo "[Installer] PKG installation complete."
 
+                # ---- Direct .app ----
                 elif [ "$EXT" = "app" ]; then
-                  # Direct .app bundle — just copy it to /Applications
-                  APP_NAME="$BASENAME"
-                  echo "[Installer] Direct .app bundle detected: $APP_NAME"
-                  echo "[Installer] Copying $APP_NAME to /Applications..."
+                  echo "[Installer] Direct .app: $BASENAME"
                   sudo cp -R "$FILE" /Applications/ || true
-                  sudo xattr -dr com.apple.quarantine "/Applications/$APP_NAME" 2>/dev/null || true
-                  # Also codesign ad-hoc so Gatekeeper doesn't block launch
-                  sudo codesign --force --deep --sign - "/Applications/$APP_NAME" 2>/dev/null || true
-                  echo "[Installer] $APP_NAME installed from direct .app bundle."
+                  sudo xattr -dr com.apple.quarantine "/Applications/$BASENAME" 2>/dev/null || true
+                  sudo codesign --force --deep --sign - "/Applications/$BASENAME" 2>/dev/null || true
+                  echo "[Installer] $BASENAME installed."
                 fi
 
-                # Detect what was installed and determine the app path.
-                # For dynamic_opera / ad_mvn we sniff the actual filename (dmg/pkg/app)
-                # to decide whether GX or standard Opera was delivered.
-                ACTUAL_SOFTWARE="$SOFTWARE_TYPE"
-                if [ "$ACTUAL_SOFTWARE" = "dynamic_opera" ] || [ "$ACTUAL_SOFTWARE" = "ad_mvn" ]; then
-                  if echo "$BASENAME" | grep -qi "gx"; then
-                    ACTUAL_SOFTWARE="opera_gx"
-                  else
-                    ACTUAL_SOFTWARE="opera_one"
-                  fi
+                # ---- Resolve actual software type from filename ----
+                ACTUAL="$SOFTWARE_TYPE"
+                if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
+                  echo "$BASENAME" | grep -qi "gx" && ACTUAL="opera_gx" || ACTUAL="opera_one"
                 fi
 
-                # Build candidate app paths.
-                # If we installed a bare .app bundle its name IS $BASENAME — put that first.
-                if [ "$ACTUAL_SOFTWARE" = "opera_gx" ]; then
-                  APP_PATHS=(
-                    "/Applications/$BASENAME"
-                    "/Applications/Opera GX.app"
-                    "$HOME/Applications/Opera GX.app"
-                  )
+                # ---- App launch paths ----
+                if [ "$ACTUAL" = "opera_gx" ]; then
+                  PATHS=("/Applications/$BASENAME"
+                         "/Applications/Opera GX.app"
+                         "$HOME/Applications/Opera GX.app")
                 else
-                  APP_PATHS=(
-                    "/Applications/$BASENAME"
-                    "/Applications/Opera.app"
-                    "$HOME/Applications/Opera.app"
-                  )
+                  PATHS=("/Applications/$BASENAME"
+                         "/Applications/Opera.app"
+                         "$HOME/Applications/Opera.app")
                 fi
 
-                echo "[$ACTUAL_SOFTWARE] Waiting for app to appear after install..."
+                echo "[$ACTUAL] Waiting for app..."
                 LAUNCHED=false
                 for i in $(seq 1 60); do
-                  for APP_PATH in "${APP_PATHS[@]}"; do
-                    if [ -d "$APP_PATH" ]; then
+                  for P in "${PATHS[@]}"; do
+                    if [ -d "$P" ]; then
                       sleep 3
-                      echo "[$ACTUAL_SOFTWARE] Launching: $APP_PATH"
-                      open "$APP_PATH" || true
-                      LAUNCHED=true
-                      break 2
+                      echo "[$ACTUAL] Launching: $P"
+                      open "$P" || true
+                      LAUNCHED=true; break 2
                     fi
                   done
                   sleep 2
                 done
 
                 if [ "$LAUNCHED" = false ]; then
-                  echo "[$ACTUAL_SOFTWARE] WARNING: Could not find app after install. Searching..."
-                  FOUND=$(find /Applications "$HOME/Applications" -maxdepth 2 -name "Opera*.app" 2>/dev/null | head -1)
-                  if [ -n "$FOUND" ]; then
-                    echo "[$ACTUAL_SOFTWARE] Found at: $FOUND — launching."
-                    open "$FOUND" || true
-                  fi
+                  FOUND=$(find /Applications "$HOME/Applications" \
+                          -maxdepth 2 -name "Opera*.app" 2>/dev/null | head -1)
+                  [ -n "$FOUND" ] && echo "[$ACTUAL] Fallback launch: $FOUND" && open "$FOUND" || true
                 fi
 
                 INSTALLED=true
@@ -990,79 +874,64 @@ jobs:
                 sleep 5
               fi
             done
-            echo "[Watcher] Job complete or timed out."
+            echo "[Watcher] Done."
           ) &
           WATCHER_PID=$!
           echo "Watcher PID: $WATCHER_PID"
 
-          # -------------------------------------------------------------------
-          # 5. Launch Chrome (or Safari fallback) with target URL
-          # -------------------------------------------------------------------
+          # ----------------------------------------------------------------
+          # 5. Launch Chrome (or Safari fallback)
+          # ----------------------------------------------------------------
           touch /tmp/watcher_start_marker
-
-          CHROME_APP="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-          SAFARI_APP="/Applications/Safari.app"
+          CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
           if [ "$USE_PROXY" = "true" ]; then
-            PROXY_SERVER="residential-proxy.scrapeops.io:8181"
+            PROXY_SRV="residential-proxy.scrapeops.io:8181"
             echo "Launching Chrome WITH proxy -> $TARGET_URL"
-            if [ -f "$CHROME_APP" ]; then
-              "$CHROME_APP" \
-                --no-first-run \
-                --no-default-browser-check \
-                --disable-sync \
+            if [ -f "$CHROME_BIN" ]; then
+              "$CHROME_BIN" \
+                --no-first-run --no-default-browser-check --disable-sync \
                 --safebrowsing-disable-download-protection \
                 --disable-features=SafeBrowsingEnhancedProtection \
-                --proxy-server="http://$PROXY_SERVER" \
+                --proxy-server="http://$PROXY_SRV" \
                 "$TARGET_URL" &
-              echo "Chrome launched with proxy."
             else
-              echo "ERROR: Chrome not installed. Cannot use proxy. Exiting."
-              exit 1
+              echo "ERROR: Chrome required for proxy mode but not found."; exit 1
             fi
           else
-            echo "Launching browser WITHOUT proxy (direct) -> $TARGET_URL"
-            if [ -f "$CHROME_APP" ]; then
-              "$CHROME_APP" \
-                --no-first-run \
-                --no-default-browser-check \
-                --disable-sync \
+            echo "Launching browser (direct) -> $TARGET_URL"
+            if [ -f "$CHROME_BIN" ]; then
+              "$CHROME_BIN" \
+                --no-first-run --no-default-browser-check --disable-sync \
                 --safebrowsing-disable-download-protection \
                 --disable-features=SafeBrowsingEnhancedProtection \
                 "$TARGET_URL" &
-              echo "Chrome launched (direct)."
             else
-              echo "Chrome not found, using Safari as fallback."
-              # Configure Safari proxy via networksetup if needed (direct mode only)
+              echo "Chrome not found — Safari fallback."
               open -a Safari "$TARGET_URL" || true
-              echo "Safari launched (direct)."
             fi
           fi
 
-          # -------------------------------------------------------------------
-          # 6. Monitor watcher output and wait
-          # -------------------------------------------------------------------
-          echo "Monitoring background jobs for up to $TIMEOUT_SECS seconds..."
+          # ----------------------------------------------------------------
+          # 6. Monitor & wait
+          # ----------------------------------------------------------------
+          echo "Monitoring for up to $TIMEOUT_SECS seconds..."
           DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
-          while kill -0 $WATCHER_PID 2>/dev/null && [ $(date +%s) -lt $DEADLINE ]; do
-            # Stream handler log output
-            if [ -f /tmp/handler_output.log ]; then
-              tail -n +1 -f /tmp/handler_output.log 2>/dev/null &
-              TAIL_PID=$!
-              sleep 10
-              kill $TAIL_PID 2>/dev/null || true
-            else
-              sleep 10
-            fi
+          while kill -0 $WATCHER_PID 2>/dev/null && \
+                [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            [ -f /tmp/handler_output.log ] && \
+              timeout 10 tail -f /tmp/handler_output.log 2>/dev/null || sleep 10
           done
-
           wait $WATCHER_PID 2>/dev/null || true
           kill $HANDLER_PID 2>/dev/null || true
           echo "=== Installation workflow complete ==="
 
+      # ================================================================== #
+      # STEP 6 — Keep runner alive                                         #
+      # ================================================================== #
       - name: Keep Runner Alive
         if: always()
         shell: bash
         run: |
-          echo "Session is active. Runner will stay online until job timeout."
+          echo "Session active. Runner stays online until job timeout."
           sleep 360
