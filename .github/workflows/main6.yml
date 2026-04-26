@@ -14,7 +14,7 @@ on:
           - 'macos-15-xlarge'
           - 'macos-26'
           - 'macos-26-intel'
-        default: 'macos-26'
+        default: 'macos-15'
       getscreen_email:
         description: 'Getscreen.me Account Email'
         required: true
@@ -51,12 +51,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - B4Books'
+        default: 'OperaGX - James'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '2f2622aa-3db7-4033-8b94-f0657bdf0cb3'
+        default: '589109d6-21c7-4f1c-b369-6557eca63d01'
       proxy_country:
         description: 'Proxy Country Geotargeting'
         required: true
@@ -69,12 +69,12 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'USA'
+        default: 'Brazil'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: false
+        default: true
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
@@ -147,7 +147,7 @@ jobs:
           all_urls = {**opera_urls, **opera_one_urls, **ad_mvn_urls}
           target_url = all_urls.get(software_choice, opera_urls["OperaGX - James"])
 
-          dynamic_links =[
+          dynamic_links = [
               "OperaGX - Techx", "OperaGX - Fatradez", "OperaGX - James",
               "OperaGX - Oliver", "OperaGX - Mahal"
           ]
@@ -190,7 +190,7 @@ jobs:
 
           short_os_tag = short_os(os_version)
           short_sw_tag = short_software(software_choice)
-          includes =[]
+          includes = []
           if email:
               for i in range(1, num_devices + 1):
                   device_name = f"{i}-{short_os_tag}-{short_sw_tag}"
@@ -247,14 +247,14 @@ jobs:
                   global content
                   pattern = r"(" + input_name + r":[\s\S]*?default:\s*)(true|false)"
                   content = re.sub(pattern, rf"\g<1>{new_val.lower()}", content, count=1)
-              update_default_str("os_version",       os.environ.get("OS_VERSION"))
-              update_default_str("getscreen_email",  os.environ.get("GETSCREEN_EMAIL"))
-              update_default_str("num_devices",      os.environ.get("NUM_DEVICES"))
-              update_default_str("software_choice",  os.environ.get("SOFTWARE_CHOICE"))
+              update_default_str("os_version",        os.environ.get("OS_VERSION"))
+              update_default_str("getscreen_email",   os.environ.get("GETSCREEN_EMAIL"))
+              update_default_str("num_devices",       os.environ.get("NUM_DEVICES"))
+              update_default_str("software_choice",   os.environ.get("SOFTWARE_CHOICE"))
               update_default_str("scrapeops_api_key", os.environ.get("API_KEY"))
-              update_default_str("proxy_country",    os.environ.get("COUNTRY"))
-              update_default_bool("mobile_proxies",  os.environ.get("MOBILE"))
-              update_default_bool("sticky_sessions", os.environ.get("STICKY"))
+              update_default_str("proxy_country",     os.environ.get("COUNTRY"))
+              update_default_bool("mobile_proxies",   os.environ.get("MOBILE"))
+              update_default_bool("sticky_sessions",  os.environ.get("STICKY"))
               with open(file_path, "w") as f:
                   f.write(content)
           else:
@@ -303,7 +303,6 @@ jobs:
         run: |
           echo "=== Installing Python UI Automation Dependencies ==="
 
-          # PEP 668: use a venv to bypass externally-managed-environment error
           VENV_DIR="/tmp/uienv"
           PYTHON_BIN=""
           for candidate in python3.12 python3.11 python3.10 python3; do
@@ -331,8 +330,12 @@ jobs:
             echo "Installing Homebrew..."
             NONINTERACTIVE=1 /bin/bash -c \
               "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
-            for bp in /opt/homebrew/bin /usr/local/bin; do[ -x "$bp/brew" ] && export PATH="$bp:$PATH" && \
-                echo "PATH=$bp:$PATH" >> "$GITHUB_ENV" && break
+            for bp in /opt/homebrew/bin /usr/local/bin; do
+              if [ -x "$bp/brew" ]; then
+                export PATH="$bp:$PATH"
+                echo "PATH=$bp:$PATH" >> "$GITHUB_ENV"
+                break
+              fi
             done
           fi
 
@@ -349,7 +352,6 @@ jobs:
           DEVICE_NAME="${{ matrix.device }}"
           EMAIL="${{ matrix.email }}"
 
-          # --- Download with retries ---
           MAX_RETRIES=3
           RETRY=0
           SUCCESS=false
@@ -358,7 +360,7 @@ jobs:
               --retry 3 --retry-delay 5 --silent --show-error
             FILE_SIZE=$(stat -f%z getscreen.dmg 2>/dev/null || \
                         stat -c%s getscreen.dmg 2>/dev/null || echo 0)
-            if[ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
+            if [ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
               SUCCESS=true
               break
             fi
@@ -373,10 +375,8 @@ jobs:
           fi
           echo "Downloaded getscreen.dmg (${FILE_SIZE}B). Mounting..."
 
-          # --- Mount ---
           hdiutil attach getscreen.dmg -mountpoint /Volumes/getscreen -nobrowse -quiet
 
-          # --- Find .app inside DMG ---
           APP_PATH=$(find /Volumes/getscreen -maxdepth 1 -name "*.app" | head -n 1)
           if [ -z "$APP_PATH" ]; then
             echo "ERROR: No .app found inside Getscreen DMG. Detaching."
@@ -386,14 +386,11 @@ jobs:
           APP_NAME=$(basename "$APP_PATH")
           echo "Found: $APP_NAME"
 
-          # --- Install to /Applications ---
           sudo cp -R "$APP_PATH" /Applications/
           sudo xattr -dr com.apple.quarantine "/Applications/$APP_NAME" 2>/dev/null || true
 
-          # --- Detach ---
           hdiutil detach /Volumes/getscreen -quiet -force || true
 
-          # --- Grant TCC permissions (ScreenCapture + Accessibility) ---
           APP_BUNDLE_ID=$(defaults read \
             "/Applications/$APP_NAME/Contents/Info.plist" \
             CFBundleIdentifier 2>/dev/null || echo "")
@@ -401,7 +398,7 @@ jobs:
 
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
 
-          if[ -n "$APP_BUNDLE_ID" ]; then
+          if [ -n "$APP_BUNDLE_ID" ]; then
             sudo sqlite3 "$TCC_DB" \
               "INSERT OR REPLACE INTO access \
                (service, client, client_type, auth_value, auth_reason, auth_version, flags) \
@@ -417,25 +414,22 @@ jobs:
             echo "WARNING: Bundle ID not found — skipping TCC injection."
           fi
 
-          # --- Find executable ---
           EXEC_NAME=$(defaults read \
             "/Applications/$APP_NAME/Contents/Info.plist" \
             CFBundleExecutable 2>/dev/null || echo "")
           EXEC_PATH="/Applications/$APP_NAME/Contents/MacOS/$EXEC_NAME"
 
-          # Fallback: find any executable in MacOS folder
-          if[ ! -x "$EXEC_PATH" ]; then
+          if [ ! -x "$EXEC_PATH" ]; then
             EXEC_PATH=$(find "/Applications/$APP_NAME/Contents/MacOS" \
               -maxdepth 1 -type f -perm +111 2>/dev/null | head -1)
           fi
 
-          if [ -z "$EXEC_PATH" ] ||[ ! -x "$EXEC_PATH" ]; then
+          if [ -z "$EXEC_PATH" ] || [ ! -x "$EXEC_PATH" ]; then
             echo "ERROR: Getscreen executable not found. Skipping registration."
             exit 0
           fi
           echo "Executable: $EXEC_PATH"
 
-          # --- Register, configure, start ---
           sudo "$EXEC_PATH" -install 2>/dev/null || true
           sleep 2
           sudo "$EXEC_PATH" -register "$EMAIL" 2>/dev/null || true
@@ -465,10 +459,10 @@ jobs:
             -o "$CHROME_DMG" 2>/dev/null || true
 
           FILE_SIZE=$(stat -f%z "$CHROME_DMG" 2>/dev/null || echo 0)
-          if[ -f "$CHROME_DMG" ] &&[ "$FILE_SIZE" -gt 1000000 ]; then
+          if [ -f "$CHROME_DMG" ] && [ "$FILE_SIZE" -gt 1000000 ]; then
             hdiutil attach "$CHROME_DMG" -quiet -nobrowse \
               -mountpoint /Volumes/GoogleChrome || true
-            if[ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
+            if [ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
               sudo cp -R "/Volumes/GoogleChrome/Google Chrome.app" /Applications/ || true
               sudo xattr -dr com.apple.quarantine \
                 "/Applications/Google Chrome.app" 2>/dev/null || true
@@ -513,9 +507,6 @@ jobs:
           SENTINEL_PATH="/tmp/download_done.flag"
           TIMEOUT_SECS=360
 
-          # ----------------------------------------------------------------
-          # 1. Write Python UI automation handler
-          # ----------------------------------------------------------------
           cat > /tmp/macos_handler.py << 'PYEOF'
           import time, sys, os, subprocess, random
 
@@ -526,7 +517,7 @@ jobs:
               HAS_ATOMACOS = False
               print("[Handler] atomacos not available — AppleScript only.")
 
-          DOWNLOAD_DONE_TITLES =[
+          DOWNLOAD_DONE_TITLES = [
               "Thanks for downloading Opera", "Thanks for downloadin",
               "Download | Thanks", "sudetyj", "clickWorker",
               "GET READY TO PLAY", "ready to install",
@@ -552,7 +543,7 @@ jobs:
           def running_apps():
               r = run_as('tell application "System Events" to get name of every process whose visible is true',
                          silent=True)
-              return[n.strip() for n in r.split(",") if n.strip()]
+              return [n.strip() for n in r.split(",") if n.strip()]
 
           def fill_proxy_auth(user, pwd):
               return run_as(f'''
@@ -591,7 +582,7 @@ jobs:
           end tell''', silent=True)
 
           def accept_cookie():
-              for b in["Accept all","Accept All","Accept Cookies","Allow all","Accepter tout"]:
+              for b in ["Accept all","Accept All","Accept Cookies","Allow all","Accepter tout"]:
                   r = run_as(f'''
           tell application "System Events"
               tell process "Google Chrome"
@@ -677,7 +668,7 @@ jobs:
                           if accept_cookie():
                               last_cookie = time.time()
 
-                      if chrome and sw_type in["opera_gx","opera_one","dynamic_opera","ad_mvn"]:
+                      if chrome and sw_type in ["opera_gx","opera_one","dynamic_opera","ad_mvn"]:
                           if time.time() - last_dl > 5:
                               r = click_dl_button()
                               if r and "clicked" in r:
@@ -693,7 +684,7 @@ jobs:
                                   print(f"[CloseWindow] Clear on #{a}"); break
                           wins_closed = True
 
-                      if sw_type in["opera_gx","dynamic_opera","ad_mvn"] and op_gx and not setup_done:
+                      if sw_type in ["opera_gx","dynamic_opera","ad_mvn"] and op_gx and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
                               print("[Handler] Opera GX detected — 15s wait...")
@@ -721,9 +712,6 @@ jobs:
               handle(u, p, sw, px)
           PYEOF
 
-          # ----------------------------------------------------------------
-          # 2. TCC — grant Accessibility to osascript & System Events
-          # ----------------------------------------------------------------
           sudo tccutil reset Accessibility 2>/dev/null || true
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           sudo sqlite3 "$TCC_DB" \
@@ -741,9 +729,6 @@ jobs:
              VALUES('kTCCServiceAccessibility','com.apple.systemevents',0,2,4,1,0);" \
             2>/dev/null || true
 
-          # ----------------------------------------------------------------
-          # 3. Start UI handler in background
-          # ----------------------------------------------------------------
           HANDLER_PYTHON="${UIENV_PYTHON:-python3}"
           echo "Starting UI handler ($HANDLER_PYTHON)..."
           "$HANDLER_PYTHON" -u /tmp/macos_handler.py \
@@ -752,23 +737,18 @@ jobs:
           HANDLER_PID=$!
           echo "Handler PID: $HANDLER_PID"
 
-          # ----------------------------------------------------------------
-          # 4. Background watcher: detect download → install → launch
-          # ----------------------------------------------------------------
           (
             DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
             INSTALLED=false
             echo "[Watcher] Monitoring $DL_FOLDER ..."
 
-            while [ "$INSTALLED" = false ] &&[ "$(date +%s)" -lt "$DEADLINE" ]; do
+            while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
 
-              # Primary: DMG or PKG (no partials)
               FILE=$(find "$DL_FOLDER" -maxdepth 1 \
                      \( -name "*.dmg" -o -name "*.pkg" \) \
                      ! -name "*.download" ! -name "*.crdownload" ! -name "*.part" \
                      -newer /tmp/watcher_start_marker 2>/dev/null | head -1)
 
-              # Fallback: bare .app bundle
               if [ -z "$FILE" ]; then
                 FILE=$(find "$DL_FOLDER" -maxdepth 1 -type d -name "*.app" \
                        -newer /tmp/watcher_start_marker 2>/dev/null | head -1)
@@ -780,12 +760,12 @@ jobs:
                 BASENAME=$(basename "$FILE")
                 EXT="${BASENAME##*.}"
 
-                # Wait for file to stabilise (skip for .app directories)
-                if[ "$EXT" != "app" ]; then
+                if [ "$EXT" != "app" ]; then
                   PREV=0
                   for i in $(seq 1 30); do
                     SZ=$(stat -f%z "$FILE" 2>/dev/null || \
-                         stat -c%s "$FILE" 2>/dev/null || echo 0)[ "$SZ" = "$PREV" ] && [ "$SZ" -gt 1000000 ] && break
+                         stat -c%s "$FILE" 2>/dev/null || echo 0)
+                    [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 1000000 ] && break
                     PREV=$SZ; sleep 2
                   done
                 else
@@ -796,12 +776,11 @@ jobs:
                 echo "[Watcher] 4s cleanup delay..."
                 sleep 4
 
-                # ---- DMG ----
                 if [ "$EXT" = "dmg" ]; then
                   echo "[Installer] Mounting: $FILE"
                   MNT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null \
                         | awk '/\/Volumes\// {print $NF}' | head -1)
-                  if[ -n "$MNT" ]; then
+                  if [ -n "$MNT" ]; then
                     APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -1)
                     if [ -n "$APP_SRC" ]; then
                       AN=$(basename "$APP_SRC")
@@ -816,12 +795,10 @@ jobs:
                     echo "[Installer] ERROR: Mount failed."
                   fi
 
-                # ---- PKG ----
                 elif [ "$EXT" = "pkg" ]; then
                   echo "[Installer] Installing PKG..."
                   sudo installer -pkg "$FILE" -target / -verboseR || true
 
-                # ---- Direct .app ----
                 elif [ "$EXT" = "app" ]; then
                   echo "[Installer] Direct .app: $BASENAME"
                   sudo cp -R "$FILE" /Applications/ || true
@@ -830,13 +807,11 @@ jobs:
                   echo "[Installer] $BASENAME installed."
                 fi
 
-                # ---- Resolve actual software type from filename ----
                 ACTUAL="$SOFTWARE_TYPE"
-                if [ "$ACTUAL" = "dynamic_opera" ] ||[ "$ACTUAL" = "ad_mvn" ]; then
+                if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
                   echo "$BASENAME" | grep -qi "gx" && ACTUAL="opera_gx" || ACTUAL="opera_one"
                 fi
 
-                # ---- App launch paths ----
                 if [ "$ACTUAL" = "opera_gx" ]; then
                   PATHS=("/Applications/$BASENAME"
                          "/Applications/Opera GX.app"
@@ -877,9 +852,6 @@ jobs:
           WATCHER_PID=$!
           echo "Watcher PID: $WATCHER_PID"
 
-          # ----------------------------------------------------------------
-          # 5. Launch Chrome (or Safari fallback)
-          # ----------------------------------------------------------------
           touch /tmp/watcher_start_marker
           CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
@@ -910,12 +882,10 @@ jobs:
             fi
           fi
 
-          # ----------------------------------------------------------------
-          # 6. Monitor & wait
-          # ----------------------------------------------------------------
           echo "Monitoring for up to $TIMEOUT_SECS seconds..."
           DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
-          while kill -0 $WATCHER_PID 2>/dev/null && \[ "$(date +%s)" -lt "$DEADLINE" ]; do[ -f /tmp/handler_output.log ] && \
+          while kill -0 $WATCHER_PID 2>/dev/null && [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            [ -f /tmp/handler_output.log ] && \
               timeout 10 tail -f /tmp/handler_output.log 2>/dev/null || sleep 10
           done
           wait $WATCHER_PID 2>/dev/null || true
