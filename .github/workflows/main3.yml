@@ -54,7 +54,7 @@ on:
           - 'Ad-MVN - A2Z'
         default: 'OperaGX - James'
       manual_software_url:
-        description: 'Manual Software URL (Overrides Dropdown - Detects Opera GX/One)'
+        description: 'Manual Software URL'
         required: false
         type: string
         default: ''
