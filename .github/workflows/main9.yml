@@ -36,7 +36,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '1'
+        default: '5'
 
 jobs:
   prepare_matrix:
@@ -225,7 +225,7 @@ jobs:
 
           python -m pip install pywinauto pyautogui pygetwindow keyboard --quiet
           
-          # 1. Background Python UI Automation Handler
+          # 1. Background Python UI Automation Handler (Robust & Non-Blocking)
           $handlerPy = @'
           import time, random, sys, os
           import pyautogui
@@ -238,6 +238,8 @@ jobs:
               gx_done = False
               one_done = False
               avg_done = False
+              
+              browser_timers = {}
 
               print("[Handler] Watching for launched applications continuously...")
               while True:
@@ -260,55 +262,93 @@ jobs:
                       for window in desktop.windows(visible_only=True):
                           wt = window.window_text()
                           if not wt: continue
+                          
+                          # Ignore the installer process itself and Microsoft Edge completely
+                          if "Installer" in wt or "Setup" in wt or "Microsoft Edge" in wt or "Edge" in wt:
+                              continue
 
-                          is_gx = "Opera GX" in wt
-                          is_one = "Opera" in wt and "Opera GX" not in wt
+                          is_opera = "Opera" in wt or "Speed Dial" in wt or "Start Page" in wt or "Welcome" in wt
+                          if not is_opera:
+                              continue
 
+                          is_gx = "GX" in wt.upper()
+                          is_one = not is_gx
+
+                          # OPERA GX LOGIC
                           if is_gx and not gx_done:
-                              print(f"[Opera GX] Window Detected: {wt}. Waiting 15s...")
-                              time.sleep(15)
-                              try: window.set_focus(); window.maximize()
-                              except: pass
-                              time.sleep(1)
+                              if "gx" not in browser_timers:
+                                  print(f"[Opera GX] Window Detected: '{wt}'. Waiting 15s for full rendering...")
+                                  browser_timers["gx"] = time.time()
+                              elif time.time() - browser_timers["gx"] > 15:
+                                  try: window.set_focus(); window.maximize()
+                                  except: pass
+                                  time.sleep(1)
 
-                              print("[Opera GX] Starting TAB/ENTER automation flow...")
-                              for _ in range(4):
-                                  send_keys('{TAB}')
-                                  time.sleep(0.5)
-                              for i in range(8):
-                                  send_keys('{ENTER}')
-                                  time.sleep(random.uniform(1.0, 2.0))
-                              for _ in range(random.randint(4, 10)):
-                                  send_keys('{TAB}')
-                                  time.sleep(0.3)
-                              send_keys('{ENTER}')
-                              gx_done = True
-                              print("[Opera GX] Setup automation completed.")
-                              break # Break out of loop to reset window search fresh
+                                  print("[Opera GX] Starting TAB/ENTER automation flow...")
+                                  try:
+                                      for _ in range(4):
+                                          send_keys('{TAB}')
+                                          time.sleep(0.5)
+                                      print("[Opera GX] Pressed TAB 4 times.")
 
+                                      for i in range(8):
+                                          send_keys('{ENTER}')
+                                          delay = random.uniform(1.0, 2.0)
+                                          print(f"[Opera GX] Pressed ENTER ({i+1}/8), waiting {delay:.2f}s")
+                                          time.sleep(delay)
+
+                                      random_tabs = random.randint(4, 10)
+                                      for _ in range(random_tabs):
+                                          send_keys('{TAB}')
+                                          time.sleep(0.3)
+                                      print(f"[Opera GX] Pressed TAB {random_tabs} times.")
+
+                                      send_keys('{ENTER}')
+                                      print("[Opera GX] Pressed final ENTER.")
+                                      gx_done = True
+                                      print("[Opera GX] Setup automation completed.")
+                                  except Exception as e:
+                                      print(f"[Opera GX] Error: {e}")
+
+                          # OPERA ONE LOGIC
                           elif is_one and not one_done:
-                              print(f"[Opera One] Window Detected: {wt}. Waiting 90s...")
-                              time.sleep(90)
-                              try: window.set_focus(); window.maximize()
-                              except: pass
-                              time.sleep(1)
+                              if "one" not in browser_timers:
+                                  print(f"[Opera One] Window Detected: '{wt}'. Waiting 90s for full rendering...")
+                                  browser_timers["one"] = time.time()
+                              elif time.time() - browser_timers["one"] > 90:
+                                  try: window.set_focus(); window.maximize()
+                                  except: pass
+                                  time.sleep(2)
 
-                              print("[Opera One] Starting automation flow...")
-                              sw, sh = pyautogui.size()
-                              cx, cy = sw // 2, sh // 2
-                              for i in range(3):
-                                  pyautogui.click(cx, cy)
-                                  time.sleep(random.uniform(1.0, 2.0))
-                              for i in range(10):
-                                  send_keys('{RIGHT}')
-                                  time.sleep(random.uniform(1.0, 2.0))
-                              send_keys('{ENTER}')
-                              one_done = True
-                              print("[Opera One] Setup automation completed.")
-                              break
+                                  print("[Opera One] Starting automation flow after 90s delay...")
+                                  try:
+                                      sw, sh = pyautogui.size()
+                                      cx, cy = sw // 2, sh // 2
+                                      print(f"[Opera One] Clicking center of screen ({cx}, {cy}) 3 times...")
+                                      for i in range(3):
+                                          pyautogui.click(cx, cy)
+                                          delay = random.uniform(1.0, 2.0)
+                                          print(f"[Opera One] Center click {i+1}/3 done, waiting {delay:.2f}s")
+                                          time.sleep(delay)
+
+                                      for i in range(10):
+                                          send_keys('{RIGHT}')
+                                          delay = random.uniform(1.0, 2.0)
+                                          print(f"[Opera One] Sent RIGHT arrow ({i+1}/10), waiting {delay:.2f}s")
+                                          time.sleep(delay)
+
+                                      send_keys('{ENTER}')
+                                      print("[Opera One] Pressed ENTER.")
+
+                                      one_done = True
+                                      print("[Opera One] Setup automation successfully completed.")
+                                  except Exception as e:
+                                      print(f"[Opera One] Error in Opera One flow: {e}")
 
                   except Exception as e:
                       pass
+                  
+                  # Non-blocking tiny sleep, keeps thread fully responsive to new windows
                   time.sleep(2)
 
           if __name__ == "__main__":
@@ -594,7 +634,7 @@ jobs:
                       PREV=0
                       for i in {1..30}; do
                           SZ=$(stat -f%z "$FILE" 2>/dev/null || echo 0)
-                          if[ "$SZ" -eq "$PREV" ] && [ "$SZ" -gt 100000 ]; then break; fi
+                          if[ "$SZ" -eq "$PREV" ] &&[ "$SZ" -gt 100000 ]; then break; fi
                           PREV=$SZ; sleep 2
                       done
 
@@ -604,9 +644,9 @@ jobs:
 
                       if [[ "$BASENAME" == *Opera* || "$BASENAME" == *avg* ]]; then
                           echo "[macOS] Detected Software Download: $BASENAME"
-                          if [ "$EXT" == "dmg" ]; then
+                          if[ "$EXT" == "dmg" ]; then
                               MNT=$(hdiutil attach "$FILE" -nobrowse -quiet | awk '/\/Volumes\// {print $NF}' | head -1)
-                              if [ -n "$MNT" ]; then
+                              if[ -n "$MNT" ]; then
                                   APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -1)
                                   if [ -n "$APP_SRC" ]; then
                                       AN=$(basename "$APP_SRC")
@@ -627,7 +667,7 @@ jobs:
                                   sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
                                   open "/Applications/$AN"
                               fi
-                          elif [ "$EXT" == "app" ]; then
+                          elif[ "$EXT" == "app" ]; then
                               sudo cp -R "$FILE" /Applications/
                               sudo xattr -dr com.apple.quarantine "/Applications/$BASENAME" 2>/dev/null || true
                               open "/Applications/$BASENAME"
