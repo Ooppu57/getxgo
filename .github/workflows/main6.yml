@@ -51,7 +51,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Ad-MVN - Orderflowz'
+        default: 'Ad-MVN - A2Z'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
