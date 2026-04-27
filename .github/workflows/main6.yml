@@ -51,12 +51,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Esmeel'
+        default: 'OperaGX - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: 'fd6d8b71-953d-4c71-9060-cb7bd4b7261e'
+        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
@@ -1054,31 +1054,6 @@ jobs:
               run_as('tell application "Google Chrome" to execute active tab of front window javascript "if(document.activeElement) document.activeElement.click()"', silent=True)
               return "tab3_enter"
 
-          def click_screen_center():
-              """Click at the centre of the main screen using actual bounds."""
-              try:
-                  # Get screen bounds via AppleScript (returns e.g. "0, 0, 1440, 900")
-                  raw = run_as(
-                      'tell application "Finder" to get bounds of window of desktop',
-                      silent=True, timeout=10
-                  )
-                  # raw might be empty; fallback to default
-                  if not raw:
-                      raise Exception("No bounds returned")
-                  parts = [int(x.strip()) for x in raw.split(",")]
-                  if len(parts) >= 4:
-                      cx = (parts[0] + parts[2]) // 2
-                      cy = (parts[1] + parts[3]) // 2
-                      log(f"[ClickCenter] Clicking at ({cx},{cy})")
-                      cliclick(f'c:{cx},{cy}')
-                      return True
-              except Exception as e:
-                  log(f"[ClickCenter] Error getting screen bounds: {e}")
-              # Fallback: click at common center (1440x900)
-              log("[ClickCenter] Using fallback centre (720,450)")
-              cliclick('c:720,450')
-              return True
-
           def accept_cookie():
               for b in["Accept all", "Accept All", "Accept Cookies",
                         "Allow all", "Accepter tout", "I agree", "Got it"]:
@@ -1190,10 +1165,28 @@ jobs:
               log("[Opera GX] Setup complete.")
 
           def opera_one_flow():
-              # Wait specifically for the Opera installer process
+              # Wait specifically for Opera Installer
               if not wait_for_app_launch("Opera Installer", timeout=120):
-                  if not wait_for_app_launch("Opera", timeout=120):
-                      return
+                  # Fallback: try to open the known path directly
+                  log("[Opera One] Installer not seen, attempting manual launch of /Applications/Opera Installer.app")
+                  if os.path.exists("/Applications/Opera Installer.app"):
+                      subprocess.run(["open", "/Applications/Opera Installer.app"])
+                      time.sleep(5)
+                      if not wait_for_app_launch("Opera Installer", timeout=60):
+                          log("[Opera One] Still not found, aborting setup.")
+                          return
+                  else:
+                      # Last resort: look for any Opera installer in Applications
+                      found = subprocess.run(
+                          "find /Applications -maxdepth 2 -name 'Opera*.app' 2>/dev/null | head -1",
+                          shell=True, capture_output=True, text=True).stdout.strip()
+                      if found:
+                          log(f"[Opera One] Opening {found}")
+                          subprocess.run(["open", found])
+                          time.sleep(5)
+                      if not wait_for_app_launch("Opera", timeout=60):
+                          return
+
               log("[Opera One] App launched. Dismissing popups for 10s (aggressive)...")
               t0 = time.time()
               while time.time() - t0 < 10:
@@ -1209,11 +1202,6 @@ jobs:
                   press("return")
               log("[Opera One] Waiting 30s for next screen...")
               time.sleep(30)
-
-              # New step: click at screen centre to focus the Opera window
-              log("[Opera One] Clicking at screen centre...")
-              click_screen_center()
-              time.sleep(1)
 
               # Opera One specific post-install sequence
               log("[Opera One] Pressing Enter...")
@@ -1385,7 +1373,6 @@ jobs:
                           if not op_launch_t:
                               op_launch_t = time.time()
                               log("[Handler] *** Opera detected — starting installer sequence in 5s ***")
-                              # Activate the installer if not frontmost
                               run_as('tell application "Opera Installer" to activate', silent=True)
                               time.sleep(1)
                           if time.time() - op_launch_t > 5:
