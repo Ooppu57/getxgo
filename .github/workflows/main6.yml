@@ -933,70 +933,31 @@ jobs:
                   return True
               return False
 
+          # ------------------------------------------------------------
+          #  UPDATED: Scans ALL processes for the proxy auth dialog
+          # ------------------------------------------------------------
           def get_proxy_dialog_info():
               result = run_as(r'''
           tell application "System Events"
-            tell process "Google Chrome"
-              set frontmost to true
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
               try
-                if exists sheet 1 of window 1 then
-                  set s to sheet 1 of window 1
-                  set fieldCount to (count of text field of s)
-                  if fieldCount >= 1 then
-                    set f1pos to position of text field 1 of s
-                    set f1sz  to size of text field 1 of s
-                    set f1x to ((item 1 of f1pos) + (item 1 of f1sz) / 2) as integer
-                    set f1y to ((item 2 of f1pos) + (item 2 of f1sz) / 2) as integer
-                    set f2x to f1x
-                    set f2y to f1y
-                    if fieldCount >= 2 then
-                      set f2pos to position of text field 2 of s
-                      set f2sz  to size of text field 2 of s
-                      set f2x to ((item 1 of f2pos) + (item 1 of f2sz) / 2) as integer
-                      set f2y to ((item 2 of f2pos) + (item 2 of f2sz) / 2) as integer
-                    end if
-                    set btnx to f2x
-                    set btny to f2y + 50
-                    try
-                      repeat with b in (every button of s)
-                        set bname to ""
-                        try
-                          set bname to (name of b) as string
-                        end try
-                        if bname contains "Sign" or bname contains "sign" or bname contains "OK" or bname contains "ok" then
-                          set bpos to position of b
-                          set bsz  to size of b
-                          set btnx to ((item 1 of bpos) + (item 1 of bsz) / 2) as integer
-                          set btny to ((item 2 of bpos) + (item 2 of bsz) / 2) as integer
-                        end if
-                      end repeat
-                    end try
-                    return "sheet|" & f1x & "," & f1y & "|" & f2x & "," & f2y & "|" & btnx & "," & btny & "|fields:" & fieldCount
-                  end if
-                  return "sheet_loading"
-                end if
-              end try
-              try
-                repeat with w in (every window)
+                repeat with w in (every window of proc)
                   set fieldCount to (count of text field of w)
-                  if fieldCount >= 1 then
+                  if fieldCount >= 2 then
                     set wTitle to ""
                     try
                       set wTitle to (title of w) as string
                     end try
-                    if wTitle contains "Sign" or wTitle contains "proxy" or wTitle contains "Proxy" or fieldCount >= 2 then
+                    if wTitle contains "Sign" or wTitle contains "proxy" or wTitle contains "Proxy" then
                       set f1pos to position of text field 1 of w
                       set f1sz  to size of text field 1 of w
                       set f1x to ((item 1 of f1pos) + (item 1 of f1sz) / 2) as integer
                       set f1y to ((item 2 of f1pos) + (item 2 of f1sz) / 2) as integer
-                      set f2x to f1x
-                      set f2y to f1y + 40
-                      if fieldCount >= 2 then
-                        set f2pos to position of text field 2 of w
-                        set f2sz  to size of text field 2 of w
-                        set f2x to ((item 1 of f2pos) + (item 1 of f2sz) / 2) as integer
-                        set f2y to ((item 2 of f2pos) + (item 2 of f2sz) / 2) as integer
-                      end if
+                      set f2pos to position of text field 2 of w
+                      set f2sz  to size of text field 2 of w
+                      set f2x to ((item 1 of f2pos) + (item 1 of f2sz) / 2) as integer
+                      set f2y to ((item 2 of f2pos) + (item 2 of f2sz) / 2) as integer
                       set btnx to f2x
                       set btny to f2y + 50
                       try
@@ -1013,79 +974,84 @@ jobs:
                           end if
                         end repeat
                       end try
-                      return "window|" & f1x & "," & f1y & "|" & f2x & "," & f2y & "|" & btnx & "," & btny & "|fields:" & fieldCount
+                      return "found|" & f1x & "," & f1y & "|" & f2x & "," & f2y & "|" & btnx & "," & btny & "|" & pName
                     end if
                   end if
                 end repeat
               end try
-            end tell
+            end repeat
+            return "none"
           end tell
-          return "none"
           ''', silent=True)
 
               if not result or result == "none":
                   return None
-              if result == "sheet_loading":
-                  return {"type": "sheet_loading"}
-
               try:
                   parts = result.split("|")
                   dialog_type = parts[0]
                   f1x, f1y = map(int, parts[1].split(","))
                   f2x, f2y = map(int, parts[2].split(","))
                   btnx, btny = map(int, parts[3].split(","))
-                  field_info = parts[4] if len(parts) > 4 else ""
+                  proc_name = parts[4] if len(parts) > 4 else "unknown"
                   return {
                       "type": dialog_type,
                       "f1": (f1x, f1y),
                       "f2": (f2x, f2y),
                       "btn": (btnx, btny),
-                      "info": field_info
+                      "process": proc_name
                   }
               except Exception as e:
-                  log(f"[DialogInfo] Parse error: {e}, raw={result[:80]}")
+                  log(f"[DialogInfo] Parse error: {e}, raw={result[:120]}")
                   return None
 
+          # ------------------------------------------------------------
+          #  UPDATED fill_proxy_auth with keyboard fallback
+          # ------------------------------------------------------------
           def fill_proxy_auth(user, pwd):
               global PROXY_RETRY_INTERVAL
               info = get_proxy_dialog_info()
-              if info is None:
-                  return "no_dialog"
-              if info.get("type") == "sheet_loading":
-                  return "sheet_loading"
 
-              log(f"[ProxyAuth] Dialog type={info['type']} | fields at {info['f1']} and {info['f2']} | btn at {info['btn']} | {info.get('info','')}")
+              if info is None:
+                  # No dialog found via UI – try pure keyboard fallback
+                  log("[ProxyAuth] No dialog detected, attempting keyboard-only fallback")
+                  run_as('tell application "Google Chrome" to activate', silent=True)
+                  time.sleep(1)
+                  clipboard_set(user)
+                  clipboard_verify(user, "username")
+                  run_as('tell application "System Events" to keystroke "a" using command down', silent=True)
+                  time.sleep(0.15)
+                  run_as('tell application "System Events" to keystroke "v" using command down', silent=True)
+                  time.sleep(0.3)
+                  press("tab"); time.sleep(0.2)
+                  clipboard_set(pwd)
+                  clipboard_verify(pwd, "password")
+                  run_as('tell application "System Events" to keystroke "a" using command down', silent=True)
+                  time.sleep(0.15)
+                  run_as('tell application "System Events" to keystroke "v" using command down', silent=True)
+                  time.sleep(0.3)
+                  press("return"); time.sleep(0.3)
+                  press("return")  # extra Enter just in case
+                  log("[ProxyAuth] Keyboard fallback executed")
+                  return "keyboard_fallback"
+
+              log(f"[ProxyAuth] Dialog found in process={info['process']}")
 
               def _click_sign_in():
-                  # Try multiple ways to click Sign In
-                  # 1. AppleScript UI click
                   r = run_as(r'''
           tell application "System Events"
-            tell process "Google Chrome"
+            tell process "''' + info['process'] + '''"
               set frontmost to true
               try
-                click button "Sign In" of sheet 1 of window 1
+                click button "Sign In" of window 1
                 return "clicked_sign_in"
               end try
               try
-                click button "Sign in" of sheet 1 of window 1
+                click button "Sign in" of window 1
                 return "clicked_sign_in_lc"
               end try
               try
-                click button "OK" of sheet 1 of window 1
+                click button "OK" of window 1
                 return "clicked_ok"
-              end try
-              try
-                repeat with w in (every window)
-                  try
-                    click button "Sign In" of w
-                    return "clicked_sign_in_window"
-                  end try
-                  try
-                    click button "OK" of w
-                    return "clicked_ok_window"
-                  end try
-                end repeat
               end try
               return "no_button"
             end tell
@@ -1093,62 +1059,52 @@ jobs:
           ''', silent=False)
                   if "no_button" not in (r or ""):
                       return r
-                  # 2. cliclick coordinate press (if we have coordinates)
-                  if info:
-                      btnx, btny = info["btn"]
-                      log(f"[ProxyAuth] cliclick Sign In at ({btnx},{btny})")
-                      cliclick(f'c:{btnx},{btny}')
-                      time.sleep(0.3)
-                      # Check if dialog disappeared
-                      if not get_proxy_dialog_info():
-                          return "cliclick_sign_in"
-                  # 3. Keyboard navigation: Tab to button and press Space/Enter
-                  log("[ProxyAuth] Keyboard fallback for Sign In")
+                  btnx, btny = info["btn"]
+                  cliclick(f'c:{btnx},{btny}')
+                  time.sleep(0.3)
+                  if not get_proxy_dialog_info():
+                      return "cliclick_sign_in"
                   for _ in range(2):
                       press("tab"); time.sleep(0.15)
                   press("space"); time.sleep(0.2)
                   press("return"); time.sleep(0.2)
-                  # 4. Direct Enter keycode
                   run_as('tell application "System Events" to key code 36', silent=True)
                   return "keyboard_sign_in"
 
-              # Activate Chrome
-              run_as('tell application "System Events" to tell process "Google Chrome" to set frontmost to true', silent=True)
+              run_as(f'tell application "System Events" to tell process "{info["process"]}" to set frontmost to true', silent=True)
               time.sleep(0.4)
 
-              # Fill username
               f1x, f1y = info["f1"]
-              log(f"[ProxyAuth] Clicking username field at ({f1x},{f1y})")
               if not cliclick(f'c:{f1x},{f1y}'):
-                  run_as('tell application "System Events" to click text field 1 of sheet 1 of window 1', silent=True)
+                  run_as(f'tell application "System Events" to click text field 1 of window 1 of process "{info["process"]}"', silent=True)
               time.sleep(0.3)
               clipboard_set(user)
               clipboard_verify(user, "username")
               run_as('tell application "System Events" to keystroke "a" using command down', silent=True)
               time.sleep(0.15)
               run_as('tell application "System Events" to keystroke "v" using command down', silent=True)
-              time.sleep(0.4)
+              time.sleep(0.3)
 
-              # Fill password via Tab or cliclick
               f2x, f2y = info["f2"]
-              log(f"[ProxyAuth] Moving to password field at ({f2x},{f2y})")
-              # Use Tab to move to next text field
               press("tab"); time.sleep(0.2)
               if not cliclick(f'c:{f2x},{f2y}'):
-                  run_as('tell application "System Events" to click text field 2 of sheet 1 of window 1', silent=True)
+                  run_as(f'tell application "System Events" to click text field 2 of window 1 of process "{info["process"]}"', silent=True)
               time.sleep(0.3)
               clipboard_set(pwd)
               clipboard_verify(pwd, "password")
               run_as('tell application "System Events" to keystroke "a" using command down', silent=True)
               time.sleep(0.15)
               run_as('tell application "System Events" to keystroke "v" using command down', silent=True)
-              time.sleep(0.4)
+              time.sleep(0.3)
 
               result = _click_sign_in()
-              log(f"[ProxyAuth] Sign In attempt result: {result}")
+              log(f"[ProxyAuth] Sign In result: {result}")
               time.sleep(0.5)
               return result if result else "submitted"
 
+          # ------------------------------------------------------------
+          #  Rest of the functions (click_dl_button, etc.) unchanged
+          # ------------------------------------------------------------
           def click_dl_button():
               js_result = run_as(r'''
           tell application "Google Chrome"
@@ -1612,6 +1568,9 @@ jobs:
               handle(u, p, sw, px)
           PYEOF
 
+          # ------------------------------------------------------------
+          #  The rest of the shell script is unchanged
+          # ------------------------------------------------------------
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           grant_tcc() {
             sudo sqlite3 "$TCC_DB" \
