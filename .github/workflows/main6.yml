@@ -56,7 +56,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
+        default: 'c58ce00a-1032-4cea-8310-aa8eb6055fd6'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
@@ -152,7 +152,7 @@ jobs:
           }
           all_urls = {**opera_urls, **opera_one_urls, **ad_mvn_urls}
           target_url = all_urls.get(software_choice, opera_urls["OperaGX - James"])
-          dynamic_links = [
+          dynamic_links =[
               "OperaGX - Techx", "OperaGX - Fatradez", "OperaGX - James",
               "OperaGX - Oliver", "OperaGX - Mahal"
           ]
@@ -192,7 +192,7 @@ jobs:
               return choice.replace(" ", "").replace("-", "")
           short_os_tag = short_os(os_version)
           short_sw_tag = short_software(software_choice)
-          includes = []
+          includes =[]
           if email:
               for i in range(1, num_devices + 1):
                   device_name = f"{i}-{short_os_tag}-{short_sw_tag}"
@@ -286,7 +286,7 @@ jobs:
       - name: Disable Gatekeeper & Configure macOS Security
         shell: bash
         run: |
-          echo "=== [$(date '+%H:%M:%S')] Configuring macOS Security Settings ==="
+          echo "===[$(date '+%H:%M:%S')] Configuring macOS Security Settings ==="
           sudo spctl --master-disable || true
           sudo defaults write /Library/Preferences/com.apple.security GKAutoRearm -bool false || true
           sudo defaults write /Library/Preferences/com.apple.security AssessmentEnable -bool false || true
@@ -302,7 +302,7 @@ jobs:
       - name: Install Dependencies (Python + Browser Tools)
         shell: bash
         run: |
-          echo "=== [$(date '+%H:%M:%S')] Installing Python UI Automation Dependencies ==="
+          echo "===[$(date '+%H:%M:%S')] Installing Python UI Automation Dependencies ==="
           VENV_DIR="/tmp/uienv"
           PYTHON_BIN=""
           for candidate in python3.12 python3.11 python3.10 python3; do
@@ -311,7 +311,7 @@ jobs:
               break
             fi
           done
-          if [ -z "$PYTHON_BIN" ]; then
+          if[ -z "$PYTHON_BIN" ]; then
             echo "ERROR: No Python3 found on runner."
             exit 1
           fi
@@ -387,10 +387,10 @@ jobs:
           grant_tcc kTCCServiceLocalNetwork  com.getscreen.desktop       0
           echo "[$(date '+%H:%M:%S')] --- Scanning for GitHub runner + compute-host process paths ---"
           for RUNNER_DIR in /Users/runner /home/runner /opt/hostedtoolcache /private/var/folders; do
-            if [ -d "$RUNNER_DIR" ]; then
+            if[ -d "$RUNNER_DIR" ]; then
               for BIN_NAME in Runner.Worker Runner.Listener Runner.PluginHost run.sh; do
-                FOUND_PATH=$(find "$RUNNER_DIR" -name "$BIN_NAME" -maxdepth 6 2>/dev/null | head -1)
-                if [ -n "$FOUND_PATH" ]; then
+                FOUND_PATH=$(find "$RUNNER_DIR" -name "$BIN_NAME" -maxdepth 6 2>/dev/null | head -n 1 || true)
+                if[ -n "$FOUND_PATH" ]; then
                   echo "[$(date '+%H:%M:%S')] Granting TCC to runner binary: $FOUND_PATH"
                   grant_tcc kTCCServiceLocalNetwork  "$FOUND_PATH" 1
                   grant_tcc kTCCServiceScreenCapture "$FOUND_PATH" 1
@@ -434,7 +434,7 @@ jobs:
       - name: Install, Bypass Security, and Start Getscreen.me (macOS)
         shell: bash
         run: |
-          echo "=== [$(date '+%H:%M:%S')] Installing Getscreen.me via DMG ==="
+          echo "===[$(date '+%H:%M:%S')] Installing Getscreen.me via DMG ==="
           DEVICE_NAME="${{ matrix.device }}"
           EMAIL="${{ matrix.email }}"
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
@@ -443,10 +443,10 @@ jobs:
           SUCCESS=false
           while [ $RETRY -lt $MAX_RETRIES ]; do
             curl -L -o getscreen.dmg "https://getscreen.me/download/getscreen.dmg" \
-              --retry 3 --retry-delay 5 --silent --show-error
+              --retry 3 --retry-delay 5 --silent --show-error || true
             FILE_SIZE=$(stat -f%z getscreen.dmg 2>/dev/null || \
                         stat -c%s getscreen.dmg 2>/dev/null || echo 0)
-            if [ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
+            if[ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
               SUCCESS=true
               break
             fi
@@ -454,13 +454,13 @@ jobs:
             sleep 5
             RETRY=$((RETRY+1))
           done
-          if [ "$SUCCESS" = false ]; then
+          if[ "$SUCCESS" = false ]; then
             echo "[$(date '+%H:%M:%S')] ERROR: Getscreen.me DMG failed to download. Skipping."
             exit 0
           fi
           echo "[$(date '+%H:%M:%S')] Downloaded getscreen.dmg (${FILE_SIZE}B). Mounting..."
-          hdiutil attach getscreen.dmg -mountpoint /Volumes/getscreen -nobrowse -quiet
-          APP_PATH=$(find /Volumes/getscreen -maxdepth 1 -name "*.app" | head -n 1)
+          hdiutil attach getscreen.dmg -mountpoint /Volumes/getscreen -nobrowse -quiet || true
+          APP_PATH=$(find /Volumes/getscreen -maxdepth 1 -name "*.app" | head -n 1 || true)
           if [ -z "$APP_PATH" ]; then
             echo "[$(date '+%H:%M:%S')] ERROR: No .app found inside Getscreen DMG."
             hdiutil detach /Volumes/getscreen -quiet -force || true
@@ -490,7 +490,7 @@ jobs:
           EXEC_PATH="/Applications/$APP_NAME/Contents/MacOS/$EXEC_NAME"
           if [ ! -x "$EXEC_PATH" ]; then
             EXEC_PATH=$(find "/Applications/$APP_NAME/Contents/MacOS" \
-              -maxdepth 1 -type f -perm +111 2>/dev/null | head -1)
+              -maxdepth 1 -type f -perm +111 2>/dev/null | head -n 1 || true)
           fi
           if [ -n "$EXEC_PATH" ] && [ -x "$EXEC_PATH" ]; then
             for SVC in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServiceLocalNetwork; do
@@ -501,7 +501,7 @@ jobs:
             done
             echo "[$(date '+%H:%M:%S')] TCC path-based permissions granted for $EXEC_PATH"
           fi
-          if [ -z "$EXEC_PATH" ] || [ ! -x "$EXEC_PATH" ]; then
+          if[ -z "$EXEC_PATH" ] || [ ! -x "$EXEC_PATH" ]; then
             echo "[$(date '+%H:%M:%S')] ERROR: Getscreen executable not found."
             exit 0
           fi
@@ -519,7 +519,6 @@ jobs:
 
       # ================================================================== #
       # STEP 4.5 — Aggressively dismiss ALL popups BEFORE Chrome launches  #
-      # NEW: CLI-based compute-host agent popup elimination                 #
       # ================================================================== #
       - name: Pre-Dismiss All System Popups Including Compute-Host Agent (CLI + GUI)
         shell: bash
@@ -527,19 +526,11 @@ jobs:
           echo "=== [$(date '+%H:%M:%S')] Pre-dismissing ALL system popups (CLI + GUI) ==="
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
 
-          # ----------------------------------------------------------------
-          # CLI FIX 1: Restart tccd so all our SQLite grants take effect
-          # immediately — prevents stale TCC cache from triggering dialogs
-          # ----------------------------------------------------------------
           echo "[$(date '+%H:%M:%S')] Restarting TCC daemon to flush permission cache..."
           sudo launchctl kickstart -k system/com.apple.tccd 2>/dev/null || true
           sudo launchctl kickstart -k user/$(id -u)/com.apple.tccd 2>/dev/null || true
           sleep 2
 
-          # ----------------------------------------------------------------
-          # CLI FIX 2: Find and grant TCC to ALL currently running processes
-          # including the hosted-compute-agent and any runner helpers
-          # ----------------------------------------------------------------
           echo "[$(date '+%H:%M:%S')] Scanning ALL running processes for TCC grants..."
           ps aux 2>/dev/null | awk '{print $11}' | sort -u | while read -r PROC_PATH; do
             if [ -x "$PROC_PATH" ] 2>/dev/null; then
@@ -559,32 +550,20 @@ jobs:
             fi
           done || true
 
-          # ----------------------------------------------------------------
-          # CLI FIX 3: Kill notificationcenterui and cfprefsd so any cached
-          # pending dialogs are discarded before Chrome opens
-          # ----------------------------------------------------------------
           echo "[$(date '+%H:%M:%S')] Resetting notification/preference daemons..."
           sudo killall -HUP cfprefsd 2>/dev/null || true
           sudo killall UserNotificationCenter 2>/dev/null || true
           sudo killall NotificationCenter 2>/dev/null || true
           sleep 1
 
-          # ----------------------------------------------------------------
-          # CLI FIX 4: Grant Chrome specifically for LocalNetwork BEFORE
-          # it launches so the dialog never appears in the first place
-          # ----------------------------------------------------------------
           echo "[$(date '+%H:%M:%S')] Pre-granting Chrome LocalNetwork permission..."
           sudo sqlite3 "$TCC_DB" \
             "INSERT OR REPLACE INTO access (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
              VALUES('kTCCServiceLocalNetwork','com.google.Chrome',0,2,4,1,0);" 2>/dev/null || true
 
-          # ----------------------------------------------------------------
-          # CLI FIX 5: Also look for the hosted compute agent binary path
-          # and grant it directly
-          # ----------------------------------------------------------------
           for AGENT_PATTERN in "com.apple.network" "hosted-compute" "hostedagent" "compute-agent"; do
             FOUND=$(find /usr /Library /System -name "*${AGENT_PATTERN}*" -type f \
-                    -perm +111 2>/dev/null | head -3)
+                    -perm +111 2>/dev/null | head -n 3 || true)
             for F in $FOUND; do
               echo "[$(date '+%H:%M:%S')]   Found compute agent binary: $F"
               sudo sqlite3 "$TCC_DB" \
@@ -593,10 +572,6 @@ jobs:
             done
           done
 
-          # ----------------------------------------------------------------
-          # GUI: Run AppleScript popup dismisser for 25 seconds
-          # Extended time to catch any residual compute-host dialogs
-          # ----------------------------------------------------------------
           echo "[$(date '+%H:%M:%S')] Starting 25-second GUI popup dismisser..."
           cat > /tmp/early_popup_dismiss.applescript << 'ASEOF'
           set maxRuns to 50
@@ -607,7 +582,6 @@ jobs:
               tell application "System Events"
                 repeat with proc in (every process whose visible is true)
                   set pName to name of proc as string
-                  -- Handle Getscreen popups
                   if pName contains "getscreen" or pName contains "Getscreen" then
                     try
                       repeat with win in (every window of proc)
@@ -620,7 +594,6 @@ jobs:
                       end repeat
                     end try
                   end if
-                  -- Handle all other non-Chrome popups
                   if pName is not "Google Chrome" then
                     try
                       repeat with win in (every window of proc)
@@ -633,7 +606,6 @@ jobs:
                           set winDesc to (description of win) as string
                         end try
                         set combinedText to (winTitle & " " & winDesc) as string
-                        -- Local network / compute host dialogs
                         if combinedText contains "local network" or ¬
                            combinedText contains "Local Network" or ¬
                            combinedText contains "hosted-compute" or ¬
@@ -646,7 +618,6 @@ jobs:
                             log "Clicked Allow on LocalNetwork/ComputeHost dialog in: " & pName
                           end try
                         end if
-                        -- Getscreen screen recording dialogs
                         if combinedText contains "Getscreen" or ¬
                            combinedText contains "getscreen" or ¬
                            combinedText contains "screen and audio" or ¬
@@ -657,7 +628,6 @@ jobs:
                             log "Clicked Allow on Getscreen screen-recording dialog"
                           end try
                         end if
-                        -- Generic Allow/Don't Allow dialogs (skip accessibility ones)
                         if combinedText does not contain "Accessibility" and ¬
                            combinedText does not contain "accessibility" then
                           try
@@ -687,7 +657,7 @@ jobs:
           echo "[$(date '+%H:%M:%S')] Step 4.5 complete — system is clean for Chrome launch."
 
       # ================================================================== #
-      # STEP 5 — Google Chrome                                              #
+      # STEP 5 — Google Chrome                                             #
       # ================================================================== #
       - name: Install Google Chrome (Proxy-capable Browser)
         shell: bash
@@ -717,7 +687,7 @@ jobs:
           else
             echo "[$(date '+%H:%M:%S')] WARNING: Chrome DMG download failed ($FILE_SIZE B)."
           fi
-          if [ -d "/Applications/Google Chrome.app" ]; then
+          if[ -d "/Applications/Google Chrome.app" ]; then
             echo "CHROME_AVAILABLE=true" >> "$GITHUB_ENV"
             echo "[$(date '+%H:%M:%S')] Chrome confirmed available."
           else
@@ -727,7 +697,6 @@ jobs:
 
       # ================================================================== #
       # STEP 6 — Download, Install & Automate Software                     #
-      # UPDATED: Robust proxy auth, download detection, full logging       #
       # ================================================================== #
       - name: Setup Auto-Downloader & Software Installation (macOS)
         shell: bash
@@ -755,32 +724,19 @@ jobs:
           SENTINEL_PATH="/tmp/download_done.flag"
           TIMEOUT_SECS=360
 
-          # ----------------------------------------------------------------
-          # 1. Write the Python UI automation handler
-          # ----------------------------------------------------------------
           cat > /tmp/macos_handler.py << 'PYEOF'
           import time, sys, os, subprocess, random
 
-          # ============================================================
-          # LOGGING — timestamped, always flushed for GH Actions
-          # ============================================================
           def log(msg):
               ts = time.strftime("%H:%M:%S")
               print(f"[{ts}] {msg}", flush=True)
 
-          # ============================================================
-          # STATE MACHINE CONSTANTS
-          # ============================================================
-          CHROME_WARMUP_SECS      = 20   # Wait after Chrome first seen before proxy auth
-                                          # (lets compute-host dialog appear & be dismissed first)
-          PROXY_WAIT_BEFORE_AUTH  = 10   # Extra settle time before first proxy-auth attempt
-          DL_WAIT_AFTER_PROXY     = 15   # Wait after proxy sign-in before clicking download
-          PROXY_RETRY_INTERVAL    = 2    # Seconds between proxy-auth attempts
-          PROXY_MAX_ATTEMPTS      = 40   # Give up proxy auth after this many tries
+          CHROME_WARMUP_SECS      = 20
+          PROXY_WAIT_BEFORE_AUTH  = 10
+          DL_WAIT_AFTER_PROXY     = 15
+          PROXY_RETRY_INTERVAL    = 2
+          PROXY_MAX_ATTEMPTS      = 40
 
-          # ============================================================
-          # CLIPBOARD HELPERS
-          # ============================================================
           def clipboard_set(text):
               try:
                   proc = subprocess.Popen(
@@ -812,13 +768,9 @@ jobs:
                   return clipboard_get() == expected
               return True
 
-          # ============================================================
-          # APPLESCRIPT RUNNER
-          # ============================================================
           def run_as(script, silent=False, timeout=20):
               try:
-                  r = subprocess.run(
-                      ["osascript", "-e", script],
+                  r = subprocess.run(["osascript", "-e", script],
                       capture_output=True, text=True, timeout=timeout
                   )
                   if r.returncode != 0 and not silent:
@@ -834,7 +786,6 @@ jobs:
                   return ""
 
           def cliclick(cmd):
-              """Run a cliclick command — e.g. cliclick('c:640,400') or cliclick('kp:tab')"""
               try:
                   result = subprocess.run(
                       ['cliclick', cmd],
@@ -858,19 +809,10 @@ jobs:
               r = run_as(
                   'tell application "System Events" to get name of every process '
                   'whose visible is true', silent=True)
-              return [n.strip() for n in r.split(",") if n.strip()]
+              return[n.strip() for n in r.split(",") if n.strip()]
 
-          # ============================================================
-          # POPUP DISMISSERS
-          # ============================================================
           def dismiss_compute_host_popup():
-              """
-              Specifically targets the 'hosted-compute' / 'local network' dialog
-              that the GitHub runner triggers when Chrome first opens a proxy connection.
-              Runs BOTH CLI (TCC DB re-grant) and GUI (AppleScript click).
-              """
               TCC_DB = "/Library/Application Support/com.apple.TCC/TCC.db"
-              # CLI: re-grant LocalNetwork for Chrome right now (catches race conditions)
               try:
                   subprocess.run([
                       'sudo', 'sqlite3', TCC_DB,
@@ -881,7 +823,6 @@ jobs:
               except Exception:
                   pass
 
-              # GUI: AppleScript click on any LocalNetwork/compute dialog
               result = run_as(r'''
           tell application "System Events"
             set dismissed to ""
@@ -923,7 +864,6 @@ jobs:
               return False
 
           def dismiss_system_popups():
-              """Dismiss all non-Chrome system popups (Getscreen, LocalNetwork, generic Allow dialogs)."""
               result = run_as(r'''
           tell application "System Events"
             set popupClicked to ""
@@ -993,20 +933,11 @@ jobs:
                   return True
               return False
 
-          # ============================================================
-          # PROXY DIALOG DETECTION
-          # ============================================================
           def get_proxy_dialog_info():
-              """
-              Detect Chrome proxy auth dialog and get UI element positions.
-              Returns dict with keys: type, field1_pos, field2_pos, signin_pos
-              or None if no dialog found.
-              """
               result = run_as(r'''
           tell application "System Events"
             tell process "Google Chrome"
               set frontmost to true
-              -- Check for sheet (most common proxy dialog form in Chrome)
               try
                 if exists sheet 1 of window 1 then
                   set s to sheet 1 of window 1
@@ -1024,7 +955,6 @@ jobs:
                       set f2x to ((item 1 of f2pos) + (item 1 of f2sz) / 2) as integer
                       set f2y to ((item 2 of f2pos) + (item 2 of f2sz) / 2) as integer
                     end if
-                    -- Find Sign In button position
                     set btnx to f2x
                     set btny to f2y + 50
                     try
@@ -1043,11 +973,9 @@ jobs:
                     end try
                     return "sheet|" & f1x & "," & f1y & "|" & f2x & "," & f2y & "|" & btnx & "," & btny & "|fields:" & fieldCount
                   end if
-                  -- Sheet exists but no text fields yet — it's loading
                   return "sheet_loading"
                 end if
               end try
-              -- Check for standalone window
               try
                 repeat with w in (every window)
                   set fieldCount to (count of text field of w)
@@ -1118,21 +1046,7 @@ jobs:
                   log(f"[DialogInfo] Parse error: {e}, raw={result[:80]}")
                   return None
 
-          # ============================================================
-          # PROXY AUTH — ROBUST MULTI-METHOD FILL
-          # ============================================================
           def fill_proxy_auth(user, pwd):
-              """
-              Fill Chrome proxy auth dialog using exact UI element positions + cliclick.
-              Strategy:
-                1. Detect dialog and get text field / button positions via AppleScript
-                2. Click field 1 with cliclick (mouse — most reliable for sheets)
-                3. Paste username from clipboard
-                4. Click field 2 with cliclick
-                5. Paste password from clipboard
-                6. Click Sign In button with cliclick, then keyboard Return as backup
-              Falls back to keyboard-only if cliclick or positions unavailable.
-              """
               info = get_proxy_dialog_info()
 
               if info is None:
@@ -1141,16 +1055,12 @@ jobs:
                   return "sheet_loading"
 
               log(f"[ProxyAuth] Dialog type={info['type']} | fields at {info['f1']} and {info['f2']} | btn at {info['btn']} | {info.get('info','')}")
-
-              # Bring Chrome to front
               run_as('tell application "System Events" to tell process "Google Chrome" to set frontmost to true', silent=True)
               time.sleep(0.4)
 
-              # ---- STEP A: Click username field and paste ----
               f1x, f1y = info["f1"]
               log(f"[ProxyAuth] Clicking username field at ({f1x},{f1y})")
               if not cliclick(f'c:{f1x},{f1y}'):
-                  # cliclick fallback — AppleScript click
                   run_as(f'''
           tell application "System Events"
             tell process "Google Chrome"
@@ -1161,18 +1071,14 @@ jobs:
           end tell''', silent=True)
               time.sleep(0.3)
 
-              # Select all existing content then paste username
               clipboard_set(user)
               clipboard_verify(user, "username")
               run_as('tell application "System Events" to keystroke "a" using command down', silent=True)
               time.sleep(0.15)
               run_as('tell application "System Events" to keystroke "v" using command down', silent=True)
               time.sleep(0.4)
-
-              # Verify paste happened (check clipboard still has user — indirect check)
               log(f"[ProxyAuth] Username paste sent (user={user[:20]}...)")
 
-              # ---- STEP B: Click password field and paste ----
               f2x, f2y = info["f2"]
               log(f"[ProxyAuth] Clicking password field at ({f2x},{f2y})")
               if not cliclick(f'c:{f2x},{f2y}'):
@@ -1196,16 +1102,12 @@ jobs:
               time.sleep(0.4)
               log("[ProxyAuth] Password paste sent")
 
-              # ---- STEP C: Click Sign In button ----
               btnx, btny = info["btn"]
               log(f"[ProxyAuth] Clicking Sign In button at ({btnx},{btny})")
               time.sleep(0.2)
-
-              # Method 1: cliclick on button position
               cliclick(f'c:{btnx},{btny}')
               time.sleep(0.3)
 
-              # Method 2: AppleScript button click by name
               result = run_as(r'''
           tell application "System Events"
             tell process "Google Chrome"
@@ -1240,8 +1142,6 @@ jobs:
           ''', silent=False)
 
               log(f"[ProxyAuth] Sign In button result: {result}")
-
-              # Method 3: Press Return as final fallback
               if "no_button" in (result or ""):
                   log("[ProxyAuth] Button not found via AppleScript — pressing Return as fallback")
                   run_as('tell application "System Events" to tell process "Google Chrome" to key code 36', silent=True)
@@ -1251,24 +1151,13 @@ jobs:
               time.sleep(0.5)
               return result if result else "submitted"
 
-          # ============================================================
-          # DOWNLOAD BUTTON — ROBUST MULTI-METHOD CLICK
-          # ============================================================
           def click_dl_button():
-              """
-              Click the download button on the Opera page.
-              Methods tried in order:
-                1. JavaScript injection (handles dynamically rendered pages)
-                2. AppleScript UI button search
-                3. cliclick on known Opera download button location (fallback)
-              """
-              # Method 1: JavaScript injection — most reliable for web page buttons
               js_result = run_as(r'''
           tell application "Google Chrome"
             try
               set jsCode to "
                 (function() {
-                  var selectors = [
+                  var selectors =[
                     'a[data-dtime]',
                     'a[href*=\"download\"]',
                     '.download-button',
@@ -1284,7 +1173,7 @@ jobs:
                     'a[href]',
                     '[role=\"button\"]'
                   ];
-                  var keywords = [
+                  var keywords =[
                     'download', 'Download', 'DOWNLOAD',
                     'get opera', 'Get Opera', 'GET OPERA',
                     'install', 'Install', 'INSTALL',
@@ -1328,7 +1217,6 @@ jobs:
 
               log(f"[DLButton] JS result: {js_result} — trying AppleScript UI method...")
 
-              # Method 2: AppleScript UI button search
               as_result = run_as(r'''
           tell application "System Events"
             tell process "Google Chrome"
@@ -1376,7 +1264,6 @@ jobs:
 
               log(f"[DLButton] AppleScript result: {as_result} — trying page reload + retry...")
 
-              # Method 3: Reload page and try JS again after 3s
               run_as('tell application "Google Chrome" to reload active tab of front window', silent=True)
               time.sleep(3)
               js_retry = run_as(r'''
@@ -1412,11 +1299,8 @@ jobs:
               log(f"[DLButton] All methods exhausted. Last result: {js_retry}")
               return "not_found"
 
-          # ============================================================
-          # COOKIE BANNER ACCEPTER
-          # ============================================================
           def accept_cookie():
-              for b in ["Accept all", "Accept All", "Accept Cookies",
+              for b in["Accept all", "Accept All", "Accept Cookies",
                         "Allow all", "Accepter tout", "I agree", "Got it"]:
                   r = run_as(f'''
           tell application "System Events"
@@ -1433,9 +1317,6 @@ jobs:
                       return True
               return False
 
-          # ============================================================
-          # OPERA INSTALLER FLOWS
-          # ============================================================
           def wait_for_app_launch(app_name, timeout=120):
               log(f"[LaunchDetect] Waiting for '{app_name}' to launch (up to {timeout}s)...")
               start = time.time()
@@ -1561,9 +1442,6 @@ jobs:
               press("return")
               log("[Opera One] Setup complete.")
 
-          # ============================================================
-          # MAIN HANDLER LOOP — STATE MACHINE
-          # ============================================================
           def close_chrome():
               run_as('tell application "Google Chrome" to quit', silent=True)
               log("[Chrome] Quit signal sent.")
@@ -1572,21 +1450,18 @@ jobs:
               t0 = time.time()
               sentinel = "/tmp/download_done.flag"
 
-              # State tracking
-              chrome_first_seen  = None   # When Chrome was first detected
-              proxy_done         = False  # Has proxy auth been completed?
-              proxy_done_time    = None   # When proxy auth completed
-              dl_clicked         = False  # Has download button been clicked?
-              dl_clicked_time    = None   # When download button was first clicked
-              chrome_closed      = False  # Has Chrome been closed post-download?
-              setup_done         = False  # Has Opera installer flow completed?
-              op_launch_t        = None   # When Opera was first detected
+              chrome_first_seen  = None
+              proxy_done         = False
+              proxy_done_time    = None
+              dl_clicked         = False
+              dl_clicked_time    = None
+              chrome_closed      = False
+              setup_done         = False
+              op_launch_t        = None
 
-              # Proxy state
               proxy_fill_attempts = 0
               proxy_last_try      = 0
 
-              # General intervals
               last_popup_dismiss  = 0
               last_cookie_try     = 0
               last_dl_try         = 0
@@ -1607,7 +1482,6 @@ jobs:
                       op_gx   = any("Opera GX" in a for a in apps)
                       op_one  = any("Opera" in a and "Opera GX" not in a for a in apps)
 
-                      # ---- Track Chrome first appearance ----
                       if chrome and chrome_first_seen is None:
                           chrome_first_seen = time.time()
                           log(f"[Handler] *** Chrome detected at t={elapsed}s ***")
@@ -1618,7 +1492,6 @@ jobs:
                           (time.time() - chrome_first_seen) >= CHROME_WARMUP_SECS
                       )
 
-                      # ---- During warmup: aggressively dismiss compute-host popups ----
                       if chrome_first_seen and not warmup_done:
                           warmup_elapsed = int(time.time() - chrome_first_seen)
                           if warmup_elapsed % 5 == 0 and time.time() - last_popup_dismiss > 4:
@@ -1629,17 +1502,14 @@ jobs:
                           time.sleep(0.5)
                           continue
 
-                      # ---- Post-warmup: normal popup dismissal ----
                       if time.time() - last_popup_dismiss > 3:
                           dismiss_system_popups()
                           last_popup_dismiss = time.time()
 
-                      # ---- Cookie banner ----
                       if chrome and time.time() - last_cookie_try > 12:
                           accept_cookie()
                           last_cookie_try = time.time()
 
-                      # ---- PROXY AUTH (only after warmup, only if proxy enabled) ----
                       if (use_proxy and warmup_done and chrome
                               and not proxy_done
                               and proxy_fill_attempts < PROXY_MAX_ATTEMPTS
@@ -1665,18 +1535,15 @@ jobs:
                               log(f"[ProxyAuth] Uncertain result — retrying in 2s")
                               PROXY_RETRY_INTERVAL = 2
 
-                      # ---- DOWNLOAD BUTTON (after proxy OR if no proxy needed) ----
                       if chrome and not dl_clicked:
                           if use_proxy:
-                              # Need proxy done + DL_WAIT_AFTER_PROXY seconds
                               if not proxy_done:
-                                  pass  # Still waiting for proxy auth
+                                  pass
                               elif (time.time() - proxy_done_time) < DL_WAIT_AFTER_PROXY:
                                   wait_left = int(DL_WAIT_AFTER_PROXY - (time.time() - proxy_done_time))
                                   if wait_left % 5 == 0:
                                       log(f"[Handler] Waiting {wait_left}s more before download button click...")
                               else:
-                                  # Ready to click download
                                   if time.time() - last_dl_try > 5:
                                       last_dl_try = time.time()
                                       log(f"[DLButton] === Attempting download button click (t={elapsed}s) ===")
@@ -1688,7 +1555,6 @@ jobs:
                                       else:
                                           log(f"[DLButton] Not found yet — retrying in 5s")
                           else:
-                              # No proxy — click download as soon as page loads (after 5s)
                               if chrome_first_seen and (time.time() - chrome_first_seen) > 5:
                                   if time.time() - last_dl_try > 5:
                                       last_dl_try = time.time()
@@ -1699,14 +1565,12 @@ jobs:
                                           dl_clicked_time = time.time()
                                           log(f"[DLButton] ✓ Download triggered! ({result})")
 
-                      # ---- Close Chrome once sentinel appears ----
                       if not chrome_closed and os.path.exists(sentinel):
                           log("[Handler] ✓ Download sentinel detected — closing Chrome...")
                           close_chrome()
                           time.sleep(2)
                           chrome_closed = True
 
-                      # ---- Opera GX installer flow ----
                       if sw_type in ["opera_gx", "dynamic_opera", "ad_mvn"] and op_gx and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
@@ -1717,7 +1581,6 @@ jobs:
                               setup_done = True
                               break
 
-                      # ---- Opera One installer flow ----
                       if sw_type == "opera_one" and op_one and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
@@ -1728,7 +1591,6 @@ jobs:
                               setup_done = True
                               break
 
-                      # ---- Periodic status log ----
                       if elapsed % 30 == 0 and elapsed > 0:
                           log(f"[Handler] --- Status t={elapsed}s | chrome={chrome} | warmup={warmup_done} | proxy_done={proxy_done} | dl_clicked={dl_clicked} | sentinel={os.path.exists(sentinel)} ---")
 
@@ -1751,9 +1613,6 @@ jobs:
               handle(u, p, sw, px)
           PYEOF
 
-          # ----------------------------------------------------------------
-          # 2. Pre-grant TCC for all automation tools
-          # ----------------------------------------------------------------
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           grant_tcc() {
             sudo sqlite3 "$TCC_DB" \
@@ -1770,9 +1629,6 @@ jobs:
           grant_tcc kTCCServiceLocalNetwork  /usr/bin/osascript          1
           echo "[$(date '+%H:%M:%S')] TCC grants refreshed for automation tools."
 
-          # ----------------------------------------------------------------
-          # 3. Background popup dismisser (non-Chrome, continuous)
-          # ----------------------------------------------------------------
           cat > /tmp/popup_dismisser.sh << 'DISMISSEOF'
           #!/bin/bash
           COUNT=0
@@ -1842,10 +1698,6 @@ jobs:
           echo "Waiting 5s before Chrome launch..."
           sleep 5
 
-          # ----------------------------------------------------------------
-          # 4. Start Python UI handler — output piped to stdout AND log file
-          #    (tee ensures real-time visibility in GitHub Actions)
-          # ----------------------------------------------------------------
           HANDLER_PYTHON="${UIENV_PYTHON:-python3}"
           echo "[$(date '+%H:%M:%S')] Starting UI automation handler (PID TBD)..."
           echo "[$(date '+%H:%M:%S')] Handler: proxy=$USE_PROXY | sw_type=$SOFTWARE_TYPE"
@@ -1855,18 +1707,14 @@ jobs:
           HANDLER_PID=$!
           echo "[$(date '+%H:%M:%S')] Handler started (PID $HANDLER_PID)"
 
-          # ----------------------------------------------------------------
-          # 5. Background watcher: detect download → install → launch
-          # ----------------------------------------------------------------
           touch /tmp/watcher_start_marker
           (
             DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
             INSTALLED=false
             echo "[$(date '+%H:%M:%S')] [Watcher] Started. Monitoring $DL_FOLDER for downloads..."
             LAST_STATUS=$(($(date +%s)))
-            while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            while[ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
               NOW=$(date +%s)
-              # Print status every 20s
               if [ $((NOW - LAST_STATUS)) -ge 20 ]; then
                 echo "[$(date '+%H:%M:%S')] [Watcher] Still monitoring... ($(( DEADLINE - NOW ))s remaining)"
                 LAST_STATUS=$NOW
@@ -1874,23 +1722,23 @@ jobs:
               FILE=$(find "$DL_FOLDER" -maxdepth 1 \
                      \( -name "*.dmg" -o -name "*.zip" -o -name "*.pkg" \) \
                      ! -name "*.download" ! -name "*.crdownload" ! -name "*.part" \
-                     -newer /tmp/watcher_start_marker 2>/dev/null | head -1)
+                     -newer /tmp/watcher_start_marker 2>/dev/null | head -n 1 || true)
               if [ -z "$FILE" ]; then
                 FILE=$(find "$DL_FOLDER" -maxdepth 1 -type d -name "*.app" \
-                       -newer /tmp/watcher_start_marker 2>/dev/null | head -1)
+                       -newer /tmp/watcher_start_marker 2>/dev/null | head -n 1 || true)
               fi
               if [ -n "$FILE" ]; then
                 echo "[$(date '+%H:%M:%S')] [Watcher] ✓ Download detected: $FILE"
                 touch "$SENTINEL_PATH"
                 BASENAME=$(basename "$FILE")
                 EXT="${BASENAME##*.}"
-                if [ "$EXT" != "app" ]; then
+                if[ "$EXT" != "app" ]; then
                   echo "[$(date '+%H:%M:%S')] [Watcher] Waiting for download to complete..."
                   PREV=0
                   for i in $(seq 1 30); do
                     SZ=$(stat -f%z "$FILE" 2>/dev/null || \
                          stat -c%s "$FILE" 2>/dev/null || echo 0)
-                    if [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 500000 ]; then
+                    if[ "$SZ" = "$PREV" ] && [ "$SZ" -gt 500000 ]; then
                       echo "[$(date '+%H:%M:%S')] [Watcher] File stable at ${SZ}B"
                       break
                     fi
@@ -1901,15 +1749,15 @@ jobs:
                   sleep 5
                 fi
                 xattr -dr com.apple.quarantine "$FILE" 2>/dev/null || true
-                echo "[$(date '+%H:%M:%S')] [Watcher] 4s cleanup delay..."
+                echo "[$(date '+%H:%M:%S')][Watcher] 4s cleanup delay..."
                 sleep 4
                 INSTALLED_APP_NAME=""
                 if [ "$EXT" = "dmg" ]; then
                   echo "[$(date '+%H:%M:%S')] [Installer] Mounting DMG: $FILE"
                   MNT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null \
-                        | awk '/\/Volumes\// {print $NF}' | head -1)
+                        | awk '/\/Volumes\// {print $NF}' | head -n 1 || true)
                   if [ -n "$MNT" ]; then
-                    APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -1)
+                    APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -n 1 || true)
                     if [ -n "$APP_SRC" ]; then
                       AN=$(basename "$APP_SRC")
                       sudo cp -R "$APP_SRC" /Applications/ || true
@@ -1930,7 +1778,7 @@ jobs:
                   unzip -q "$FILE" -d "$EXTRACT_DIR" 2>/dev/null || \
                     ditto -xk "$FILE" "$EXTRACT_DIR" 2>/dev/null || true
                   find "$EXTRACT_DIR" -name "__MACOSX" -exec rm -rf {} + 2>/dev/null || true
-                  APP_IN_ZIP=$(find "$EXTRACT_DIR" -maxdepth 3 -name "*.app" ! -path "*/__MACOSX/*" | head -1)
+                  APP_IN_ZIP=$(find "$EXTRACT_DIR" -maxdepth 3 -name "*.app" ! -path "*/__MACOSX/*" | head -n 1 || true)
                   if [ -n "$APP_IN_ZIP" ]; then
                     AN=$(basename "$APP_IN_ZIP")
                     sudo cp -R "$APP_IN_ZIP" /Applications/ || true
@@ -1942,8 +1790,8 @@ jobs:
                   else
                     echo "[$(date '+%H:%M:%S')] [Installer] WARNING: No .app in ZIP."
                   fi
-                elif [ "$EXT" = "pkg" ]; then
-                  echo "[$(date '+%H:%M:%S')] [Installer] Installing PKG: $FILE"
+                elif[ "$EXT" = "pkg" ]; then
+                  echo "[$(date '+%H:%M:%S')][Installer] Installing PKG: $FILE"
                   sudo installer -pkg "$FILE" -target / -verboseR || true
                 elif [ "$EXT" = "app" ]; then
                   echo "[$(date '+%H:%M:%S')] [Installer] Direct .app: $BASENAME"
@@ -1953,7 +1801,7 @@ jobs:
                   INSTALLED_APP_NAME="$BASENAME"
                 fi
                 ACTUAL="$SOFTWARE_TYPE"
-                if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
+                if[ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
                   if echo "$INSTALLED_APP_NAME$BASENAME" | grep -qi "gx"; then
                     ACTUAL="opera_gx"
                   else
@@ -1981,7 +1829,7 @@ jobs:
                 LAUNCHED=false
                 for i in $(seq 1 60); do
                   for P in "${SEARCH_PATHS[@]}"; do
-                    if [ -d "$P" ]; then
+                    if[ -d "$P" ]; then
                       sleep 3
                       echo "[$(date '+%H:%M:%S')] [Watcher] Launching: $P"
                       open "$P" || true
@@ -1993,7 +1841,7 @@ jobs:
                   sleep 2
                 done
                 if [ "$LAUNCHED" = false ]; then
-                  FOUND=$(find /Applications "$HOME/Applications" -maxdepth 2 -name "Opera*.app" 2>/dev/null | head -1)
+                  FOUND=$(find /Applications "$HOME/Applications" -maxdepth 2 -name "Opera*.app" 2>/dev/null | head -n 1 || true)
                   if [ -n "$FOUND" ]; then
                     echo "[$(date '+%H:%M:%S')] [Watcher] Fallback launch: $FOUND"
                     open "$FOUND" || true
@@ -2010,9 +1858,6 @@ jobs:
           WATCHER_PID=$!
           echo "[$(date '+%H:%M:%S')] Watcher started (PID $WATCHER_PID)"
 
-          # ----------------------------------------------------------------
-          # 6. Launch Chrome with popup-suppression flags
-          # ----------------------------------------------------------------
           CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
           CHROME_FLAGS=(
             --no-first-run
@@ -2035,7 +1880,7 @@ jobs:
             PROXY_SRV="residential-proxy.scrapeops.io:8181"
             echo "[$(date '+%H:%M:%S')] Launching Chrome WITH proxy → $TARGET_URL"
             echo "[$(date '+%H:%M:%S')] Proxy server: $PROXY_SRV"
-            if [ -f "$CHROME_BIN" ]; then
+            if[ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
                 "${CHROME_FLAGS[@]}" \
                 --proxy-server="http://$PROXY_SRV" \
@@ -2064,15 +1909,11 @@ jobs:
           echo "[$(date '+%H:%M:%S')] Monitoring handler output in real time below:"
           echo "------------------------------------------------------------"
 
-          # ----------------------------------------------------------------
-          # 7. Wait for handler to finish (installer automation) then clean up
-          # Handler output is already streaming via tee above
-          # ----------------------------------------------------------------
           HANDLER_TIMEOUT=600
           POLL_START=$(date +%s)
           while kill -0 $HANDLER_PID 2>/dev/null; do
             ELAPSED=$(($(date +%s) - POLL_START))
-            if [ $ELAPSED -gt $HANDLER_TIMEOUT ]; then
+            if[ $ELAPSED -gt $HANDLER_TIMEOUT ]; then
               echo "[$(date '+%H:%M:%S')] Handler timeout (${ELAPSED}s) — killing."
               kill $HANDLER_PID 2>/dev/null || true
               break
