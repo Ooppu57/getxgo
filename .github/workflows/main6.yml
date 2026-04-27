@@ -56,7 +56,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
+        default: 'c58ce00a-1032-4cea-8310-aa8eb6055fd6'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
@@ -406,7 +406,7 @@ jobs:
               grant_tcc kTCCServiceScreenCapture "$PROC_PATH" 1
               grant_tcc kTCCServiceAccessibility "$PROC_PATH" 1
             fi
-          done
+          done || true
           grant_tcc kTCCServiceCamera     com.google.Chrome 0
           grant_tcc kTCCServiceMicrophone com.google.Chrome 0
           echo "[$(date '+%H:%M:%S')] All TCC permissions pre-granted via CLI."
@@ -557,7 +557,7 @@ jobs:
                    VALUES('kTCCServiceAccessibility','$PROC_PATH',1,2,4,1,0);" 2>/dev/null || true
               fi
             fi
-          done
+          done || true
 
           # ----------------------------------------------------------------
           # CLI FIX 3: Kill notificationcenterui and cfprefsd so any cached
