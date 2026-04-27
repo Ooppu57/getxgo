@@ -51,7 +51,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - James'
+        default: 'Opera-One - Daisy'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
@@ -74,7 +74,7 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'Brazil'
+        default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
