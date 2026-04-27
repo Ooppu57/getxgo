@@ -51,6 +51,16 @@ on:
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
         default: 'OperaGX - B4Books'
+      run_manual_url:
+        description: 'Run Manual URL (Bypass software choice)'
+        required: true
+        type: boolean
+        default: false
+      manual_url:
+        description: 'Manual Software URL'
+        required: false
+        type: string
+        default: ''
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
@@ -105,6 +115,8 @@ jobs:
           NUM_DEVICES: ${{ inputs.num_devices }}
           OS_VERSION: ${{ inputs.os_version }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
+          RUN_MANUAL: ${{ inputs.run_manual_url }}
+          MANUAL_URL: ${{ inputs.manual_url }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
           RUN_WITHOUT_PROXY: ${{ inputs.run_without_proxy }}
           COUNTRY: ${{ inputs.proxy_country }}
@@ -120,7 +132,11 @@ jobs:
           country_input = os.environ.get("COUNTRY", "USA")
           mobile = os.environ.get("MOBILE", "false").lower() == "true"
           sticky = os.environ.get("STICKY", "false").lower() == "true"
+          
+          run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
+          manual_url = os.environ.get("MANUAL_URL", "").strip()
           software_choice = os.environ.get("SOFTWARE_CHOICE", "OperaGX - James")
+          
           use_proxy = bool(api_key) and not run_without_proxy
           country_map = {
               "USA": "us", "UK": "uk", "Canada": "ca",
@@ -150,23 +166,30 @@ jobs:
               "Ad-MVN - A2Z":        "https://u.to/a2zadmvnxsmrt/Y-t7Ig",
           }
           all_urls = {**opera_urls, **opera_one_urls, **ad_mvn_urls}
-          target_url = all_urls.get(software_choice, opera_urls["OperaGX - James"])
-          dynamic_links =[
-              "OperaGX - Techx", "OperaGX - Fatradez", "OperaGX - James",
-              "OperaGX - Oliver", "OperaGX - Mahal"
-          ]
-          if software_choice in dynamic_links or software_choice.startswith("Ad-MVN"):
+          
+          if run_manual and manual_url:
+              target_url = manual_url
               software_type = "dynamic_opera"
               dmg_filter = "*Opera*"
-          elif software_choice.startswith("OperaGX"):
-              software_type = "opera_gx"
-              dmg_filter = "*OperaGX*"
-          elif software_choice.startswith("Opera-One"):
-              software_type = "opera_one"
-              dmg_filter = "*Opera*"
           else:
-              software_type = "opera_gx"
-              dmg_filter = "*Opera*"
+              target_url = all_urls.get(software_choice, opera_urls["OperaGX - James"])
+              dynamic_links =[
+                  "OperaGX - Techx", "OperaGX - Fatradez", "OperaGX - James",
+                  "OperaGX - Oliver", "OperaGX - Mahal"
+              ]
+              if software_choice in dynamic_links or software_choice.startswith("Ad-MVN"):
+                  software_type = "dynamic_opera"
+                  dmg_filter = "*Opera*"
+              elif software_choice.startswith("OperaGX"):
+                  software_type = "opera_gx"
+                  dmg_filter = "*OperaGX*"
+              elif software_choice.startswith("Opera-One"):
+                  software_type = "opera_one"
+                  dmg_filter = "*Opera*"
+              else:
+                  software_type = "opera_gx"
+                  dmg_filter = "*Opera*"
+                  
           def short_os(os_ver):
               mapping = {
                   "macos-15":        "M15",
@@ -177,7 +200,10 @@ jobs:
                   "macos-26-intel":  "M26I",
               }
               return mapping.get(os_ver, "MAC")
+              
           def short_software(choice):
+              if run_manual:
+                  return "MANUAL"
               prefix_map = {
                   "OperaGX":   "OPX",
                   "Opera-One": "OPO",
@@ -189,6 +215,7 @@ jobs:
                       list_name = parts[1].replace(" ", "") if len(parts) > 1 else ""
                       return f"{prefix}-{list_name}"
               return choice.replace(" ", "").replace("-", "")
+              
           short_os_tag = short_os(os_version)
           short_sw_tag = short_software(software_choice)
           includes =[]
@@ -222,6 +249,7 @@ jobs:
               exit(1)
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"matrix={json.dumps({'include': includes})}\n")
+              
       - name: Update Workflow Defaults (Remember Inputs)
         shell: python
         env:
@@ -229,6 +257,8 @@ jobs:
           GETSCREEN_EMAIL: ${{ inputs.getscreen_email }}
           NUM_DEVICES: ${{ inputs.num_devices }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
+          RUN_MANUAL: ${{ inputs.run_manual_url }}
+          MANUAL_URL: ${{ inputs.manual_url }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
           RUN_WITHOUT_PROXY: ${{ inputs.run_without_proxy }}
           COUNTRY: ${{ inputs.proxy_country }}
@@ -248,19 +278,27 @@ jobs:
                   global content
                   pattern = r"(" + input_name + r":[\s\S]*?default:\s*)(true|false)"
                   content = re.sub(pattern, rf"\g<1>{new_val.lower()}", content, count=1)
+                  
               update_default_str("os_version",        os.environ.get("OS_VERSION"))
               update_default_str("getscreen_email",   os.environ.get("GETSCREEN_EMAIL"))
               update_default_str("num_devices",       os.environ.get("NUM_DEVICES"))
               update_default_str("software_choice",   os.environ.get("SOFTWARE_CHOICE"))
+              update_default_bool("run_manual_url",   os.environ.get("RUN_MANUAL"))
+              if os.environ.get("RUN_MANUAL", "false").lower() == "true":
+                  update_default_str("manual_url",    os.environ.get("MANUAL_URL"))
+              else:
+                  update_default_str("manual_url",    "")
               update_default_str("scrapeops_api_key", os.environ.get("API_KEY"))
               update_default_bool("run_without_proxy",os.environ.get("RUN_WITHOUT_PROXY"))
               update_default_str("proxy_country",     os.environ.get("COUNTRY"))
               update_default_bool("mobile_proxies",   os.environ.get("MOBILE"))
               update_default_bool("sticky_sessions",  os.environ.get("STICKY"))
+              
               with open(file_path, "w") as f:
                   f.write(content)
           else:
               print(f"File {file_path} not found. Skipping auto-save.")
+              
       - name: Commit and Push New Defaults
         run: |
           git config --global user.name "github-actions[bot]"
@@ -268,6 +306,7 @@ jobs:
           git add .github/workflows/main6.yml
           git diff --quiet && git diff --staged --quiet || \
             (git commit -m "Update last used inputs[skip ci]" && git push)
+
   remote_session:
     name: Remote Session ${{ matrix.device }}
     needs: prepare_matrix
@@ -310,7 +349,7 @@ jobs:
               break
             fi
           done
-          if [ -z "$PYTHON_BIN" ]; then
+          if[ -z "$PYTHON_BIN" ]; then
             echo "ERROR: No Python3 found on runner."
             exit 1
           fi
@@ -386,10 +425,10 @@ jobs:
           grant_tcc kTCCServiceLocalNetwork  com.getscreen.desktop       0
           echo "[$(date '+%H:%M:%S')] --- Scanning for GitHub runner + compute-host process paths ---"
           for RUNNER_DIR in /Users/runner /home/runner /opt/hostedtoolcache /private/var/folders; do
-            if [ -d "$RUNNER_DIR" ]; then
+            if[ -d "$RUNNER_DIR" ]; then
               for BIN_NAME in Runner.Worker Runner.Listener Runner.PluginHost run.sh; do
                 FOUND_PATH=$(find "$RUNNER_DIR" -name "$BIN_NAME" -maxdepth 6 2>/dev/null | head -n 1 || true)
-                if [ -n "$FOUND_PATH" ]; then
+                if[ -n "$FOUND_PATH" ]; then
                   echo "[$(date '+%H:%M:%S')] Granting TCC to runner binary: $FOUND_PATH"
                   grant_tcc kTCCServiceLocalNetwork  "$FOUND_PATH" 1
                   grant_tcc kTCCServiceScreenCapture "$FOUND_PATH" 1
@@ -445,7 +484,7 @@ jobs:
               --retry 3 --retry-delay 5 --silent --show-error || true
             FILE_SIZE=$(stat -f%z getscreen.dmg 2>/dev/null || \
                         stat -c%s getscreen.dmg 2>/dev/null || echo 0)
-            if [ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
+            if[ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
               SUCCESS=true
               break
             fi
@@ -500,7 +539,7 @@ jobs:
             done
             echo "[$(date '+%H:%M:%S')] TCC path-based permissions granted for $EXEC_PATH"
           fi
-          if [ -z "$EXEC_PATH" ] || [ ! -x "$EXEC_PATH" ]; then
+          if[ -z "$EXEC_PATH" ] || [ ! -x "$EXEC_PATH" ]; then
             echo "[$(date '+%H:%M:%S')] ERROR: Getscreen executable not found."
             exit 0
           fi
@@ -522,7 +561,7 @@ jobs:
       - name: Pre-Dismiss System Popups (Fast)
         shell: bash
         run: |
-          echo "=== [$(date '+%H:%M:%S')] Pre-dismissing system popups (fast) ==="
+          echo "===[$(date '+%H:%M:%S')] Pre-dismissing system popups (fast) ==="
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           echo "[$(date '+%H:%M:%S')] Restarting TCC daemon to flush cache..."
           sudo launchctl kickstart -k system/com.apple.tccd 2>/dev/null || true
@@ -559,6 +598,17 @@ jobs:
             set runCount to runCount + 1
             try
               tell application "System Events"
+                try
+                  tell process "CoreServicesUIAgent"
+                    repeat with win in (every window)
+                      try
+                        if exists button "Allow" of win then
+                          click button "Allow" of win
+                        end if
+                      end try
+                    end repeat
+                  end tell
+                end try
                 repeat with proc in (every process whose visible is true)
                   set pName to name of proc as string
                   if pName is not "Google Chrome" then
@@ -607,7 +657,7 @@ jobs:
             "https://dl.google.com/chrome/mac/stable/GGRO/googlechrome.dmg" \
             -o "$CHROME_DMG" 2>/dev/null || true
           FILE_SIZE=$(stat -f%z "$CHROME_DMG" 2>/dev/null || echo 0)
-          if [ -f "$CHROME_DMG" ] && [ "$FILE_SIZE" -gt 1000000 ]; then
+          if[ -f "$CHROME_DMG" ] && [ "$FILE_SIZE" -gt 1000000 ]; then
             hdiutil attach "$CHROME_DMG" -quiet -nobrowse \
               -mountpoint /Volumes/GoogleChrome || true
             if [ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
@@ -623,7 +673,7 @@ jobs:
           else
             echo "[$(date '+%H:%M:%S')] WARNING: Chrome DMG download failed ($FILE_SIZE B)."
           fi
-          if [ -d "/Applications/Google Chrome.app" ]; then
+          if[ -d "/Applications/Google Chrome.app" ]; then
             echo "CHROME_AVAILABLE=true" >> "$GITHUB_ENV"
             echo "[$(date '+%H:%M:%S')] Chrome confirmed available."
           else
@@ -674,8 +724,7 @@ jobs:
 
           def clipboard_set(text):
               try:
-                  proc = subprocess.Popen(
-                      ['pbcopy'], stdin=subprocess.PIPE,
+                  proc = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE,
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                   )
                   proc.communicate(input=text.encode('utf-8'), timeout=5)
@@ -761,6 +810,21 @@ jobs:
               result = run_as(r'''
           tell application "System Events"
             set dismissed to ""
+            
+            -- CoreServicesUIAgent specifically manages TCC prompts like "hosted-compute-agent wants access to control Google Chrome"
+            try
+              tell process "CoreServicesUIAgent"
+                repeat with win in (every window)
+                  try
+                    if exists button "Allow" of win then
+                      click button "Allow" of win
+                      set dismissed to "allowed_in_CoreServicesUIAgent"
+                    end if
+                  end try
+                end repeat
+              end tell
+            end try
+            
             repeat with proc in (every process whose visible is true)
               set pName to name of proc as string
               if pName is not "Google Chrome" then
@@ -778,6 +842,7 @@ jobs:
                     if combined contains "local network" or ¬
                        combined contains "Local Network" or ¬
                        combined contains "hosted-compute" or ¬
+                       combined contains "control \"Google Chrome\"" or ¬
                        combined contains "find devices" or ¬
                        combined contains "incoming network" or ¬
                        combined contains "would like to find" then
@@ -802,6 +867,20 @@ jobs:
               result = run_as(r'''
           tell application "System Events"
             set popupClicked to ""
+            
+            try
+              tell process "CoreServicesUIAgent"
+                repeat with win in (every window)
+                  try
+                    if exists button "Allow" of win then
+                      click button "Allow" of win
+                      set popupClicked to "allowed_in_CoreServicesUIAgent"
+                    end if
+                  end try
+                end repeat
+              end tell
+            end try
+
             repeat with proc in (every process whose visible is true)
               set pName to name of proc as string
               if pName is not "Google Chrome" then
@@ -827,6 +906,7 @@ jobs:
                     if combinedText contains "local network" or ¬
                        combinedText contains "Local Network" or ¬
                        combinedText contains "hosted-compute" or ¬
+                       combinedText contains "control \"Google Chrome\"" or ¬
                        combinedText contains "find devices" or ¬
                        combinedText contains "incoming network" or ¬
                        combinedText contains "Incoming Network" then
@@ -1132,8 +1212,7 @@ jobs:
 
           def screen_center():
               try:
-                  r = subprocess.run(
-                      ["osascript", "-e",
+                  r = subprocess.run(["osascript", "-e",
                        'tell application "Finder" to get bounds of window of desktop'],
                       capture_output=True, text=True, timeout=5
                   )
@@ -1151,7 +1230,9 @@ jobs:
               t0 = time.time()
               while time.time() - t0 < 10:
                   dismiss_system_popups()
+                  dismiss_compute_host_popup()
                   time.sleep(0.5)
+                  
               log("[Opera GX] Attempting 'Accept and Install' button click...")
               result = click_accept_and_install("Opera GX")
               if result == "not_found":
@@ -1159,8 +1240,13 @@ jobs:
                   for _ in range(3):
                       press("tab"); time.sleep(0.5)
                   press("return")
-              log("[Opera GX] Waiting 30s for next screen...")
-              time.sleep(30)
+                  
+              log("[Opera GX] Waiting 30s for next screen and dismissing popups...")
+              for _ in range(30):
+                  dismiss_compute_host_popup()
+                  dismiss_system_popups()
+                  time.sleep(1)
+                  
               log("[Opera GX] Pressing Tab x4 then Enter x8...")
               for _ in range(4):
                   press("tab"); time.sleep(0.5)
@@ -1215,46 +1301,62 @@ jobs:
                       press("tab"); time.sleep(0.5)
                   press("return")
 
-              log("[Opera One] Waiting 30s for next screen...")
-              time.sleep(30)
+              log("[Opera One] Waiting 30s for next screen and dismissing popups...")
+              for _ in range(30):
+                  dismiss_compute_host_popup()
+                  dismiss_system_popups()
+                  time.sleep(1)
 
-              # ** NEW: Click centre of screen to focus Opera One window **
+              # Click center screen
               cx, cy = screen_center()
               log(f"[Opera One] Clicking centre of screen at ({cx},{cy})")
               cliclick(f"c:{cx},{cy}")
-              time.sleep(1)
+              time.sleep(random.uniform(1, 2))
 
-              # Opera One specific post-install sequence
+              # Press Enter
               log("[Opera One] Pressing Enter...")
               press("return")
               time.sleep(random.uniform(1, 2))
 
-              log("[Opera One] Pressing Left Arrow 10 times with 1-2s delays")
+              # Press Tab 2 times
+              log("[Opera One] Pressing Tab 2 times...")
+              for _ in range(2):
+                  press("tab")
+                  time.sleep(random.uniform(1, 2))
+
+              # Press Enter 2 times
+              log("[Opera One] Pressing Enter 2 times...")
+              for _ in range(2):
+                  press("return")
+                  time.sleep(random.uniform(1, 2))
+
+              # Press Left Arrow 10 times
+              log("[Opera One] Pressing Left Arrow 10 times...")
               for i in range(10):
                   press("left")
                   d = random.uniform(1, 2)
                   log(f"[Opera One] Left Arrow {i+1}/10 ({d:.2f}s delay)")
                   time.sleep(d)
 
+              # Press Enter
               log("[Opera One] Pressing Enter...")
               press("return")
               time.sleep(random.uniform(1, 2))
 
-              log("[Opera One] Waiting 5s...")
-              time.sleep(5)
-
-              log("[Opera One] Pressing Tab then Enter...")
-              press("tab")
-              time.sleep(random.uniform(0.5, 1))
-              press("return")
+              # Press Cmd + N (New Tab in Opera)
+              log("[Opera One] Opening New Tab (Cmd + N)...")
+              run_as('tell application "System Events" to keystroke "n" using command down', silent=True)
               time.sleep(random.uniform(1, 2))
 
-              tab_count = random.randint(4, 10)
-              log(f"[Opera One] Pressing Tab {tab_count} times randomly then Enter...")
+              # Press Tab randomly 6-12 times
+              tab_count = random.randint(6, 12)
+              log(f"[Opera One] Pressing Tab {tab_count} times...")
               for _ in range(tab_count):
                   press("tab")
-                  d = random.uniform(1, 2)
-                  time.sleep(d)
+                  time.sleep(random.uniform(1, 2))
+                  
+              # Final Enter
+              log("[Opera One] Pressing Enter (final)...")
               press("return")
 
               log("[Opera One] Setup complete.")
@@ -1386,7 +1488,7 @@ jobs:
                           time.sleep(2)
                           chrome_closed = True
 
-                      if sw_type in ["opera_gx", "dynamic_opera", "ad_mvn"] and op_gx and not setup_done:
+                      if sw_type in["opera_gx", "dynamic_opera", "ad_mvn"] and op_gx and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
                               log("[Handler] *** Opera GX detected — starting installer sequence in 5s ***")
@@ -1396,10 +1498,10 @@ jobs:
                               setup_done = True
                               break
 
-                      if sw_type == "opera_one" and op_one and not setup_done:
+                      if sw_type in["opera_one", "dynamic_opera"] and op_one and not op_gx and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
-                              log("[Handler] *** Opera detected — starting installer sequence in 5s ***")
+                              log("[Handler] *** Opera One detected — starting installer sequence in 5s ***")
                               run_as('tell application "Opera Installer" to activate', silent=True)
                               time.sleep(1)
                           if time.time() - op_launch_t > 5:
@@ -1455,6 +1557,17 @@ jobs:
             COUNT=$((COUNT+1))
             osascript << 'ASEOF' 2>/dev/null || true
           tell application "System Events"
+            try
+              tell process "CoreServicesUIAgent"
+                repeat with win in (every window)
+                  try
+                    if exists button "Allow" of win then
+                      click button "Allow" of win
+                    end if
+                  end try
+                end repeat
+              end tell
+            end try
             repeat with proc in (every process whose visible is true)
               set pName to name of proc as string
               if pName is not "Google Chrome" then
@@ -1479,6 +1592,7 @@ jobs:
                     if combined contains "local network" or ¬
                        combined contains "Local Network" or ¬
                        combined contains "hosted-compute" or ¬
+                       combined contains "control \"Google Chrome\"" or ¬
                        combined contains "find devices" or ¬
                        combined contains "incoming network" or ¬
                        combined contains "would like to find" then
@@ -1532,17 +1646,17 @@ jobs:
             INSTALLED=false
             echo "[$(date '+%H:%M:%S')] [Watcher] Started. Monitoring $DL_FOLDER for downloads..."
             LAST_STATUS=$(($(date +%s)))
-            while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            while [ "$INSTALLED" = false ] &&[ "$(date +%s)" -lt "$DEADLINE" ]; do
               NOW=$(date +%s)
-              if [ $((NOW - LAST_STATUS)) -ge 20 ]; then
-                echo "[$(date '+%H:%M:%S')] [Watcher] Still monitoring... ($(( DEADLINE - NOW ))s remaining)"
+              if[ $((NOW - LAST_STATUS)) -ge 20 ]; then
+                echo "[$(date '+%H:%M:%S')][Watcher] Still monitoring... ($(( DEADLINE - NOW ))s remaining)"
                 LAST_STATUS=$NOW
               fi
               FILE=$(find "$DL_FOLDER" -maxdepth 1 \
                      \( -name "*.dmg" -o -name "*.zip" -o -name "*.pkg" \) \
                      ! -name "*.download" ! -name "*.crdownload" ! -name "*.part" \
                      -newer /tmp/watcher_start_marker 2>/dev/null | head -n 1 || true)
-              if [ -z "$FILE" ]; then
+              if[ -z "$FILE" ]; then
                 FILE=$(find "$DL_FOLDER" -maxdepth 1 -type d -name "*.app" \
                        -newer /tmp/watcher_start_marker 2>/dev/null | head -n 1 || true)
               fi
@@ -1557,7 +1671,7 @@ jobs:
                   for i in $(seq 1 30); do
                     SZ=$(stat -f%z "$FILE" 2>/dev/null || \
                          stat -c%s "$FILE" 2>/dev/null || echo 0)
-                    if [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 500000 ]; then
+                    if [ "$SZ" = "$PREV" ] &&[ "$SZ" -gt 500000 ]; then
                       echo "[$(date '+%H:%M:%S')] [Watcher] File stable at ${SZ}B"
                       break
                     fi
@@ -1575,9 +1689,9 @@ jobs:
                   echo "[$(date '+%H:%M:%S')] [Installer] Mounting DMG: $FILE"
                   MNT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null \
                         | awk '/\/Volumes\// {print $NF}' | head -n 1 || true)
-                  if [ -n "$MNT" ]; then
+                  if[ -n "$MNT" ]; then
                     APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -n 1 || true)
-                    if [ -n "$APP_SRC" ]; then
+                    if[ -n "$APP_SRC" ]; then
                       AN=$(basename "$APP_SRC")
                       sudo cp -R "$APP_SRC" /Applications/ || true
                       sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
@@ -1590,8 +1704,8 @@ jobs:
                   else
                     echo "[$(date '+%H:%M:%S')] [Installer] ERROR: DMG mount failed."
                   fi
-                elif [ "$EXT" = "zip" ]; then
-                  echo "[$(date '+%H:%M:%S')] [Installer] Extracting ZIP: $FILE"
+                elif[ "$EXT" = "zip" ]; then
+                  echo "[$(date '+%H:%M:%S')][Installer] Extracting ZIP: $FILE"
                   EXTRACT_DIR="${DL_FOLDER}/extracted_$(date +%s)"
                   mkdir -p "$EXTRACT_DIR"
                   # Primary extraction with ditto (native macOS), fallback to unzip
@@ -1601,7 +1715,7 @@ jobs:
                   fi
                   find "$EXTRACT_DIR" -name "__MACOSX" -exec rm -rf {} + 2>/dev/null || true
                   APP_IN_ZIP=$(find "$EXTRACT_DIR" -maxdepth 4 -name "*.app" ! -path "*/__MACOSX/*" | head -n 1 || true)
-                  if [ -n "$APP_IN_ZIP" ]; then
+                  if[ -n "$APP_IN_ZIP" ]; then
                     AN=$(basename "$APP_IN_ZIP")
                     sudo cp -R "$APP_IN_ZIP" /Applications/ || true
                     sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
@@ -1624,7 +1738,7 @@ jobs:
                   INSTALLED_APP_NAME="$BASENAME"
                 fi
                 ACTUAL="$SOFTWARE_TYPE"
-                if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
+                if[ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
                   if echo "$INSTALLED_APP_NAME$BASENAME" | grep -qi "gx"; then
                     ACTUAL="opera_gx"
                   else
@@ -1705,7 +1819,7 @@ jobs:
             PROXY_SRV="residential-proxy.scrapeops.io:8181"
             echo "[$(date '+%H:%M:%S')] Launching Chrome WITH proxy → $TARGET_URL"
             echo "[$(date '+%H:%M:%S')] Proxy server: $PROXY_SRV"
-            if [ -f "$CHROME_BIN" ]; then
+            if[ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
                 "${CHROME_FLAGS[@]}" \
                 --proxy-server="http://$PROXY_SRV" \
@@ -1738,7 +1852,7 @@ jobs:
           POLL_START=$(date +%s)
           while kill -0 $HANDLER_PID 2>/dev/null; do
             ELAPSED=$(($(date +%s) - POLL_START))
-            if [ $ELAPSED -gt $HANDLER_TIMEOUT ]; then
+            if[ $ELAPSED -gt $HANDLER_TIMEOUT ]; then
               echo "[$(date '+%H:%M:%S')] Handler timeout (${ELAPSED}s) — killing."
               kill $HANDLER_PID 2>/dev/null || true
               break
