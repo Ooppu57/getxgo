@@ -51,12 +51,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Daisy'
+        default: 'OperaGX - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '9215b08e-0b9d-4c13-a6d5-5d587e6a885b'
+        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
@@ -1038,7 +1038,7 @@ jobs:
               return result if result else "submitted"
 
           # ------------------------------------------------------------
-          #  DOWNLOAD BUTTON CLICK – uniform 3 Tab + Enter for all types
+          #  DOWNLOAD BUTTON CLICK – 3 Tab + Enter
           # ------------------------------------------------------------
           def click_dl_button(sw_type):
               log("[DLButton] Activating Chrome and giving page time to settle...")
@@ -1165,6 +1165,7 @@ jobs:
               log("[Opera GX] Setup complete.")
 
           def opera_one_flow():
+              # Wait for Opera Installer or Opera app
               if not wait_for_app_launch("Opera", timeout=120):
                   return
               log("[Opera One] App launched. Dismissing popups for 10s...")
@@ -1182,7 +1183,7 @@ jobs:
               log("[Opera One] Waiting 30s for next screen...")
               time.sleep(30)
 
-              # New Opera One post-install sequence as requested
+              # Opera One specific post-install sequence
               log("[Opera One] Pressing Enter...")
               press("return")
               time.sleep(random.uniform(1, 2))
@@ -1249,7 +1250,10 @@ jobs:
                       apps    = running_apps()
                       chrome  = "Google Chrome" in apps
                       op_gx   = any("Opera GX" in a for a in apps)
-                      op_one  = any("Opera" in a and "Opera GX" not in a for a in apps)
+                      # Include Opera Installer/Setup for Opera One detection
+                      op_one  = any(("Opera" in a and "Opera GX" not in a) or
+                                    "Opera Installer" in a or "Opera Setup" in a
+                                    for a in apps)
 
                       if chrome and chrome_first_seen is None:
                           chrome_first_seen = time.time()
