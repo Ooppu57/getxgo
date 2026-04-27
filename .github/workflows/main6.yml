@@ -51,12 +51,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - B4Books'
+        default: 'Opera-One - Harrari'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
+        default: '9215b08e-0b9d-4c13-a6d5-5d587e6a885b'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
