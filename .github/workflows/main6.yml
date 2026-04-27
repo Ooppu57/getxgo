@@ -50,7 +50,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Esmeel'
+        default: 'OperaGX - B4Books'
       run_manual_url:
         description: 'Run Manual URL (Bypass software choice)'
         required: true
