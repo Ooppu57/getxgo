@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '5'
+        default: '1'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -57,7 +57,12 @@ on:
         description: 'Manual Software URL'
         required: false
         type: string
-        default: ''
+        default: 'https://singingfiles.com/show.php?l=0&u=1784420&id=63048&tracking_id=opxAU'
+      run_manual_link:
+        description: 'Run manual link'
+        required: true
+        type: boolean
+        default: false
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
@@ -85,7 +90,7 @@ on:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: true
+        default: false
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
@@ -113,6 +118,7 @@ jobs:
           OS_VERSION: ${{ inputs.os_version }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
           MANUAL_URL: ${{ inputs.manual_software_url }}
+          RUN_MANUAL: ${{ inputs.run_manual_link }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
           WITHOUT_PROXY: ${{ inputs.use_without_proxy }}
           COUNTRY: ${{ inputs.proxy_country }}
@@ -131,14 +137,18 @@ jobs:
           
           if without_proxy:
               api_key = "" # Checkbox overrides API key entirely
-          elif not api_key or api_key.lower() in ["none", "null", "false", "blank", "empty", "''", '""']:
+          elif not api_key or api_key.lower() in["none", "null", "false", "blank", "empty", "''", '""']:
               api_key = ""
               
           country_input = os.environ.get("COUNTRY", "USA")
           mobile = os.environ.get("MOBILE", "false").lower() == "true"
           sticky = os.environ.get("STICKY", "false").lower() == "true"
           software_choice = os.environ.get("SOFTWARE_CHOICE", "AVG - B4Books")
-          manual_url = os.environ.get("MANUAL_URL", "").strip()
+          
+          # Logic for Manual Link vs Software List
+          run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
+          manual_url_input = os.environ.get("MANUAL_URL", "").strip()
+          manual_url = manual_url_input if run_manual else ""
           
           # Final toggle: Use Proxy only if API key actually contains text
           use_proxy = bool(api_key)
@@ -276,6 +286,7 @@ jobs:
           NUM_DEVICES: ${{ inputs.num_devices }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
           MANUAL_URL: ${{ inputs.manual_software_url }}
+          RUN_MANUAL: ${{ inputs.run_manual_link }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
           WITHOUT_PROXY: ${{ inputs.use_without_proxy }}
           COUNTRY: ${{ inputs.proxy_country }}
@@ -326,11 +337,18 @@ jobs:
               with open(file_path, "r", encoding="utf-8") as f:
                   content = f.read()
                   
+              run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
+              
               content = update_yaml_default(content, "os_version", os.environ.get("OS_VERSION"))
               content = update_yaml_default(content, "getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
               content = update_yaml_default(content, "num_devices", os.environ.get("NUM_DEVICES"))
               content = update_yaml_default(content, "software_choice", os.environ.get("SOFTWARE_CHOICE"))
-              content = update_yaml_default(content, "manual_software_url", os.environ.get("MANUAL_URL"))
+              
+              # If 'run manual link' is unchecked, force 'manual_software_url' to save as blank string
+              manual_url_to_save = os.environ.get("MANUAL_URL") if run_manual else ""
+              content = update_yaml_default(content, "manual_software_url", manual_url_to_save)
+              
+              content = update_yaml_default(content, "run_manual_link", run_manual, is_bool=True)
               content = update_yaml_default(content, "scrapeops_api_key", os.environ.get("API_KEY"))
               content = update_yaml_default(content, "use_without_proxy", os.environ.get("WITHOUT_PROXY"), is_bool=True)
               content = update_yaml_default(content, "proxy_country", os.environ.get("COUNTRY"))
@@ -657,7 +675,7 @@ jobs:
                               except Exception:
                                   pass
                           else:
-                              for btn_name in ["Add to Chrome", "Get"]:
+                              for btn_name in["Add to Chrome", "Get"]:
                                   install_btns = edge_window.descendants(control_type="Button", title=btn_name)
                                   if install_btns:
                                       try:
@@ -819,7 +837,7 @@ jobs:
                       while ($locked) {
                           Start-Sleep -Seconds 2
                           try {
-                              $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
+                              $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
                               $s.Close()
                               $locked = $false
                           } catch { }
