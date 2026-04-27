@@ -51,12 +51,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Jimmy'
+        default: 'OperaGX - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '492299c5-018b-4093-b2dd-e9088016ab68'
+        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
@@ -670,7 +670,7 @@ jobs:
 
           CHROME_WARMUP_SECS      = 20
           PROXY_WAIT_BEFORE_AUTH  = 10
-          DL_WAIT_AFTER_PROXY     = 20   # increased to 20 seconds
+          DL_WAIT_AFTER_PROXY     = 20   # wait 20 seconds for page load after proxy auth
           PROXY_RETRY_INTERVAL    = 2
           PROXY_MAX_ATTEMPTS      = 40
 
@@ -1039,13 +1039,85 @@ jobs:
               return result if result else "submitted"
 
           # ------------------------------------------------------------
-          #  Ultra‑robust download button click (multi‑method)
+          #  Ultra-robust download button click – primary: Tab-Tab-Enter
           # ------------------------------------------------------------
           def click_dl_button():
-              # Wait a few seconds for the page to settle
-              time.sleep(3)
+              # Small extra wait to be safe
+              time.sleep(2)
 
-              # 1. JavaScript click with many selectors
+              # PRIMARY METHOD: exactly what the user observed works
+              log("[DLButton] Trying keyboard Tab-Tab-Enter (user confirmed method)")
+              run_as('tell application "Google Chrome" to activate', silent=True)
+              time.sleep(1)
+
+              # Clear any existing text selection
+              run_as('tell application "System Events" to keystroke "a" using command down', silent=True)
+              time.sleep(0.1)
+
+              # Two tabs to reach the download button
+              press("tab")
+              time.sleep(0.3)
+              press("tab")
+              time.sleep(0.3)
+              # Press Enter
+              press("return")
+              time.sleep(0.5)
+
+              # Wait a moment to see if download starts (sentinel will be set by watcher)
+              for _ in range(5):
+                  if os.path.exists("/tmp/download_done.flag"):
+                      log("[DLButton] ✓ Tab-Tab-Enter triggered download!")
+                      return "tab_tab_enter"
+                  time.sleep(1)
+
+              # If not triggered, try again with slight variations
+              log("[DLButton] Tab-Tab-Enter didn't immediately start download, retrying with space/enter...")
+              for _ in range(2):
+                  press("tab"); time.sleep(0.2)
+              press("space"); time.sleep(0.3)
+              press("return"); time.sleep(0.3)
+              for _ in range(5):
+                  if os.path.exists("/tmp/download_done.flag"):
+                      log("[DLButton] ✓ Keyboard variation succeeded")
+                      return "keyboard_variant"
+
+              # Fallback: try clicking via AppleScript UI
+              log("[DLButton] Keyboard method failed, trying AppleScript UI click...")
+              as_result = run_as(r'''
+          tell application "System Events"
+            tell process "Google Chrome"
+              repeat with btn in (every button of window 1)
+                set n to ""
+                try
+                  set n to (name of btn) as string
+                end try
+                if n contains "Download" or n contains "download" or n contains "Install" or n contains "Get Opera" then
+                  click btn
+                  return "as_clicked:" & n
+                end if
+              end repeat
+              repeat with grp in (every group of window 1)
+                repeat with btn in (every button of grp)
+                  set n to ""
+                  try
+                    set n to (name of btn) as string
+                  end try
+                  if n contains "Download" or n contains "download" then
+                    click btn
+                    return "as_group_clicked:" & n
+                  end if
+                end repeat
+              end repeat
+            end tell
+          end tell
+          return "as_not_found"
+          ''', silent=True)
+              if as_result and "clicked" in as_result:
+                  log(f"[DLButton] ✓ AppleScript UI click: {as_result}")
+                  return "as_clicked"
+
+              # Fallback: JavaScript (broad selectors)
+              log("[DLButton] Trying JavaScript click fallback...")
               js_code = """
               (function() {
                 var selectors = [
@@ -1099,7 +1171,6 @@ jobs:
                     }
                   }
                 }
-                // fallback: find any link with 'download' in href
                 var allLinks = document.querySelectorAll('a');
                 for (var j = 0; j < allLinks.length; j++) {
                   if (allLinks[j].href && allLinks[j].href.toLowerCase().indexOf('download') !== -1) {
@@ -1111,66 +1182,19 @@ jobs:
               })();
               """
               js_result = run_as(f'tell application "Google Chrome" to execute active tab of front window javascript "{js_code}"', silent=True)
-              if js_result and ("clicked" in js_result):
-                  log(f"[DLButton] ✓ JS click succeeded: {js_result}")
+              if js_result and "clicked" in js_result:
+                  log(f"[DLButton] ✓ JavaScript click succeeded: {js_result}")
                   return "js_clicked"
 
-              log(f"[DLButton] JS result: {js_result} — trying UI methods...")
-
-              # 2. AppleScript UI button click inside Chrome
-              as_result = run_as(r'''
-          tell application "System Events"
-            tell process "Google Chrome"
-              repeat with btn in (every button of window 1)
-                set n to ""
-                try
-                  set n to (name of btn) as string
-                end try
-                if n contains "Download" or n contains "download" or n contains "Install" or n contains "Get Opera" then
-                  click btn
-                  return "as_clicked:" & n
-                end if
-              end repeat
-              repeat with grp in (every group of window 1)
-                repeat with btn in (every button of grp)
-                  set n to ""
-                  try
-                    set n to (name of btn) as string
-                  end try
-                  if n contains "Download" or n contains "download" then
-                    click btn
-                    return "as_group_clicked:" & n
-                  end if
-                end repeat
-              end repeat
-            end tell
-          end tell
-          return "as_not_found"
-          ''', silent=True)
-              if as_result and "clicked" in as_result:
-                  log(f"[DLButton] ✓ AppleScript UI click: {as_result}")
-                  return "as_clicked"
-
-              # 3. Keyboard method: Tab through page, press Enter on each link/button
-              log("[DLButton] Trying keyboard tab/enter method...")
-              run_as('tell application "Google Chrome" to activate', silent=True)
-              time.sleep(1)
-              for _ in range(20):
-                  press("tab")
-                  time.sleep(0.2)
-                  press("return")
-                  time.sleep(0.3)
-                  # check if download started?
-                  if os.path.exists("/tmp/download_done.flag"):
-                      return "keyboard_enter_series"
-
-              # 4. Reload page and try JS again after delay
+              # Last resort: reload and try keyboard again
+              log("[DLButton] Reloading page and retrying Tab-Tab-Enter...")
               run_as('tell application "Google Chrome" to reload active tab of front window', silent=True)
               time.sleep(5)
-              js_retry = run_as(f'tell application "Google Chrome" to execute active tab of front window javascript "{js_code}"', silent=True)
-              if js_retry and "clicked" in js_retry:
-                  log(f"[DLButton] ✓ JS (after reload) succeeded: {js_retry}")
-                  return "js_reload_clicked"
+              run_as('tell application "Google Chrome" to activate', silent=True)
+              time.sleep(1)
+              press("tab"); time.sleep(0.3)
+              press("tab"); time.sleep(0.3)
+              press("return"); time.sleep(0.5)
 
               log("[DLButton] All download click methods exhausted.")
               return "not_found"
@@ -1421,7 +1445,7 @@ jobs:
                                   if wait_left % 5 == 0:
                                       log(f"[Handler] Waiting {wait_left}s more before download button click...")
                               else:
-                                  if time.time() - last_dl_try > 8:   # try every 8 seconds
+                                  if time.time() - last_dl_try > 8:
                                       last_dl_try = time.time()
                                       log(f"[DLButton] === Attempting download button click (t={elapsed}s) ===")
                                       result = click_dl_button()
