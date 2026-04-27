@@ -52,7 +52,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'AVG - B4Books'
+        default: 'AVG - Trader'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -67,7 +67,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '689fa34c-955a-469a-96ec-1fad7a328270'
+        default: 'fab07551-671e-4c88-a182-d52e5fb7f65a'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
