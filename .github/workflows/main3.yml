@@ -57,7 +57,7 @@ on:
         description: 'Manual Software URL'
         required: false
         type: string
-        default: 'https://singingfiles.com/show.php?l=0&u=1784420&id=63048&tracking_id=opxAU'
+        default: ''
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
