@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '1'
+        default: '2'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -52,12 +52,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - James'
+        default: 'AVG - MlzYT'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
         type: string
-        default: 'https://singingfiles.com/show.php?l=0&u=1784420&id=63048&tracking_id=opxAU'
+        default: ''
       run_manual_link:
         description: 'Run manual link'
         required: true
@@ -67,7 +67,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
+        default: '689fa34c-955a-469a-96ec-1fad7a328270'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -85,7 +85,7 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'Australia'
+        default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
