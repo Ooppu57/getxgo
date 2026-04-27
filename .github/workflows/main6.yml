@@ -8,10 +8,9 @@ on:
         required: true
         type: choice
         options:
-          - 'macos-15'
-          - 'macos-14'
           - 'macos-13'
-          - 'macos-15-xlarge'
+          - 'macos-14'
+          - 'macos-15'
           - 'macos-26'
           - 'macos-26-intel'
         default: 'macos-14'
