@@ -34,7 +34,6 @@ on:
         type: choice
         options:
           - 'AVG - Trader'
-          - 'AVG - MlzYT'
           - 'AVG - F.ahmad'
           - 'AVG - B4Books'
           - 'OperaGX - B4Books'
@@ -164,7 +163,6 @@ jobs:
           # Software Mappings
           avg_urls = {
               "AVG - Trader":  "https://u.to/a-trdr/xDh4Ig",
-              "AVG - MlzYT":   "https://u.to/a-mlz/Agt3Ig",
               "AVG - F.ahmad": "https://u.to/a-fah/4Qp3Ig",
               "AVG - B4Books": "https://u.to/a-b4b/7wp3Ig",
           }
