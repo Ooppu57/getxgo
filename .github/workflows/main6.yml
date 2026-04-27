@@ -50,7 +50,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Esmeel'
+        default: 'OperaGX - B4Books'
       run_manual_url:
         description: 'Run Manual URL (Bypass software choice)'
         required: true
@@ -795,6 +795,60 @@ jobs:
                   'whose visible is true', silent=True)
               return[n.strip() for n in r.split(",") if n.strip()]
 
+          # ------------------------------------------------------------
+          #  Generic button click using exact button name (case-insensitive)
+          #  Searches all visible processes whose name contains "opera"
+          # ------------------------------------------------------------
+          def click_button_exact(label, timeout=5):
+              """Click a button whose name matches *label* (case-insensitive) in any Opera-related process.
+                 Returns True if a button was clicked."""
+              result = run_as(fr'''
+          tell application "System Events"
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName contains "Opera" then
+                try
+                  repeat with win in (every window of proc)
+                    try
+                      if exists button "{label}" of win then
+                        click button "{label}" of win
+                        return "clicked"
+                      end if
+                    end try
+                  end repeat
+                end try
+              end if
+            end repeat
+            -- fallback: try partial match
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName contains "Opera" then
+                try
+                  repeat with win in (every window of proc)
+                    repeat with b in (every button of win)
+                      set bname to ""
+                      try
+                        set bname to name of b as string
+                      end try
+                      ignoring case
+                        if bname contains "{label}" then
+                          click b
+                          return "clicked_partial"
+                        end if
+                      end ignoring
+                    end repeat
+                  end repeat
+                end try
+              end if
+            end repeat
+            return "not_found"
+          end tell
+          ''', silent=True, timeout=timeout)
+              if result and ("clicked" in result):
+                  log(f"[ButtonClick] Clicked button '{label}' -> {result}")
+                  return True
+              return False
+
           def dismiss_compute_host_popup():
               TCC_DB = "/Library/Application Support/com.apple.TCC/TCC.db"
               try:
@@ -1266,7 +1320,6 @@ jobs:
           def opera_one_flow():
               # Wait specifically for Opera Installer
               if not wait_for_app_launch("Opera Installer", timeout=120):
-                  # Fallback: try to open the known path directly
                   log("[Opera One] Installer not seen, attempting manual launch of /Applications/Opera Installer.app")
                   if os.path.exists("/Applications/Opera Installer.app"):
                       subprocess.run(["open", "/Applications/Opera Installer.app"])
@@ -1275,7 +1328,6 @@ jobs:
                           log("[Opera One] Still not found, aborting setup.")
                           return
                   else:
-                      # Last resort: look for any Opera installer in Applications
                       found = subprocess.run(
                           "find /Applications -maxdepth 2 -name 'Opera*.app' 2>/dev/null | head -1",
                           shell=True, capture_output=True, text=True).stdout.strip()
@@ -1286,7 +1338,7 @@ jobs:
                       if not wait_for_app_launch("Opera", timeout=60):
                           return
 
-              log("[Opera One] App launched. Dismissing popups for 10s (aggressive)...")
+              log("[Opera One] App launched. Dismissing popups for 10s...")
               t0 = time.time()
               while time.time() - t0 < 10:
                   dismiss_system_popups()
@@ -1301,61 +1353,61 @@ jobs:
                       press("tab"); time.sleep(0.5)
                   press("return")
 
-              log("[Opera One] Waiting 30s for next screen and dismissing popups...")
+              log("[Opera One] Waiting 30s for next screen (dismissing popups)...")
               for _ in range(30):
                   dismiss_compute_host_popup()
                   dismiss_system_popups()
                   time.sleep(1)
 
-              # Click centre of screen
-              cx, cy = screen_center()
-              log(f"[Opera One] Clicking centre of screen at ({cx},{cy})")
-              cliclick(f"c:{cx},{cy}")
-              time.sleep(random.uniform(1, 2))
+              # ------------------------------------------------------------
+              #  NEW: Click "Next" 7 times with a 3s delay between each
+              # ------------------------------------------------------------
+              for i in range(1, 8):
+                  log(f"[Opera One] Clicking 'Next' (attempt {i}/7)...")
+                  clicked = click_button_exact("Next")
+                  if clicked:
+                      log(f"[Opera One] 'Next' clicked successfully.")
+                  else:
+                      log(f"[Opera One] 'Next' button not found, continuing anyway.")
+                  # dismiss any stray popups
+                  dismiss_compute_host_popup()
+                  dismiss_system_popups()
+                  time.sleep(3)
 
-              # Press Enter
-              log("[Opera One] Pressing Enter...")
-              press("return")
-              time.sleep(random.uniform(1, 2))
+              # ------------------------------------------------------------
+              #  Optional "Get Started" button (may not always appear)
+              # ------------------------------------------------------------
+              log("[Opera One] Looking for 'Get Started' button...")
+              if click_button_exact("Get Started"):
+                  log("[Opera One] 'Get Started' clicked.")
+                  time.sleep(2)
+              else:
+                  log("[Opera One] 'Get Started' not found – skipping.")
 
-              # Press Tab 2 times
-              log("[Opera One] Pressing Tab x2...")
-              for _ in range(2):
-                  press("tab")
-                  time.sleep(random.uniform(1, 2))
-
-              # Press Enter 2 times
-              log("[Opera One] Pressing Enter x2...")
-              for _ in range(2):
+              # ------------------------------------------------------------
+              #  Click "Submit"
+              # ------------------------------------------------------------
+              log("[Opera One] Clicking 'Submit'...")
+              if click_button_exact("Submit"):
+                  log("[Opera One] 'Submit' clicked.")
+              else:
+                  log("[Opera One] 'Submit' not found – using keyboard Enter as fallback.")
                   press("return")
-                  time.sleep(random.uniform(1, 2))
+              time.sleep(2)
 
-              # Press Left Arrow 10 times
-              log("[Opera One] Pressing Left Arrow x10...")
-              for i in range(10):
-                  press("left")
-                  d = random.uniform(1, 2)
-                  log(f"[Opera One] Left Arrow {i+1}/10 ({d:.2f}s delay)")
-                  time.sleep(d)
-
-              # Press Enter
-              log("[Opera One] Pressing Enter...")
-              press("return")
-              time.sleep(random.uniform(1, 2))
-
-              # Cmd + N (New Tab)
-              log("[Opera One] Opening New Tab (Cmd + N)...")
+              # ------------------------------------------------------------
+              #  Keyboard sequence: Cmd+N, Tab random 6-12, Enter
+              # ------------------------------------------------------------
+              log("[Opera One] Opening New Tab (Cmd+N)...")
               run_as('tell application "System Events" to keystroke "n" using command down', silent=True)
               time.sleep(random.uniform(1, 2))
 
-              # Tab random 6–12 times
               tab_count = random.randint(6, 12)
               log(f"[Opera One] Pressing Tab x{tab_count}...")
               for _ in range(tab_count):
                   press("tab")
                   time.sleep(random.uniform(1, 2))
                   
-              # Final Enter
               log("[Opera One] Pressing Enter (final)...")
               press("return")
 
