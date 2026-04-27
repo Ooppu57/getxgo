@@ -57,12 +57,12 @@ on:
         description: 'Manual Software URL'
         required: false
         type: string
-        default: ''
+        default: 'https://singingfiles.com/show.php?l=0&u=1784420&id=63048&tracking_id=opxAU'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '81459f4b-8944-4a60-8f3a-b25d17b7db28'
+        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -80,7 +80,7 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'Brazil'
+        default: 'Australia'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
