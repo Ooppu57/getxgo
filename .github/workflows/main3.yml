@@ -51,7 +51,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'AVG - F.ahmad'
+        default: 'AVG - Trader'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -66,7 +66,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '35e6130f-ccc5-4fa5-8712-a8b49147cda1'
+        default: '9215b08e-0b9d-4c13-a6d5-5d587e6a885b'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -84,12 +84,12 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
-        default: 'Brazil'
+        default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: true
+        default: false
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
