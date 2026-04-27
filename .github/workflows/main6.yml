@@ -56,7 +56,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
+        default: '689fa34c-955a-469a-96ec-1fad7a328270'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
