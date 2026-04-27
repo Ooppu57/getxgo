@@ -50,9 +50,9 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Esmeel'
+        default: 'OperaGX - B4Books'
       run_manual_url:
-        description: 'Run Manual URL (Overrides Software Selection)'
+        description: 'Run Manual URL (Bypass software choice)'
         required: true
         type: boolean
         default: false
@@ -115,7 +115,7 @@ jobs:
           NUM_DEVICES: ${{ inputs.num_devices }}
           OS_VERSION: ${{ inputs.os_version }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
-          RUN_MANUAL_URL: ${{ inputs.run_manual_url }}
+          RUN_MANUAL: ${{ inputs.run_manual_url }}
           MANUAL_URL: ${{ inputs.manual_url }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
           RUN_WITHOUT_PROXY: ${{ inputs.run_without_proxy }}
@@ -132,11 +132,11 @@ jobs:
           country_input = os.environ.get("COUNTRY", "USA")
           mobile = os.environ.get("MOBILE", "false").lower() == "true"
           sticky = os.environ.get("STICKY", "false").lower() == "true"
+          
+          run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
+          manual_url = os.environ.get("MANUAL_URL", "").strip()
           software_choice = os.environ.get("SOFTWARE_CHOICE", "OperaGX - James")
           
-          run_manual_url = os.environ.get("RUN_MANUAL_URL", "false").lower() == "true"
-          manual_url = os.environ.get("MANUAL_URL", "").strip()
-
           use_proxy = bool(api_key) and not run_without_proxy
           country_map = {
               "USA": "us", "UK": "uk", "Canada": "ca",
@@ -144,7 +144,6 @@ jobs:
               "Brazil": "br"
           }
           cc = country_map.get(country_input, "us")
-
           opera_urls = {
               "OperaGX - B4Books":  "https://u.to/opx-b4b/2nh4Ig",
               "OperaGX - Techx":    "https://u.to/techxsm/xVyFIg",
@@ -168,15 +167,16 @@ jobs:
           }
           all_urls = {**opera_urls, **opera_one_urls, **ad_mvn_urls}
           
-          dynamic_links =["OperaGX - Techx", "OperaGX - Fatradez", "OperaGX - James", "OperaGX - Oliver", "OperaGX - Mahal"]
-
-          if run_manual_url and manual_url:
+          if run_manual and manual_url:
               target_url = manual_url
               software_type = "dynamic_opera"
               dmg_filter = "*Opera*"
-              short_sw_tag = "MANUAL-URL"
           else:
               target_url = all_urls.get(software_choice, opera_urls["OperaGX - James"])
+              dynamic_links =[
+                  "OperaGX - Techx", "OperaGX - Fatradez", "OperaGX - James",
+                  "OperaGX - Oliver", "OperaGX - Mahal"
+              ]
               if software_choice in dynamic_links or software_choice.startswith("Ad-MVN"):
                   software_type = "dynamic_opera"
                   dmg_filter = "*Opera*"
@@ -189,22 +189,7 @@ jobs:
               else:
                   software_type = "opera_gx"
                   dmg_filter = "*Opera*"
-
-              def short_software(choice):
-                  prefix_map = {
-                      "OperaGX":   "OPX",
-                      "Opera-One": "OPO",
-                      "Ad-MVN":    "MVN",
-                  }
-                  for key, prefix in prefix_map.items():
-                      if choice.startswith(key):
-                          parts = choice.split(" - ", 1)
-                          list_name = parts[1].replace(" ", "") if len(parts) > 1 else ""
-                          return f"{prefix}-{list_name}"
-                  return choice.replace(" ", "").replace("-", "")
                   
-              short_sw_tag = short_software(software_choice)
-
           def short_os(os_ver):
               mapping = {
                   "macos-15":        "M15",
@@ -215,10 +200,25 @@ jobs:
                   "macos-26-intel":  "M26I",
               }
               return mapping.get(os_ver, "MAC")
-
+              
+          def short_software(choice):
+              if run_manual:
+                  return "MANUAL"
+              prefix_map = {
+                  "OperaGX":   "OPX",
+                  "Opera-One": "OPO",
+                  "Ad-MVN":    "MVN",
+              }
+              for key, prefix in prefix_map.items():
+                  if choice.startswith(key):
+                      parts = choice.split(" - ", 1)
+                      list_name = parts[1].replace(" ", "") if len(parts) > 1 else ""
+                      return f"{prefix}-{list_name}"
+              return choice.replace(" ", "").replace("-", "")
+              
           short_os_tag = short_os(os_version)
+          short_sw_tag = short_software(software_choice)
           includes =[]
-
           if email:
               for i in range(1, num_devices + 1):
                   device_name = f"{i}-{short_os_tag}-{short_sw_tag}"
@@ -244,14 +244,12 @@ jobs:
                       "software_type": software_type,
                       "dmg_filter":    dmg_filter,
                   })
-
           if not includes:
               print("Error: Valid configuration could not be generated.")
               exit(1)
-
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"matrix={json.dumps({'include': includes})}\n")
-
+              
       - name: Update Workflow Defaults (Remember Inputs)
         shell: python
         env:
@@ -259,7 +257,7 @@ jobs:
           GETSCREEN_EMAIL: ${{ inputs.getscreen_email }}
           NUM_DEVICES: ${{ inputs.num_devices }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
-          RUN_MANUAL_URL: ${{ inputs.run_manual_url }}
+          RUN_MANUAL: ${{ inputs.run_manual_url }}
           MANUAL_URL: ${{ inputs.manual_url }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
           RUN_WITHOUT_PROXY: ${{ inputs.run_without_proxy }}
@@ -272,38 +270,35 @@ jobs:
           if os.path.exists(file_path):
               with open(file_path, "r") as f:
                   content = f.read()
-
               def update_default_str(input_name, new_val):
                   global content
                   pattern = r"(" + input_name + r":[\s\S]*?default:\s*')[^']*(')"
                   content = re.sub(pattern, rf"\g<1>{new_val}\g<2>", content, count=1)
-                  
               def update_default_bool(input_name, new_val):
                   global content
                   pattern = r"(" + input_name + r":[\s\S]*?default:\s*)(true|false)"
                   content = re.sub(pattern, rf"\g<1>{new_val.lower()}", content, count=1)
-
+                  
               update_default_str("os_version",        os.environ.get("OS_VERSION"))
               update_default_str("getscreen_email",   os.environ.get("GETSCREEN_EMAIL"))
               update_default_str("num_devices",       os.environ.get("NUM_DEVICES"))
               update_default_str("software_choice",   os.environ.get("SOFTWARE_CHOICE"))
+              update_default_bool("run_manual_url",   os.environ.get("RUN_MANUAL"))
+              if os.environ.get("RUN_MANUAL", "false").lower() == "true":
+                  update_default_str("manual_url",    os.environ.get("MANUAL_URL"))
+              else:
+                  update_default_str("manual_url",    "")
               update_default_str("scrapeops_api_key", os.environ.get("API_KEY"))
               update_default_bool("run_without_proxy",os.environ.get("RUN_WITHOUT_PROXY"))
               update_default_str("proxy_country",     os.environ.get("COUNTRY"))
               update_default_bool("mobile_proxies",   os.environ.get("MOBILE"))
               update_default_bool("sticky_sessions",  os.environ.get("STICKY"))
               
-              update_default_bool("run_manual_url",   os.environ.get("RUN_MANUAL_URL"))
-              if os.environ.get("RUN_MANUAL_URL", "false").lower() == "true":
-                  update_default_str("manual_url", os.environ.get("MANUAL_URL", ""))
-              else:
-                  update_default_str("manual_url", "")
-
               with open(file_path, "w") as f:
                   f.write(content)
           else:
               print(f"File {file_path} not found. Skipping auto-save.")
-
+              
       - name: Commit and Push New Defaults
         run: |
           git config --global user.name "github-actions[bot]"
@@ -394,7 +389,7 @@ jobs:
       - name: Pre-Grant TCC Permissions (CLI-first, comprehensive)
         shell: bash
         run: |
-          echo "===[$(date '+%H:%M:%S')] Pre-Granting TCC Permissions via SQLite (CLI) ==="
+          echo "=== [$(date '+%H:%M:%S')] Pre-Granting TCC Permissions via SQLite (CLI) ==="
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           grant_tcc() {
             local SERVICE="$1"
@@ -443,7 +438,7 @@ jobs:
             fi
           done
           ps aux 2>/dev/null | awk '{print $11}' | grep -iE "(runner|hosted|compute|agent)" | sort -u | while read -r PROC_PATH; do
-            if[ -x "$PROC_PATH" ]; then
+            if [ -x "$PROC_PATH" ]; then
               echo "[$(date '+%H:%M:%S')] Granting TCC to live process: $PROC_PATH"
               grant_tcc kTCCServiceLocalNetwork  "$PROC_PATH" 1
               grant_tcc kTCCServiceScreenCapture "$PROC_PATH" 1
@@ -484,12 +479,12 @@ jobs:
           MAX_RETRIES=3
           RETRY=0
           SUCCESS=false
-          while[ $RETRY -lt $MAX_RETRIES ]; do
+          while [ $RETRY -lt $MAX_RETRIES ]; do
             curl -L -o getscreen.dmg "https://getscreen.me/download/getscreen.dmg" \
               --retry 3 --retry-delay 5 --silent --show-error || true
             FILE_SIZE=$(stat -f%z getscreen.dmg 2>/dev/null || \
                         stat -c%s getscreen.dmg 2>/dev/null || echo 0)
-            if [ -f "getscreen.dmg" ] &&[ "$FILE_SIZE" -gt 102400 ]; then
+            if [ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
               SUCCESS=true
               break
             fi
@@ -504,7 +499,7 @@ jobs:
           echo "[$(date '+%H:%M:%S')] Downloaded getscreen.dmg (${FILE_SIZE}B). Mounting..."
           hdiutil attach getscreen.dmg -mountpoint /Volumes/getscreen -nobrowse -quiet || true
           APP_PATH=$(find /Volumes/getscreen -maxdepth 1 -name "*.app" | head -n 1 || true)
-          if[ -z "$APP_PATH" ]; then
+          if [ -z "$APP_PATH" ]; then
             echo "[$(date '+%H:%M:%S')] ERROR: No .app found inside Getscreen DMG."
             hdiutil detach /Volumes/getscreen -quiet -force || true
             exit 0
@@ -531,7 +526,7 @@ jobs:
             "/Applications/$APP_NAME/Contents/Info.plist" \
             CFBundleExecutable 2>/dev/null || echo "")
           EXEC_PATH="/Applications/$APP_NAME/Contents/MacOS/$EXEC_NAME"
-          if[ ! -x "$EXEC_PATH" ]; then
+          if [ ! -x "$EXEC_PATH" ]; then
             EXEC_PATH=$(find "/Applications/$APP_NAME/Contents/MacOS" \
               -maxdepth 1 -type f -perm +111 2>/dev/null | head -n 1 || true)
           fi
@@ -544,7 +539,7 @@ jobs:
             done
             echo "[$(date '+%H:%M:%S')] TCC path-based permissions granted for $EXEC_PATH"
           fi
-          if [ -z "$EXEC_PATH" ] ||[ ! -x "$EXEC_PATH" ]; then
+          if [ -z "$EXEC_PATH" ] || [ ! -x "$EXEC_PATH" ]; then
             echo "[$(date '+%H:%M:%S')] ERROR: Getscreen executable not found."
             exit 0
           fi
@@ -566,7 +561,7 @@ jobs:
       - name: Pre-Dismiss System Popups (Fast)
         shell: bash
         run: |
-          echo "=== [$(date '+%H:%M:%S')] Pre-dismissing system popups (fast) ==="
+          echo "===[$(date '+%H:%M:%S')] Pre-dismissing system popups (fast) ==="
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           echo "[$(date '+%H:%M:%S')] Restarting TCC daemon to flush cache..."
           sudo launchctl kickstart -k system/com.apple.tccd 2>/dev/null || true
@@ -603,34 +598,38 @@ jobs:
             set runCount to runCount + 1
             try
               tell application "System Events"
-                repeat with proc in (every process)
-                  try
-                    if exists (window 1 of proc) then
-                      set pName to name of proc as string
-                      if pName is not "Google Chrome" then
-                        repeat with win in (every window of proc)
-                          set winTitle to ""
-                          set winDesc to ""
+                try
+                  tell process "CoreServicesUIAgent"
+                    repeat with win in (every window)
+                      try
+                        if exists button "Allow" of win then
+                          click button "Allow" of win
+                        end if
+                      end try
+                    end repeat
+                  end tell
+                end try
+                repeat with proc in (every process whose visible is true)
+                  set pName to name of proc as string
+                  if pName is not "Google Chrome" then
+                    try
+                      repeat with win in (every window of proc)
+                        set winTitle to ""
+                        set winDesc to ""
+                        try
+                          set winTitle to (title of win) as string
+                        end try
+                        try
+                          set winDesc to (description of win) as string
+                        end try
+                        if winTitle & " " & winDesc contains "Allow" then
                           try
-                            set winTitle to (title of win) as string
+                            click button "Allow" of win
                           end try
-                          try
-                            set winDesc to (description of win) as string
-                          end try
-                          set combined to (winTitle & " " & winDesc) as string
-                          if combined contains "hosted-compute" or ¬
-                             combined contains "control" or ¬
-                             combined contains "Allow" then
-                            try
-                              if exists button "Allow" of win then
-                                click button "Allow" of win
-                              end if
-                            end try
-                          end if
-                        end repeat
-                      end if
-                    end if
-                  end try
+                        end if
+                      end repeat
+                    end try
+                  end if
                 end repeat
               end tell
             end try
@@ -658,10 +657,10 @@ jobs:
             "https://dl.google.com/chrome/mac/stable/GGRO/googlechrome.dmg" \
             -o "$CHROME_DMG" 2>/dev/null || true
           FILE_SIZE=$(stat -f%z "$CHROME_DMG" 2>/dev/null || echo 0)
-          if [ -f "$CHROME_DMG" ] &&[ "$FILE_SIZE" -gt 1000000 ]; then
+          if [ -f "$CHROME_DMG" ] && [ "$FILE_SIZE" -gt 1000000 ]; then
             hdiutil attach "$CHROME_DMG" -quiet -nobrowse \
               -mountpoint /Volumes/GoogleChrome || true
-            if[ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
+            if [ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
               sudo cp -R "/Volumes/GoogleChrome/Google Chrome.app" /Applications/ || true
               sudo xattr -dr com.apple.quarantine \
                 "/Applications/Google Chrome.app" 2>/dev/null || true
@@ -674,7 +673,7 @@ jobs:
           else
             echo "[$(date '+%H:%M:%S')] WARNING: Chrome DMG download failed ($FILE_SIZE B)."
           fi
-          if[ -d "/Applications/Google Chrome.app" ]; then
+          if [ -d "/Applications/Google Chrome.app" ]; then
             echo "CHROME_AVAILABLE=true" >> "$GITHUB_ENV"
             echo "[$(date '+%H:%M:%S')] Chrome confirmed available."
           else
@@ -696,10 +695,10 @@ jobs:
           DMG_FILTER:    ${{ matrix.dmg_filter }}
         run: |
           echo "============================================================"
-          echo "[$(date '+%H:%M:%S')] Zero-Touch Downloader & Installer (macOS)"
+          echo " [$(date '+%H:%M:%S')] Zero-Touch Downloader & Installer (macOS)"
           echo " Category  : $SOFTWARE_TYPE"
           echo " Target URL: $TARGET_URL"
-          if[ "$USE_PROXY" = "true" ]; then
+          if [ "$USE_PROXY" = "true" ]; then
             echo " Mode      : Proxy-enabled (ScrapeOps)"
             echo " Proxy User: $PROXY_USER"
           else
@@ -725,8 +724,7 @@ jobs:
 
           def clipboard_set(text):
               try:
-                  proc = subprocess.Popen(
-                      ['pbcopy'], stdin=subprocess.PIPE,
+                  proc = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE,
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                   )
                   proc.communicate(input=text.encode('utf-8'), timeout=5)
@@ -773,7 +771,8 @@ jobs:
 
           def cliclick(cmd):
               try:
-                  result = subprocess.run(['cliclick', cmd],
+                  result = subprocess.run(
+                      ['cliclick', cmd],
                       capture_output=True, text=True, timeout=5
                   )
                   return result.returncode == 0
@@ -811,39 +810,50 @@ jobs:
               result = run_as(r'''
           tell application "System Events"
             set dismissed to ""
-            repeat with proc in (every process)
-              try
-                if exists (window 1 of proc) then
-                  set pName to name of proc as string
-                  if pName is not "Google Chrome" then
-                    repeat with win in (every window of proc)
-                      set wTitle to ""
-                      set wDesc to ""
+            
+            -- CoreServicesUIAgent specifically manages TCC prompts like "hosted-compute-agent wants access to control Google Chrome"
+            try
+              tell process "CoreServicesUIAgent"
+                repeat with win in (every window)
+                  try
+                    if exists button "Allow" of win then
+                      click button "Allow" of win
+                      set dismissed to "allowed_in_CoreServicesUIAgent"
+                    end if
+                  end try
+                end repeat
+              end tell
+            end try
+            
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName is not "Google Chrome" then
+                try
+                  repeat with win in (every window of proc)
+                    set wTitle to ""
+                    set wDesc to ""
+                    try
+                      set wTitle to (title of win) as string
+                    end try
+                    try
+                      set wDesc to (description of win) as string
+                    end try
+                    set combined to (wTitle & " " & wDesc) as string
+                    if combined contains "local network" or ¬
+                       combined contains "Local Network" or ¬
+                       combined contains "hosted-compute" or ¬
+                       combined contains "control \"Google Chrome\"" or ¬
+                       combined contains "find devices" or ¬
+                       combined contains "incoming network" or ¬
+                       combined contains "would like to find" then
                       try
-                        set wTitle to (title of win) as string
+                        click button "Allow" of win
+                        set dismissed to "allowed_in_" & pName
                       end try
-                      try
-                        set wDesc to (description of win) as string
-                      end try
-                      set combined to (wTitle & " " & wDesc) as string
-                      if combined contains "local network" or ¬
-                         combined contains "Local Network" or ¬
-                         combined contains "hosted-compute" or ¬
-                         combined contains "control" or ¬
-                         combined contains "find devices" or ¬
-                         combined contains "incoming network" or ¬
-                         combined contains "would like to find" then
-                        try
-                          if exists button "Allow" of win then
-                            click button "Allow" of win
-                            set dismissed to "allowed_in_" & pName
-                          end if
-                        end try
-                      end if
-                    end repeat
-                  end if
-                end if
-              end try
+                    end if
+                  end repeat
+                end try
+              end if
             end repeat
             return dismissed
           end tell
@@ -857,74 +867,78 @@ jobs:
               result = run_as(r'''
           tell application "System Events"
             set popupClicked to ""
-            repeat with proc in (every process)
-              try
-                if exists (window 1 of proc) then
-                  set pName to name of proc as string
-                  if pName is not "Google Chrome" then
-                    repeat with win in (every window of proc)
-                      set winTitle to ""
-                      set winDesc to ""
+            
+            try
+              tell process "CoreServicesUIAgent"
+                repeat with win in (every window)
+                  try
+                    if exists button "Allow" of win then
+                      click button "Allow" of win
+                      set popupClicked to "allowed_in_CoreServicesUIAgent"
+                    end if
+                  end try
+                end repeat
+              end tell
+            end try
+
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName is not "Google Chrome" then
+                try
+                  repeat with win in (every window of proc)
+                    set winTitle to ""
+                    set winDesc to ""
+                    try
+                      set winTitle to (title of win) as string
+                    end try
+                    try
+                      set winDesc to (description of win) as string
+                    end try
+                    set combinedText to (winTitle & " " & winDesc) as string
+                    if pName contains "getscreen" or pName contains "Getscreen" then
                       try
-                        set winTitle to (title of win) as string
+                        if exists button "Allow" of win then
+                          click button "Allow" of win
+                          set popupClicked to "getscreen_allowed"
+                        end if
                       end try
+                    end if
+                    if combinedText contains "local network" or ¬
+                       combinedText contains "Local Network" or ¬
+                       combinedText contains "hosted-compute" or ¬
+                       combinedText contains "control \"Google Chrome\"" or ¬
+                       combinedText contains "find devices" or ¬
+                       combinedText contains "incoming network" or ¬
+                       combinedText contains "Incoming Network" then
                       try
-                        set winDesc to (description of win) as string
+                        click button "Allow" of win
+                        set popupClicked to "local_network_allowed_in_" & pName
                       end try
-                      set combinedText to (winTitle & " " & winDesc) as string
-                      
-                      if pName contains "getscreen" or pName contains "Getscreen" then
-                        try
-                          if exists button "Allow" of win then
-                            click button "Allow" of win
-                            set popupClicked to "getscreen_allowed"
+                    end if
+                    if combinedText contains "screen and audio" or ¬
+                       combinedText contains "bypass the system" or ¬
+                       combinedText contains "window picker" or ¬
+                       combinedText contains "Getscreen.me" then
+                      try
+                        click button "Allow" of win
+                        set popupClicked to "getscreen_screen_allowed"
+                      end try
+                    end if
+                    if combinedText does not contain "Accessibility" and ¬
+                       combinedText does not contain "accessibility" then
+                      try
+                        if (exists button "Allow" of win) and ¬
+                           (exists button "Don't Allow" of win) then
+                          click button "Allow" of win
+                          if popupClicked is "" then
+                            set popupClicked to "generic_allowed_in_" & pName
                           end if
-                        end try
-                      end if
-
-                      if combinedText contains "local network" or ¬
-                         combinedText contains "Local Network" or ¬
-                         combinedText contains "hosted-compute" or ¬
-                         combinedText contains "control" or ¬
-                         combinedText contains "find devices" or ¬
-                         combinedText contains "incoming network" or ¬
-                         combinedText contains "Incoming Network" then
-                        try
-                          if exists button "Allow" of win then
-                            click button "Allow" of win
-                            set popupClicked to "local_network_allowed_in_" & pName
-                          end if
-                        end try
-                      end if
-
-                      if combinedText contains "screen and audio" or ¬
-                         combinedText contains "bypass the system" or ¬
-                         combinedText contains "window picker" or ¬
-                         combinedText contains "Getscreen.me" then
-                        try
-                          if exists button "Allow" of win then
-                            click button "Allow" of win
-                            set popupClicked to "getscreen_screen_allowed"
-                          end if
-                        end try
-                      end if
-
-                      if combinedText does not contain "Accessibility" and ¬
-                         combinedText does not contain "accessibility" then
-                        try
-                          if (exists button "Allow" of win) and ¬
-                             (exists button "Don't Allow" of win) then
-                            click button "Allow" of win
-                            if popupClicked is "" then
-                              set popupClicked to "generic_allowed_in_" & pName
-                            end if
-                          end if
-                        end try
-                      end if
-                    end repeat
-                  end if
-                end if
-              end try
+                        end if
+                      end try
+                    end if
+                  end repeat
+                end try
+              end if
             end repeat
             return popupClicked
           end tell
@@ -934,6 +948,9 @@ jobs:
                   return True
               return False
 
+          # ------------------------------------------------------------
+          #  Scans ALL processes for the proxy auth dialog
+          # ------------------------------------------------------------
           def get_proxy_dialog_info():
               result = run_as(r'''
           tell application "System Events"
@@ -1002,6 +1019,9 @@ jobs:
                   log(f"[DialogInfo] Parse error: {e}, raw={result[:120]}")
                   return None
 
+          # ------------------------------------------------------------
+          #  fill_proxy_auth with keyboard fallback
+          # ------------------------------------------------------------
           def fill_proxy_auth(user, pwd):
               global PROXY_RETRY_INTERVAL
               info = get_proxy_dialog_info()
@@ -1096,6 +1116,9 @@ jobs:
               time.sleep(0.5)
               return result if result else "submitted"
 
+          # ------------------------------------------------------------
+          #  DOWNLOAD BUTTON CLICK – 3 Tab + Enter
+          # ------------------------------------------------------------
           def click_dl_button(sw_type):
               log("[DLButton] Activating Chrome and giving page time to settle...")
               run_as('tell application "Google Chrome" to activate', silent=True)
@@ -1148,40 +1171,38 @@ jobs:
               log(f"[{app_name}] Searching for Accept/Install button...")
               script = f'''
           tell application "System Events"
-            repeat with proc in (every process)
-              try
-                if exists (window 1 of proc) then
-                  set pName to name of proc as string
-                  if pName contains "{app_name}" or pName contains "Opera" then
-                    repeat with win in (every window of proc)
-                      try
-                        if exists button "Accept and Install" of win then
-                          click button "Accept and Install" of win
-                          return "clicked_accept_and_install"
-                        end if
-                      end try
-                      try
-                        if exists button "Accept & Install" of win then
-                          click button "Accept & Install" of win
-                          return "clicked_accept_and_install"
-                        end if
-                      end try
-                      try
-                        if exists button "Accept" of win then
-                          click button "Accept" of win
-                          return "clicked_accept"
-                        end if
-                      end try
-                      try
-                        if exists button "Install" of win then
-                          click button "Install" of win
-                          return "clicked_install"
-                        end if
-                      end try
-                    end repeat
-                  end if
-                end if
-              end try
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName contains "{app_name}" or pName contains "Opera" then
+                try
+                  repeat with win in (every window of proc)
+                    try
+                      if exists button "Accept and Install" of win then
+                        click button "Accept and Install" of win
+                        return "clicked_accept_and_install"
+                      end if
+                    end try
+                    try
+                      if exists button "Accept & Install" of win then
+                        click button "Accept & Install" of win
+                        return "clicked_accept_and_install"
+                      end if
+                    end try
+                    try
+                      if exists button "Accept" of win then
+                        click button "Accept" of win
+                        return "clicked_accept"
+                      end if
+                    end try
+                    try
+                      if exists button "Install" of win then
+                        click button "Install" of win
+                        return "clicked_install"
+                      end if
+                    end try
+                  end repeat
+                end try
+              end if
             end repeat
             return "not_found"
           end tell'''
@@ -1191,12 +1212,11 @@ jobs:
 
           def screen_center():
               try:
-                  r = subprocess.run(
-                      ["osascript", "-e",
+                  r = subprocess.run(["osascript", "-e",
                        'tell application "Finder" to get bounds of window of desktop'],
                       capture_output=True, text=True, timeout=5
                   )
-                  bounds =[int(x.strip()) for x in r.stdout.strip().split(",")]
+                  bounds = [int(x.strip()) for x in r.stdout.strip().split(",")]
                   center_x = (bounds[0] + bounds[2]) // 2
                   center_y = (bounds[1] + bounds[3]) // 2
                   return center_x, center_y
@@ -1210,7 +1230,9 @@ jobs:
               t0 = time.time()
               while time.time() - t0 < 10:
                   dismiss_system_popups()
+                  dismiss_compute_host_popup()
                   time.sleep(0.5)
+                  
               log("[Opera GX] Attempting 'Accept and Install' button click...")
               result = click_accept_and_install("Opera GX")
               if result == "not_found":
@@ -1218,8 +1240,13 @@ jobs:
                   for _ in range(3):
                       press("tab"); time.sleep(0.5)
                   press("return")
-              log("[Opera GX] Waiting 30s for next screen...")
-              time.sleep(30)
+                  
+              log("[Opera GX] Waiting 30s for next screen and dismissing popups...")
+              for _ in range(30):
+                  dismiss_compute_host_popup()
+                  dismiss_system_popups()
+                  time.sleep(1)
+                  
               log("[Opera GX] Pressing Tab x4 then Enter x8...")
               for _ in range(4):
                   press("tab"); time.sleep(0.5)
@@ -1237,7 +1264,9 @@ jobs:
               log("[Opera GX] Setup complete.")
 
           def opera_one_flow():
+              # Wait specifically for Opera Installer
               if not wait_for_app_launch("Opera Installer", timeout=120):
+                  # Fallback: try to open the known path directly
                   log("[Opera One] Installer not seen, attempting manual launch of /Applications/Opera Installer.app")
                   if os.path.exists("/Applications/Opera Installer.app"):
                       subprocess.run(["open", "/Applications/Opera Installer.app"])
@@ -1246,6 +1275,7 @@ jobs:
                           log("[Opera One] Still not found, aborting setup.")
                           return
                   else:
+                      # Last resort: look for any Opera installer in Applications
                       found = subprocess.run(
                           "find /Applications -maxdepth 2 -name 'Opera*.app' 2>/dev/null | head -1",
                           shell=True, capture_output=True, text=True).stdout.strip()
@@ -1271,49 +1301,62 @@ jobs:
                       press("tab"); time.sleep(0.5)
                   press("return")
 
-              log("[Opera One] Waiting 30s for next screen...")
-              time.sleep(30)
+              log("[Opera One] Waiting 30s for next screen and dismissing popups...")
+              for _ in range(30):
+                  dismiss_compute_host_popup()
+                  dismiss_system_popups()
+                  time.sleep(1)
 
+              # Click centre of screen
               cx, cy = screen_center()
               log(f"[Opera One] Clicking centre of screen at ({cx},{cy})")
               cliclick(f"c:{cx},{cy}")
-              time.sleep(1)
+              time.sleep(random.uniform(1, 2))
 
+              # Press Enter
               log("[Opera One] Pressing Enter...")
               press("return")
               time.sleep(random.uniform(1, 2))
 
-              log("[Opera One] Pressing Tab 2 times...")
+              # Press Tab 2 times
+              log("[Opera One] Pressing Tab x2...")
               for _ in range(2):
                   press("tab")
                   time.sleep(random.uniform(1, 2))
 
-              log("[Opera One] Pressing Enter 2 times...")
+              # Press Enter 2 times
+              log("[Opera One] Pressing Enter x2...")
               for _ in range(2):
                   press("return")
                   time.sleep(random.uniform(1, 2))
 
-              log("[Opera One] Pressing Left Arrow 10 times with 1-2s delays...")
+              # Press Left Arrow 10 times
+              log("[Opera One] Pressing Left Arrow x10...")
               for i in range(10):
                   press("left")
                   d = random.uniform(1, 2)
                   log(f"[Opera One] Left Arrow {i+1}/10 ({d:.2f}s delay)")
                   time.sleep(d)
 
+              # Press Enter
               log("[Opera One] Pressing Enter...")
               press("return")
               time.sleep(random.uniform(1, 2))
 
-              log("[Opera One] Pressing Command + N (New Tab)...")
+              # Cmd + N (New Tab)
+              log("[Opera One] Opening New Tab (Cmd + N)...")
               run_as('tell application "System Events" to keystroke "n" using command down', silent=True)
               time.sleep(random.uniform(1, 2))
 
+              # Tab random 6–12 times
               tab_count = random.randint(6, 12)
-              log(f"[Opera One] Pressing Tab {tab_count} times randomly then Enter...")
+              log(f"[Opera One] Pressing Tab x{tab_count}...")
               for _ in range(tab_count):
                   press("tab")
-                  d = random.uniform(1, 2)
-                  time.sleep(d)
+                  time.sleep(random.uniform(1, 2))
+                  
+              # Final Enter
+              log("[Opera One] Pressing Enter (final)...")
               press("return")
 
               log("[Opera One] Setup complete.")
@@ -1445,7 +1488,7 @@ jobs:
                           time.sleep(2)
                           chrome_closed = True
 
-                      if (sw_type in["opera_gx", "dynamic_opera", "ad_mvn", "manual_url"]) and op_gx and not setup_done:
+                      if sw_type in ["opera_gx", "dynamic_opera", "ad_mvn"] and op_gx and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
                               log("[Handler] *** Opera GX detected — starting installer sequence in 5s ***")
@@ -1455,10 +1498,10 @@ jobs:
                               setup_done = True
                               break
 
-                      if (sw_type in["opera_one", "dynamic_opera", "ad_mvn", "manual_url"]) and op_one and not setup_done:
+                      if sw_type in ["opera_one", "dynamic_opera"] and op_one and not op_gx and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
-                              log("[Handler] *** Opera One / Installer detected — starting sequence in 5s ***")
+                              log("[Handler] *** Opera One detected — starting installer sequence in 5s ***")
                               run_as('tell application "Opera Installer" to activate', silent=True)
                               time.sleep(1)
                           if time.time() - op_launch_t > 5:
@@ -1488,6 +1531,9 @@ jobs:
               handle(u, p, sw, px)
           PYEOF
 
+          # ------------------------------------------------------------
+          #  Shell helper functions & watcher
+          # ------------------------------------------------------------
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           grant_tcc() {
             sudo sqlite3 "$TCC_DB" \
@@ -1511,62 +1557,67 @@ jobs:
             COUNT=$((COUNT+1))
             osascript << 'ASEOF' 2>/dev/null || true
           tell application "System Events"
-            repeat with proc in (every process)
-              try
-                if exists (window 1 of proc) then
-                  set pName to name of proc as string
-                  if pName is not "Google Chrome" then
-                    repeat with win in (every window of proc)
-                      set wT to ""
-                      set wD to ""
+            try
+              tell process "CoreServicesUIAgent"
+                repeat with win in (every window)
+                  try
+                    if exists button "Allow" of win then
+                      click button "Allow" of win
+                    end if
+                  end try
+                end repeat
+              end tell
+            end try
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName is not "Google Chrome" then
+                try
+                  repeat with win in (every window of proc)
+                    set wT to ""
+                    set wD to ""
+                    try
+                      set wT to (title of win) as string
+                    end try
+                    try
+                      set wD to (description of win) as string
+                    end try
+                    set combined to (wT & " " & wD) as string
+                    if pName contains "etscreen" then
                       try
-                        set wT to (title of win) as string
+                        if exists button "Allow" of win then
+                          click button "Allow" of win
+                        end if
                       end try
+                    end if
+                    if combined contains "local network" or ¬
+                       combined contains "Local Network" or ¬
+                       combined contains "hosted-compute" or ¬
+                       combined contains "control \"Google Chrome\"" or ¬
+                       combined contains "find devices" or ¬
+                       combined contains "incoming network" or ¬
+                       combined contains "would like to find" then
                       try
-                        set wD to (description of win) as string
+                        click button "Allow" of win
                       end try
-                      set combined to (wT & " " & wD) as string
-                      if pName contains "etscreen" then
-                        try
-                          if exists button "Allow" of win then
-                            click button "Allow" of win
-                          end if
-                        end try
-                      end if
-                      if combined contains "local network" or ¬
-                         combined contains "Local Network" or ¬
-                         combined contains "hosted-compute" or ¬
-                         combined contains "find devices" or ¬
-                         combined contains "incoming network" or ¬
-                         combined contains "control" or ¬
-                         combined contains "would like to find" then
-                        try
-                          if exists button "Allow" of win then
-                            click button "Allow" of win
-                          end if
-                        end try
-                      end if
-                      if combined contains "screen and audio" or ¬
-                         combined contains "bypass the system" or ¬
-                         combined contains "window picker" then
-                        try
-                          if exists button "Allow" of win then
-                            click button "Allow" of win
-                          end if
-                        end try
-                      end if
-                      if combined does not contain "Accessibility" and ¬
-                         combined does not contain "accessibility" then
-                        try
-                          if (exists button "Allow" of win) and (exists button "Don't Allow" of win) then
-                            click button "Allow" of win
-                          end if
-                        end try
-                      end if
-                    end repeat
-                  end if
-                end if
-              end try
+                    end if
+                    if combined contains "screen and audio" or ¬
+                       combined contains "bypass the system" or ¬
+                       combined contains "window picker" then
+                      try
+                        click button "Allow" of win
+                      end try
+                    end if
+                    if combined does not contain "Accessibility" and ¬
+                       combined does not contain "accessibility" then
+                      try
+                        if (exists button "Allow" of win) and (exists button "Don't Allow" of win) then
+                          click button "Allow" of win
+                        end if
+                      end try
+                    end if
+                  end repeat
+                end try
+              end if
             end repeat
           end tell
           ASEOF
@@ -1595,7 +1646,7 @@ jobs:
             INSTALLED=false
             echo "[$(date '+%H:%M:%S')] [Watcher] Started. Monitoring $DL_FOLDER for downloads..."
             LAST_STATUS=$(($(date +%s)))
-            while[ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
               NOW=$(date +%s)
               if [ $((NOW - LAST_STATUS)) -ge 20 ]; then
                 echo "[$(date '+%H:%M:%S')] [Watcher] Still monitoring... ($(( DEADLINE - NOW ))s remaining)"
@@ -1614,13 +1665,13 @@ jobs:
                 touch "$SENTINEL_PATH"
                 BASENAME=$(basename "$FILE")
                 EXT="${BASENAME##*.}"
-                if[ "$EXT" != "app" ]; then
+                if [ "$EXT" != "app" ]; then
                   echo "[$(date '+%H:%M:%S')] [Watcher] Waiting for download to complete..."
                   PREV=0
                   for i in $(seq 1 30); do
                     SZ=$(stat -f%z "$FILE" 2>/dev/null || \
                          stat -c%s "$FILE" 2>/dev/null || echo 0)
-                    if[ "$SZ" = "$PREV" ] && [ "$SZ" -gt 500000 ]; then
+                    if [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 500000 ]; then
                       echo "[$(date '+%H:%M:%S')] [Watcher] File stable at ${SZ}B"
                       break
                     fi
@@ -1631,7 +1682,7 @@ jobs:
                   sleep 5
                 fi
                 xattr -dr com.apple.quarantine "$FILE" 2>/dev/null || true
-                echo "[$(date '+%H:%M:%S')][Watcher] 4s cleanup delay..."
+                echo "[$(date '+%H:%M:%S')] [Watcher] 4s cleanup delay..."
                 sleep 4
                 INSTALLED_APP_NAME=""
                 if [ "$EXT" = "dmg" ]; then
@@ -1651,7 +1702,7 @@ jobs:
                     fi
                     hdiutil detach "$MNT" -quiet || true
                   else
-                    echo "[$(date '+%H:%M:%S')][Installer] ERROR: DMG mount failed."
+                    echo "[$(date '+%H:%M:%S')] [Installer] ERROR: DMG mount failed."
                   fi
                 elif [ "$EXT" = "zip" ]; then
                   echo "[$(date '+%H:%M:%S')] [Installer] Extracting ZIP: $FILE"
@@ -1663,7 +1714,7 @@ jobs:
                   fi
                   find "$EXTRACT_DIR" -name "__MACOSX" -exec rm -rf {} + 2>/dev/null || true
                   APP_IN_ZIP=$(find "$EXTRACT_DIR" -maxdepth 4 -name "*.app" ! -path "*/__MACOSX/*" | head -n 1 || true)
-                  if[ -n "$APP_IN_ZIP" ]; then
+                  if [ -n "$APP_IN_ZIP" ]; then
                     AN=$(basename "$APP_IN_ZIP")
                     sudo cp -R "$APP_IN_ZIP" /Applications/ || true
                     sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
@@ -1676,7 +1727,7 @@ jobs:
                     ls -laR "$EXTRACT_DIR" || true
                   fi
                 elif [ "$EXT" = "pkg" ]; then
-                  echo "[$(date '+%H:%M:%S')][Installer] Installing PKG: $FILE"
+                  echo "[$(date '+%H:%M:%S')] [Installer] Installing PKG: $FILE"
                   sudo installer -pkg "$FILE" -target / -verboseR || true
                 elif [ "$EXT" = "app" ]; then
                   echo "[$(date '+%H:%M:%S')] [Installer] Direct .app: $BASENAME"
@@ -1686,7 +1737,7 @@ jobs:
                   INSTALLED_APP_NAME="$BASENAME"
                 fi
                 ACTUAL="$SOFTWARE_TYPE"
-                if[ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
+                if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
                   if echo "$INSTALLED_APP_NAME$BASENAME" | grep -qi "gx"; then
                     ACTUAL="opera_gx"
                   else
@@ -1716,7 +1767,7 @@ jobs:
                 LAUNCHED=false
                 for i in $(seq 1 60); do
                   for P in "${SEARCH_PATHS[@]}"; do
-                    if[ -d "$P" ]; then
+                    if [ -d "$P" ]; then
                       sleep 3
                       echo "[$(date '+%H:%M:%S')] [Watcher] Launching: $P"
                       open "$P" || true
@@ -1767,7 +1818,7 @@ jobs:
             PROXY_SRV="residential-proxy.scrapeops.io:8181"
             echo "[$(date '+%H:%M:%S')] Launching Chrome WITH proxy → $TARGET_URL"
             echo "[$(date '+%H:%M:%S')] Proxy server: $PROXY_SRV"
-            if[ -f "$CHROME_BIN" ]; then
+            if [ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
                 "${CHROME_FLAGS[@]}" \
                 --proxy-server="http://$PROXY_SRV" \
@@ -1800,7 +1851,7 @@ jobs:
           POLL_START=$(date +%s)
           while kill -0 $HANDLER_PID 2>/dev/null; do
             ELAPSED=$(($(date +%s) - POLL_START))
-            if[ $ELAPSED -gt $HANDLER_TIMEOUT ]; then
+            if [ $ELAPSED -gt $HANDLER_TIMEOUT ]; then
               echo "[$(date '+%H:%M:%S')] Handler timeout (${ELAPSED}s) — killing."
               kill $HANDLER_PID 2>/dev/null || true
               break
