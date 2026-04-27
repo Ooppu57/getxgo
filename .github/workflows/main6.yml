@@ -14,7 +14,7 @@ on:
           - 'macos-15-xlarge'
           - 'macos-26'
           - 'macos-26-intel'
-        default: 'macos-26'
+        default: 'macos-15'
       getscreen_email:
         description: 'Getscreen.me Account Email'
         required: true
@@ -51,7 +51,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Chloe'
+        default: 'Ad-MVN - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
