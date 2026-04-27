@@ -56,7 +56,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '9215b08e-0b9d-4c13-a6d5-5d587e6a885b'
+        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
@@ -1038,85 +1038,21 @@ jobs:
               return result if result else "submitted"
 
           # ------------------------------------------------------------
-          #  DOWNLOAD BUTTON CLICK – Fixed tab sequence for Opera GX
+          #  DOWNLOAD BUTTON CLICK – uniform 3 Tab + Enter for all types
           # ------------------------------------------------------------
           def click_dl_button(sw_type):
               log("[DLButton] Activating Chrome and giving page time to settle...")
               run_as('tell application "Google Chrome" to activate', silent=True)
               time.sleep(5)
-
-              if sw_type in ("opera_gx", "dynamic_opera", "ad_mvn"):
-                  # Opera GX – exactly 3 tabs with 5s delay, then Enter
-                  for i in range(3):
-                      press("tab")
-                      time.sleep(5)
-                  press("return")
-                  time.sleep(1)
-                  # Also try JS click as backup
-                  run_as('tell application "Google Chrome" to execute active tab of front window javascript "if(document.activeElement) document.activeElement.click()"', silent=True)
-                  return "tab3_enter_opera_gx"
-
-              elif sw_type == "opera_one":
-                  # Opera One – robust scanning (check "Download Opera")
-                  js_code = """
-                  (function() {
-                    var all = document.querySelectorAll('a, button, [role=button]');
-                    for (var i = 0; i < all.length; i++) {
-                      var txt = (all[i].textContent || '').trim();
-                      if (txt === 'Download Opera') {
-                        all[i].focus();
-                        all[i].click();
-                        return 'clicked:' + txt;
-                      }
-                    }
-                    return 'not_found';
-                  })();
-                  """
-                  js_result = run_as(f'tell application "Google Chrome" to execute active tab of front window javascript "{js_code}"', silent=True)
-                  log(f"[DLButton] JS direct result: {js_result}")
-                  if js_result and "clicked" in js_result:
-                      time.sleep(2)
-                      if os.path.exists("/tmp/download_done.flag"):
-                          return "js_direct_opera_one"
-
-                  max_tabs = 10
-                  for i in range(max_tabs):
-                      press("tab")
-                      time.sleep(5)
-                      check_js = (
-                          'tell application "Google Chrome" to execute active tab of front window javascript '
-                          '"if(document.activeElement){ document.activeElement.textContent || document.activeElement.outerHTML || \'\' } else { \'\' }"'
-                      )
-                      active_text = run_as(check_js, silent=True)
-                      if active_text and "download opera" in active_text.lower():
-                          log(f"[DLButton] Found button after Tab {i+1}: {active_text[:100]}")
-                          press("return")
-                          time.sleep(0.5)
-                          run_as('tell application "Google Chrome" to execute active tab of front window javascript "if(document.activeElement) document.activeElement.click()"', silent=True)
-                          time.sleep(2)
-                          if os.path.exists("/tmp/download_done.flag"):
-                              return f"tab_enter_opera_one_{i+1}"
-                          press("return")
-                          time.sleep(1)
-                          return f"tab_enter_opera_one_{i+1}"
-
-                      press("return")
-                      time.sleep(1)
-                      if os.path.exists("/tmp/download_done.flag"):
-                          return f"tab_enter_blind_opera_one_{i+1}"
-
-                  # final fallback
-                  for _ in range(8):
-                      press("tab"); time.sleep(0.3)
-                      press("return"); time.sleep(0.5)
-                  log("[DLButton] Opera One – all methods exhausted.")
-                  return "not_found"
-
-              else:
-                  # fallback for any unknown type
-                  press("tab"); time.sleep(0.5)
-                  press("return")
-                  return "fallback"
+              for i in range(3):
+                  press("tab")
+                  log(f"[DLButton] Tab {i+1}/3 - waiting 5s...")
+                  time.sleep(5)
+              press("return")
+              log("[DLButton] Pressed Enter after 3 Tabs")
+              time.sleep(1)
+              run_as('tell application "Google Chrome" to execute active tab of front window javascript "if(document.activeElement) document.activeElement.click()"', silent=True)
+              return "tab3_enter"
 
           def accept_cookie():
               for b in["Accept all", "Accept All", "Accept Cookies",
@@ -1210,8 +1146,8 @@ jobs:
                   for _ in range(3):
                       press("tab"); time.sleep(0.5)
                   press("return")
-              log("[Opera GX] Waiting 20s for next screen...")
-              time.sleep(20)
+              log("[Opera GX] Waiting 30s for next screen...")
+              time.sleep(30)
               log("[Opera GX] Pressing Tab x4 then Enter x8...")
               for _ in range(4):
                   press("tab"); time.sleep(0.5)
@@ -1243,21 +1179,35 @@ jobs:
                   for _ in range(3):
                       press("tab"); time.sleep(0.5)
                   press("return")
-              log("[Opera One] Waiting 20s for next screen...")
-              time.sleep(20)
-              log("[Opera One] Pressing Tab x4 then Enter x8...")
-              for _ in range(4):
-                  press("tab"); time.sleep(0.5)
-              for i in range(8):
-                  press("return")
-                  d = random.uniform(1.0, 2.0)
-                  log(f"[Opera One] ENTER {i+1}/8 ({d:.2f}s delay)")
+              log("[Opera One] Waiting 30s for next screen...")
+              time.sleep(30)
+
+              # New Opera One post-install sequence as requested
+              log("[Opera One] Pressing Enter...")
+              press("return")
+              time.sleep(random.uniform(1, 2))
+              log("[Opera One] Pressing Left Arrow 10 times with 1-2s delays")
+              for i in range(10):
+                  press("left")
+                  d = random.uniform(1, 2)
+                  log(f"[Opera One] Left Arrow {i+1}/10 ({d:.2f}s delay)")
                   time.sleep(d)
+              log("[Opera One] Pressing Enter...")
+              press("return")
+              time.sleep(random.uniform(1, 2))
+              log("[Opera One] Waiting 5s...")
               time.sleep(5)
-              tab_count = random.randint(6, 14)
-              log(f"[Opera One] Tab x{tab_count} then final Enter...")
+              log("[Opera One] Pressing Tab then Enter...")
+              press("tab")
+              time.sleep(random.uniform(0.5, 1))
+              press("return")
+              time.sleep(random.uniform(1, 2))
+              tab_count = random.randint(4, 10)
+              log(f"[Opera One] Pressing Tab {tab_count} times randomly then Enter...")
               for _ in range(tab_count):
-                  press("tab"); time.sleep(0.5)
+                  press("tab")
+                  d = random.uniform(1, 2)
+                  time.sleep(d)
               press("return")
               log("[Opera One] Setup complete.")
 
