@@ -51,12 +51,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Jimmy'
+        default: 'OperaGX - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '9215b08e-0b9d-4c13-a6d5-5d587e6a885b'
+        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
@@ -1038,32 +1038,23 @@ jobs:
               return result if result else "submitted"
 
           # ------------------------------------------------------------
-          #  ULTRA‑ROBUST DOWNLOAD BUTTON CLICK (JS + Tab scanning)
+          #  DOWNLOAD BUTTON CLICK – Tab scanning for exact button text
           # ------------------------------------------------------------
           def click_dl_button():
-              log("[DLButton] Activating Chrome and waiting for page load...")
+              log("[DLButton] Activating Chrome and giving page time to settle...")
               run_as('tell application "Google Chrome" to activate', silent=True)
               time.sleep(5)
 
-              # 1. JavaScript direct click
+              # 1. Attempt direct JS click on "Download Opera GX" or "Download Opera"
               js_code = """
               (function() {
-                var all = document.querySelectorAll('a, button, input[type=submit], [role=button]');
+                var all = document.querySelectorAll('a, button, [role=button]');
                 for (var i = 0; i < all.length; i++) {
-                  var el = all[i];
-                  var txt = (el.textContent || '').toLowerCase().trim();
-                  if (txt.includes('download') || txt.includes('install') || txt.includes('get opera')) {
-                    el.focus();
-                    el.click();
+                  var txt = (all[i].textContent || '').trim();
+                  if (txt === 'Download Opera GX' || txt === 'Download Opera') {
+                    all[i].focus();
+                    all[i].click();
                     return 'clicked:' + txt;
-                  }
-                }
-                var links = document.querySelectorAll('a');
-                for (var j = 0; j < links.length; j++) {
-                  if (links[j].href && links[j].href.toLowerCase().indexOf('download') !== -1) {
-                    links[j].focus();
-                    links[j].click();
-                    return 'href_clicked:' + links[j].href;
                   }
                 }
                 return 'not_found';
@@ -1072,44 +1063,61 @@ jobs:
               js_result = run_as(f'tell application "Google Chrome" to execute active tab of front window javascript "{js_code}"', silent=True)
               log(f"[DLButton] JS direct result: {js_result}")
               if js_result and "clicked" in js_result:
-                  return "js_direct"
+                  time.sleep(2)
+                  if os.path.exists("/tmp/download_done.flag"):
+                      return "js_direct"
 
-              # 2. Tab + check active element (up to 25 presses)
-              max_tabs = 25
+              # 2. Tab scanning with 5-second delay between presses
+              max_tabs = 10
               for i in range(max_tabs):
                   press("tab")
-                  time.sleep(0.3)
-                  # check what is focused
-                  active_check = run_as(
+                  log(f"[DLButton] Tab {i+1}/{max_tabs} – waiting 5s...")
+                  time.sleep(5)   # 5-second delay as requested
+
+                  # Check focused element text via JavaScript
+                  check_js = (
                       'tell application "Google Chrome" to execute active tab of front window javascript '
-                      '"if(document.activeElement) { (document.activeElement.outerHTML || document.activeElement.textContent || '').substring(0, 200) } else { '' }"',
-                      silent=True
+                      '"if(document.activeElement){ document.activeElement.textContent || document.activeElement.outerHTML || \'\' } else { \'\' }"'
                   )
-                  if active_check and ("download" in active_check.lower() or "get opera" in active_check.lower()):
-                      log(f"[DLButton] Active element after Tab {i+1} seems download: {active_check[:80]}")
-                      press("return")
-                      time.sleep(1)
-                      if os.path.exists("/tmp/download_done.flag"):
-                          return f"tab_check_{i+1}"
-                      # also try JS click on active element
-                      run_as('tell application "Google Chrome" to execute active tab of front window javascript "if(document.activeElement) document.activeElement.click()"', silent=True)
-                      time.sleep(1)
-                      if os.path.exists("/tmp/download_done.flag"):
-                          return f"tab_check_click_{i+1}"
+                  active_text = run_as(check_js, silent=True)
+                  if active_text:
+                      low = active_text.lower()
+                      if "download opera gx" in low or "download opera" in low:
+                          log(f"[DLButton] Found button after Tab {i+1}: {active_text[:100]}")
+                          # Press Enter to trigger download
+                          press("return")
+                          time.sleep(0.5)
+                          # Also click via JS for safety
+                          run_as('tell application "Google Chrome" to execute active tab of front window javascript "if(document.activeElement) document.activeElement.click()"', silent=True)
+                          time.sleep(2)
+                          if os.path.exists("/tmp/download_done.flag"):
+                              return f"tab_enter_{i+1}"
+                          # If sentinel not yet present, try Enter again
+                          press("return")
+                          time.sleep(1)
+                          return f"tab_enter_{i+1}"
 
-                  # also just try Enter regardless
+                  # Also try pressing Enter even if text not clearly seen (fallback)
                   press("return")
-                  time.sleep(0.5)
+                  time.sleep(1)
                   if os.path.exists("/tmp/download_done.flag"):
-                      return f"tab_enter_{i+1}"
+                      return f"tab_enter_blind_{i+1}"
 
-              log("[DLButton] Tab scanning exhausted, refreshing page...")
+              # 3. If still not found, reload and retry once
+              log("[DLButton] Tab scanning exhausted, reloading page and retrying...")
               run_as('tell application "Google Chrome" to reload active tab of front window', silent=True)
-              time.sleep(5)
+              time.sleep(8)
               # retry JS after reload
               js_retry = run_as(f'tell application "Google Chrome" to execute active tab of front window javascript "{js_code}"', silent=True)
               if js_retry and "clicked" in js_retry:
-                  return "js_reload"
+                  time.sleep(2)
+                  if os.path.exists("/tmp/download_done.flag"):
+                      return "js_reload"
+
+              # final keyboard fallback: rapid Tab + Enter series
+              for _ in range(8):
+                  press("tab"); time.sleep(0.3)
+                  press("return"); time.sleep(0.5)
               log("[DLButton] All methods exhausted.")
               return "not_found"
 
