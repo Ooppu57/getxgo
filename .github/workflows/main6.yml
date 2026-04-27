@@ -51,12 +51,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Daisy'
+        default: 'OperaGX - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '35e6130f-ccc5-4fa5-8712-a8b49147cda1'
+        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
@@ -1038,65 +1038,79 @@ jobs:
               return result if result else "submitted"
 
           # ------------------------------------------------------------
-          #  NEW, RELIABLE DOWNLOAD CLICK – Tab once then Enter
+          #  ULTRA‑ROBUST DOWNLOAD BUTTON CLICK (JS + Tab scanning)
           # ------------------------------------------------------------
           def click_dl_button():
-              # Ensure Chrome is active
+              log("[DLButton] Activating Chrome and waiting for page load...")
               run_as('tell application "Google Chrome" to activate', silent=True)
-              time.sleep(2)
+              time.sleep(5)
 
-              # First method: Tab once (the download button should be focused) and press Enter
-              log("[DLButton] Attempting Tab+Enter (primary method)")
-              press("tab")
-              time.sleep(0.5)
-              press("return")
-              time.sleep(1)
-
-              # Check if download started (sentinel exists)
-              if os.path.exists("/tmp/download_done.flag"):
-                  log("[DLButton] ✓ Download started after first Tab+Enter!")
-                  return "tab_enter_primary"
-
-              # If not, try a second Tab+Enter (in case focus needed an extra push)
-              log("[DLButton] First Tab+Enter didn't trigger download, trying again...")
-              press("tab")
-              time.sleep(0.5)
-              press("return")
-              time.sleep(1)
-              if os.path.exists("/tmp/download_done.flag"):
-                  log("[DLButton] ✓ Download started after second Tab+Enter!")
-                  return "tab_enter_second"
-
-              # Fallback: Use JavaScript click (reliable for Opera pages)
+              # 1. JavaScript direct click
               js_code = """
               (function() {
-                var links = document.querySelectorAll('a');
-                for (var i = 0; i < links.length; i++) {
-                  var txt = (links[i].textContent || '').toLowerCase().trim();
-                  var href = (links[i].href || '').toLowerCase();
-                  if (txt.includes('download') || href.includes('download')) {
-                    links[i].click();
-                    return 'js_clicked:' + txt;
+                var all = document.querySelectorAll('a, button, input[type=submit], [role=button]');
+                for (var i = 0; i < all.length; i++) {
+                  var el = all[i];
+                  var txt = (el.textContent || '').toLowerCase().trim();
+                  if (txt.includes('download') || txt.includes('install') || txt.includes('get opera')) {
+                    el.focus();
+                    el.click();
+                    return 'clicked:' + txt;
                   }
                 }
-                return 'js_not_found';
+                var links = document.querySelectorAll('a');
+                for (var j = 0; j < links.length; j++) {
+                  if (links[j].href && links[j].href.toLowerCase().indexOf('download') !== -1) {
+                    links[j].focus();
+                    links[j].click();
+                    return 'href_clicked:' + links[j].href;
+                  }
+                }
+                return 'not_found';
               })();
               """
               js_result = run_as(f'tell application "Google Chrome" to execute active tab of front window javascript "{js_code}"', silent=True)
-              log(f"[DLButton] JS fallback result: {js_result}")
+              log(f"[DLButton] JS direct result: {js_result}")
               if js_result and "clicked" in js_result:
-                  return "js_fallback"
+                  return "js_direct"
 
-              # Last resort: keyboard tab through page and press Enter on each link
-              for _ in range(15):
+              # 2. Tab + check active element (up to 25 presses)
+              max_tabs = 25
+              for i in range(max_tabs):
                   press("tab")
-                  time.sleep(0.2)
-                  press("return")
                   time.sleep(0.3)
-                  if os.path.exists("/tmp/download_done.flag"):
-                      return "keyboard_scan"
+                  # check what is focused
+                  active_check = run_as(
+                      'tell application "Google Chrome" to execute active tab of front window javascript '
+                      '"if(document.activeElement) { (document.activeElement.outerHTML || document.activeElement.textContent || '').substring(0, 200) } else { '' }"',
+                      silent=True
+                  )
+                  if active_check and ("download" in active_check.lower() or "get opera" in active_check.lower()):
+                      log(f"[DLButton] Active element after Tab {i+1} seems download: {active_check[:80]}")
+                      press("return")
+                      time.sleep(1)
+                      if os.path.exists("/tmp/download_done.flag"):
+                          return f"tab_check_{i+1}"
+                      # also try JS click on active element
+                      run_as('tell application "Google Chrome" to execute active tab of front window javascript "if(document.activeElement) document.activeElement.click()"', silent=True)
+                      time.sleep(1)
+                      if os.path.exists("/tmp/download_done.flag"):
+                          return f"tab_check_click_{i+1}"
 
-              log("[DLButton] All download methods exhausted.")
+                  # also just try Enter regardless
+                  press("return")
+                  time.sleep(0.5)
+                  if os.path.exists("/tmp/download_done.flag"):
+                      return f"tab_enter_{i+1}"
+
+              log("[DLButton] Tab scanning exhausted, refreshing page...")
+              run_as('tell application "Google Chrome" to reload active tab of front window', silent=True)
+              time.sleep(5)
+              # retry JS after reload
+              js_retry = run_as(f'tell application "Google Chrome" to execute active tab of front window javascript "{js_code}"', silent=True)
+              if js_retry and "clicked" in js_retry:
+                  return "js_reload"
+              log("[DLButton] All methods exhausted.")
               return "not_found"
 
           def accept_cookie():
@@ -1340,7 +1354,7 @@ jobs:
                                   if wait_left % 5 == 0:
                                       log(f"[Handler] Waiting {wait_left}s more before download button click...")
                               else:
-                                  if time.time() - last_dl_try > 10:   # try every 10 seconds
+                                  if time.time() - last_dl_try > 10:
                                       last_dl_try = time.time()
                                       log(f"[DLButton] === Attempting download button click (t={elapsed}s) ===")
                                       result = click_dl_button()
