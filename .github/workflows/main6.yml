@@ -51,12 +51,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Harrari'
+        default: 'OperaGX - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '9215b08e-0b9d-4c13-a6d5-5d587e6a885b'
+        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
@@ -669,7 +669,7 @@ jobs:
               print(f"[{ts}] {msg}", flush=True)
 
           CHROME_WARMUP_SECS      = 20
-          DL_WAIT_AFTER_PROXY     = 20
+          DL_WAIT_AFTER_PROXY     = 30   # increased to 30 seconds
           PROXY_RETRY_INTERVAL    = 2
           PROXY_MAX_ATTEMPTS      = 40
 
@@ -1165,13 +1165,15 @@ jobs:
               log("[Opera GX] Setup complete.")
 
           def opera_one_flow():
-              # Wait for Opera Installer or Opera app
-              if not wait_for_app_launch("Opera", timeout=120):
-                  return
-              log("[Opera One] App launched. Dismissing popups for 10s...")
+              # Wait specifically for the Opera installer process
+              if not wait_for_app_launch("Opera Installer", timeout=120):
+                  if not wait_for_app_launch("Opera", timeout=120):
+                      return
+              log("[Opera One] App launched. Dismissing popups for 10s (aggressive)...")
               t0 = time.time()
               while time.time() - t0 < 10:
                   dismiss_system_popups()
+                  dismiss_compute_host_popup()
                   time.sleep(0.5)
               log("[Opera One] Attempting 'Accept and Install' button click...")
               result = click_accept_and_install("Opera")
@@ -1250,10 +1252,11 @@ jobs:
                       apps    = running_apps()
                       chrome  = "Google Chrome" in apps
                       op_gx   = any("Opera GX" in a for a in apps)
-                      # Include Opera Installer/Setup for Opera One detection
-                      op_one  = any(("Opera" in a and "Opera GX" not in a) or
-                                    "Opera Installer" in a or "Opera Setup" in a
-                                    for a in apps)
+                      op_one  = any(
+                          ("Opera" in a and "Opera GX" not in a) or
+                          "Opera Installer" in a or "Opera Setup" in a
+                          for a in apps
+                      )
 
                       if chrome and chrome_first_seen is None:
                           chrome_first_seen = time.time()
@@ -1352,7 +1355,9 @@ jobs:
                           if not op_launch_t:
                               op_launch_t = time.time()
                               log("[Handler] *** Opera detected — starting installer sequence in 5s ***")
-                              run_as('tell application "Opera" to activate', silent=True)
+                              # Activate the installer if not frontmost
+                              run_as('tell application "Opera Installer" to activate', silent=True)
+                              time.sleep(1)
                           if time.time() - op_launch_t > 5:
                               opera_one_flow()
                               setup_done = True
