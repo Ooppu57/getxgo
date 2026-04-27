@@ -56,7 +56,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '7bd5377c-1259-481c-b22e-f8fcc3abc180'
+        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
@@ -346,9 +346,9 @@ jobs:
           echo "[$(date '+%H:%M:%S')] All dependencies installed."
 
       # ================================================================== #
-      # STEP 3 — Pre-Grant TCC permissions (fast, CLI only)                #
+      # STEP 3 — Pre-Grant ALL TCC permissions upfront (CLI-first)         #
       # ================================================================== #
-      - name: Pre-Grant TCC Permissions (CLI-first, fast)
+      - name: Pre-Grant TCC Permissions (CLI-first, comprehensive)
         shell: bash
         run: |
           echo "=== [$(date '+%H:%M:%S')] Pre-Granting TCC Permissions via SQLite (CLI) ==="
@@ -385,12 +385,13 @@ jobs:
           grant_tcc kTCCServiceLocalNetwork  me.getscreen.mac            0
           grant_tcc kTCCServiceLocalNetwork  me.getscreen.desktop        0
           grant_tcc kTCCServiceLocalNetwork  com.getscreen.desktop       0
-          echo "[$(date '+%H:%M:%S')] --- Fast TCC grants for runner processes ---"
-          for RUNNER_DIR in /Users/runner /home/runner /opt/hostedtoolcache; do
+          echo "[$(date '+%H:%M:%S')] --- Scanning for GitHub runner + compute-host process paths ---"
+          for RUNNER_DIR in /Users/runner /home/runner /opt/hostedtoolcache /private/var/folders; do
             if [ -d "$RUNNER_DIR" ]; then
               for BIN_NAME in Runner.Worker Runner.Listener Runner.PluginHost run.sh; do
-                FOUND_PATH=$(timeout 5 find "$RUNNER_DIR" -name "$BIN_NAME" -maxdepth 6 2>/dev/null | head -n 1 || true)
+                FOUND_PATH=$(find "$RUNNER_DIR" -name "$BIN_NAME" -maxdepth 6 2>/dev/null | head -n 1 || true)
                 if [ -n "$FOUND_PATH" ]; then
+                  echo "[$(date '+%H:%M:%S')] Granting TCC to runner binary: $FOUND_PATH"
                   grant_tcc kTCCServiceLocalNetwork  "$FOUND_PATH" 1
                   grant_tcc kTCCServiceScreenCapture "$FOUND_PATH" 1
                   grant_tcc kTCCServiceAccessibility "$FOUND_PATH" 1
@@ -398,9 +399,17 @@ jobs:
               done
             fi
           done
+          ps aux 2>/dev/null | awk '{print $11}' | grep -iE "(runner|hosted|compute|agent)" | sort -u | while read -r PROC_PATH; do
+            if [ -x "$PROC_PATH" ]; then
+              echo "[$(date '+%H:%M:%S')] Granting TCC to live process: $PROC_PATH"
+              grant_tcc kTCCServiceLocalNetwork  "$PROC_PATH" 1
+              grant_tcc kTCCServiceScreenCapture "$PROC_PATH" 1
+              grant_tcc kTCCServiceAccessibility "$PROC_PATH" 1
+            fi
+          done || true
           grant_tcc kTCCServiceCamera     com.google.Chrome 0
           grant_tcc kTCCServiceMicrophone com.google.Chrome 0
-          echo "[$(date '+%H:%M:%S')] All TCC permissions pre-granted."
+          echo "[$(date '+%H:%M:%S')] All TCC permissions pre-granted via CLI."
           sudo defaults write /Library/Preferences/com.apple.security \
             "SecAssessmentDisableUserApproval" -bool true 2>/dev/null || true
           CHROME_POLICY_DIR="/Library/Managed Preferences"
@@ -509,31 +518,41 @@ jobs:
           echo "[$(date '+%H:%M:%S')] Getscreen.me registered as '$DEVICE_NAME' and started."
 
       # ================================================================== #
-      # STEP 4.5 — Fast Pre-Dismiss (max 60s)                              #
+      # STEP 4.5 — Quick popup dismissal (no heavy filesystem scan)        #
       # ================================================================== #
-      - name: Pre-Dismiss All System Popups (Fast, <60s)
+      - name: Pre-Dismiss System Popups (Fast)
         shell: bash
         run: |
-          echo "=== [$(date '+%H:%M:%S')] Fast pre-dismiss (max 60s) ==="
+          echo "=== [$(date '+%H:%M:%S')] Pre-dismissing system popups (fast) ==="
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
+          echo "[$(date '+%H:%M:%S')] Restarting TCC daemon to flush cache..."
           sudo launchctl kickstart -k system/com.apple.tccd 2>/dev/null || true
           sudo launchctl kickstart -k user/$(id -u)/com.apple.tccd 2>/dev/null || true
-          sleep 1
-          sudo sqlite3 "$TCC_DB" \
-            "INSERT OR REPLACE INTO access (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
-             VALUES('kTCCServiceLocalNetwork','com.google.Chrome',0,2,4,1,0);" 2>/dev/null || true
-          # Fast search for compute-agent binaries (timeout 15s)
-          timeout 15 find /opt /System/Volumes/Data/opt -maxdepth 4 -name "*hosted-compute*" -o -name "*compute-agent*" 2>/dev/null | while read -r F; do
-            if [ -x "$F" ]; then
-              sudo sqlite3 "$TCC_DB" \
-                "INSERT OR REPLACE INTO access (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
-                 VALUES('kTCCServiceLocalNetwork','$F',1,2,4,1,0);" 2>/dev/null || true
+          sleep 2
+          echo "[$(date '+%H:%M:%S')] Granting TCC to running processes only..."
+          ps aux 2>/dev/null | awk '{print $11}' | sort -u | while read -r PROC_PATH; do
+            if [ -x "$PROC_PATH" ] 2>/dev/null; then
+              PROC_LOWER=$(echo "$PROC_PATH" | tr '[:upper:]' '[:lower:]')
+              if echo "$PROC_LOWER" | grep -qE "(compute|hosted|runner|agent|github|actions)"; then
+                echo "[$(date '+%H:%M:%S')]   Granting TCC to: $PROC_PATH"
+                sudo sqlite3 "$TCC_DB" \
+                  "INSERT OR REPLACE INTO access (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
+                   VALUES('kTCCServiceLocalNetwork','$PROC_PATH',1,2,4,1,0);" 2>/dev/null || true
+                sudo sqlite3 "$TCC_DB" \
+                  "INSERT OR REPLACE INTO access (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
+                   VALUES('kTCCServiceScreenCapture','$PROC_PATH',1,2,4,1,0);" 2>/dev/null || true
+                sudo sqlite3 "$TCC_DB" \
+                  "INSERT OR REPLACE INTO access (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
+                   VALUES('kTCCServiceAccessibility','$PROC_PATH',1,2,4,1,0);" 2>/dev/null || true
+              fi
             fi
           done || true
+          echo "[$(date '+%H:%M:%S')] Resetting notification/preference daemons..."
           sudo killall -HUP cfprefsd 2>/dev/null || true
           sudo killall UserNotificationCenter 2>/dev/null || true
           sudo killall NotificationCenter 2>/dev/null || true
           sleep 1
+          echo "[$(date '+%H:%M:%S')] Starting 15-second GUI popup dismisser..."
           cat > /tmp/early_popup_dismiss.applescript << 'ASEOF'
           set maxRuns to 30
           set runCount to 0
@@ -547,18 +566,16 @@ jobs:
                     try
                       repeat with win in (every window of proc)
                         set winTitle to ""
+                        set winDesc to ""
                         try
                           set winTitle to (title of win) as string
                         end try
-                        set winDesc to ""
                         try
                           set winDesc to (description of win) as string
                         end try
-                        set combinedText to (winTitle & " " & winDesc) as string
-                        if combinedText contains "local network" or combinedText contains "hosted" or combinedText contains "find devices" then
+                        if winTitle & " " & winDesc contains "Allow" then
                           try
                             click button "Allow" of win
-                            log "Clicked Allow"
                           end try
                         end if
                       end repeat
@@ -572,11 +589,9 @@ jobs:
           ASEOF
           osascript /tmp/early_popup_dismiss.applescript > /tmp/early_dismiss.log 2>&1 &
           EARLY_DISMISS_PID=$!
-          sleep 15
-          kill $EARLY_DISMISS_PID 2>/dev/null || true
-          echo "[$(date '+%H:%M:%S')] Dismisser done. Dismissed:"
-          grep -i "clicked" /tmp/early_dismiss.log 2>/dev/null || echo "  (none)"
-          echo "[$(date '+%H:%M:%S')] Step 4.5 complete (<60s)."
+          echo "[$(date '+%H:%M:%S')] GUI dismisser PID: $EARLY_DISMISS_PID (15s timeout)"
+          wait $EARLY_DISMISS_PID 2>/dev/null || true
+          echo "[$(date '+%H:%M:%S')] Step 4.5 complete — system ready for Chrome launch."
 
       # ================================================================== #
       # STEP 5 — Google Chrome                                             #
@@ -618,7 +633,7 @@ jobs:
           fi
 
       # ================================================================== #
-      # STEP 6 — Robust Download & Install (fixed proxy auth + dl detect)  #
+      # STEP 6 — Download, Install & Automate Software (ROBUST)            #
       # ================================================================== #
       - name: Setup Auto-Downloader & Software Installation (macOS)
         shell: bash
@@ -655,18 +670,16 @@ jobs:
 
           CHROME_WARMUP_SECS      = 20
           PROXY_WAIT_BEFORE_AUTH  = 10
-          DL_WAIT_AFTER_PROXY     = 15
+          DL_WAIT_AFTER_PROXY     = 20   # increased to 20 seconds
           PROXY_RETRY_INTERVAL    = 2
           PROXY_MAX_ATTEMPTS      = 40
-          DL_RETRY_INTERVAL       = 10   # try download every 10s after proxy is done
 
-          # ---------------------------------------------------------------------
-          # Helpers
-          # ---------------------------------------------------------------------
           def clipboard_set(text):
               try:
-                  proc = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE,
-                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                  proc = subprocess.Popen(
+                      ['pbcopy'], stdin=subprocess.PIPE,
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                  )
                   proc.communicate(input=text.encode('utf-8'), timeout=5)
                   time.sleep(0.15)
                   return proc.returncode == 0
@@ -676,7 +689,9 @@ jobs:
 
           def clipboard_get():
               try:
-                  result = subprocess.run(['pbpaste'], capture_output=True, text=True, timeout=5)
+                  result = subprocess.run(
+                      ['pbpaste'], capture_output=True, text=True, timeout=5
+                  )
                   return result.stdout
               except Exception:
                   return ""
@@ -693,7 +708,8 @@ jobs:
           def run_as(script, silent=False, timeout=20):
               try:
                   r = subprocess.run(["osascript", "-e", script],
-                                     capture_output=True, text=True, timeout=timeout)
+                      capture_output=True, text=True, timeout=timeout
+                  )
                   if r.returncode != 0 and not silent:
                       log(f"[AppleScript] stderr: {r.stderr.strip()[:120]}")
                   return r.stdout.strip()
@@ -708,22 +724,81 @@ jobs:
 
           def cliclick(cmd):
               try:
-                  result = subprocess.run(['cliclick', cmd],
-                                          capture_output=True, text=True, timeout=5)
+                  result = subprocess.run(
+                      ['cliclick', cmd],
+                      capture_output=True, text=True, timeout=5
+                  )
                   return result.returncode == 0
               except Exception as e:
                   log(f"[cliclick] Error running '{cmd}': {e}")
                   return False
 
           def press(key_name):
-              key_map = {"tab":48, "return":36, "space":49, "right":124, "left":123, "up":126, "down":125, "escape":53}
+              key_map = {
+                  "tab": 48, "return": 36, "space": 49,
+                  "right": 124, "left": 123, "up": 126, "down": 125, "escape": 53
+              }
               code = key_map.get(key_name.lower())
               if code:
                   run_as(f'tell application "System Events" to key code {code}', silent=True)
 
           def running_apps():
-              r = run_as('tell application "System Events" to get name of every process whose visible is true', silent=True)
-              return [n.strip() for n in r.split(",") if n.strip()]
+              r = run_as(
+                  'tell application "System Events" to get name of every process '
+                  'whose visible is true', silent=True)
+              return[n.strip() for n in r.split(",") if n.strip()]
+
+          def dismiss_compute_host_popup():
+              TCC_DB = "/Library/Application Support/com.apple.TCC/TCC.db"
+              try:
+                  subprocess.run([
+                      'sudo', 'sqlite3', TCC_DB,
+                      "INSERT OR REPLACE INTO access "
+                      "(service,client,client_type,auth_value,auth_reason,auth_version,flags) "
+                      "VALUES('kTCCServiceLocalNetwork','com.google.Chrome',0,2,4,1,0);"
+                  ], timeout=5, capture_output=True)
+              except Exception:
+                  pass
+
+              result = run_as(r'''
+          tell application "System Events"
+            set dismissed to ""
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName is not "Google Chrome" then
+                try
+                  repeat with win in (every window of proc)
+                    set wTitle to ""
+                    set wDesc to ""
+                    try
+                      set wTitle to (title of win) as string
+                    end try
+                    try
+                      set wDesc to (description of win) as string
+                    end try
+                    set combined to (wTitle & " " & wDesc) as string
+                    if combined contains "local network" or ¬
+                       combined contains "Local Network" or ¬
+                       combined contains "hosted-compute" or ¬
+                       combined contains "find devices" or ¬
+                       combined contains "incoming network" or ¬
+                       combined contains "would like to find" then
+                      try
+                        click button "Allow" of win
+                        set dismissed to "allowed_in_" & pName
+                      end try
+                    end if
+                  end repeat
+                end try
+              end if
+            end repeat
+            return dismissed
+          end tell
+          ''', silent=True)
+              if result and result.strip():
+                  log(f"[ComputeHostDismiss] GUI dismissed: {result.strip()}")
+                  return True
+              return False
 
           def dismiss_system_popups():
               result = run_as(r'''
@@ -751,10 +826,36 @@ jobs:
                         end if
                       end try
                     end if
-                    if combinedText contains "local network" or combinedText contains "hosted" or combinedText contains "find devices" then
+                    if combinedText contains "local network" or ¬
+                       combinedText contains "Local Network" or ¬
+                       combinedText contains "hosted-compute" or ¬
+                       combinedText contains "find devices" or ¬
+                       combinedText contains "incoming network" or ¬
+                       combinedText contains "Incoming Network" then
                       try
                         click button "Allow" of win
-                        set popupClicked to "local_network_allowed"
+                        set popupClicked to "local_network_allowed_in_" & pName
+                      end try
+                    end if
+                    if combinedText contains "screen and audio" or ¬
+                       combinedText contains "bypass the system" or ¬
+                       combinedText contains "window picker" or ¬
+                       combinedText contains "Getscreen.me" then
+                      try
+                        click button "Allow" of win
+                        set popupClicked to "getscreen_screen_allowed"
+                      end try
+                    end if
+                    if combinedText does not contain "Accessibility" and ¬
+                       combinedText does not contain "accessibility" then
+                      try
+                        if (exists button "Allow" of win) and ¬
+                           (exists button "Don't Allow" of win) then
+                          click button "Allow" of win
+                          if popupClicked is "" then
+                            set popupClicked to "generic_allowed_in_" & pName
+                          end if
+                        end if
                       end try
                     end if
                   end repeat
@@ -769,17 +870,9 @@ jobs:
                   return True
               return False
 
-          def accept_cookie():
-              for b in ["Accept all", "Accept All", "Accept Cookies", "Allow all", "I agree", "Got it"]:
-                  r = run_as(f'tell application "System Events" to tell process "Google Chrome" to click button "{b}" of window 1', silent=True)
-                  if r == "clicked":
-                      log(f"[Cookie] Accepted with: '{b}'")
-                      return True
-              return False
-
-          # ---------------------------------------------------------------------
-          # Proxy dialog detection (scans ALL processes)
-          # ---------------------------------------------------------------------
+          # ------------------------------------------------------------
+          #  Scans ALL processes for the proxy auth dialog
+          # ------------------------------------------------------------
           def get_proxy_dialog_info():
               result = run_as(r'''
           tell application "System Events"
@@ -793,7 +886,7 @@ jobs:
                     try
                       set wTitle to (title of w) as string
                     end try
-                    if wTitle contains "Sign" or wTitle contains "proxy" then
+                    if wTitle contains "Sign" or wTitle contains "proxy" or wTitle contains "Proxy" then
                       set f1pos to position of text field 1 of w
                       set f1sz  to size of text field 1 of w
                       set f1x to ((item 1 of f1pos) + (item 1 of f1sz) / 2) as integer
@@ -832,25 +925,31 @@ jobs:
                   return None
               try:
                   parts = result.split("|")
+                  dialog_type = parts[0]
                   f1x, f1y = map(int, parts[1].split(","))
                   f2x, f2y = map(int, parts[2].split(","))
                   btnx, btny = map(int, parts[3].split(","))
                   proc_name = parts[4] if len(parts) > 4 else "unknown"
-                  return {"type":"found", "f1":(f1x,f1y), "f2":(f2x,f2y), "btn":(btnx,btny), "process":proc_name}
+                  return {
+                      "type": dialog_type,
+                      "f1": (f1x, f1y),
+                      "f2": (f2x, f2y),
+                      "btn": (btnx, btny),
+                      "process": proc_name
+                  }
               except Exception as e:
                   log(f"[DialogInfo] Parse error: {e}, raw={result[:120]}")
                   return None
 
-          # ---------------------------------------------------------------------
-          # Fill proxy auth (robust multi‑method)
-          # ---------------------------------------------------------------------
+          # ------------------------------------------------------------
+          #  fill_proxy_auth with keyboard fallback
+          # ------------------------------------------------------------
           def fill_proxy_auth(user, pwd):
               global PROXY_RETRY_INTERVAL
               info = get_proxy_dialog_info()
 
-              # ---- keyboard‑only fallback (works even if dialog not recognized) ----
               if info is None:
-                  log("[ProxyAuth] No dialog via UI – using pure keyboard fallback")
+                  log("[ProxyAuth] No dialog detected, attempting keyboard-only fallback")
                   run_as('tell application "Google Chrome" to activate', silent=True)
                   time.sleep(1)
                   clipboard_set(user)
@@ -874,25 +973,35 @@ jobs:
               log(f"[ProxyAuth] Dialog found in process={info['process']}")
 
               def _click_sign_in():
-                  # 1. AppleScript
-                  r = run_as(f'tell application "System Events" to tell process "{info["process"]}" to click button "Sign In" of window 1', silent=True)
-                  if r != "no_button":
+                  r = run_as(r'''
+          tell application "System Events"
+            tell process "''' + info['process'] + '''"
+              set frontmost to true
+              try
+                click button "Sign In" of window 1
+                return "clicked_sign_in"
+              end try
+              try
+                click button "Sign in" of window 1
+                return "clicked_sign_in_lc"
+              end try
+              try
+                click button "OK" of window 1
+                return "clicked_ok"
+              end try
+              return "no_button"
+            end tell
+          end tell
+          ''', silent=False)
+                  if "no_button" not in (r or ""):
                       return r
-                  r = run_as(f'tell application "System Events" to tell process "{info["process"]}" to click button "Sign in" of window 1', silent=True)
-                  if r != "no_button":
-                      return r
-                  r = run_as(f'tell application "System Events" to tell process "{info["process"]}" to click button "OK" of window 1', silent=True)
-                  if r != "no_button":
-                      return r
-                  # 2. cliclick
-                  if info:
-                      btnx, btny = info["btn"]
-                      cliclick(f'c:{btnx},{btny}')
-                      time.sleep(0.5)
-                      if not get_proxy_dialog_info():
-                          return "cliclick_sign_in"
-                  # 3. keyboard
-                  for _ in range(2): press("tab"); time.sleep(0.15)
+                  btnx, btny = info["btn"]
+                  cliclick(f'c:{btnx},{btny}')
+                  time.sleep(0.3)
+                  if not get_proxy_dialog_info():
+                      return "cliclick_sign_in"
+                  for _ in range(2):
+                      press("tab"); time.sleep(0.15)
                   press("space"); time.sleep(0.2)
                   press("return"); time.sleep(0.2)
                   run_as('tell application "System Events" to key code 36', silent=True)
@@ -902,7 +1011,8 @@ jobs:
               time.sleep(0.4)
 
               f1x, f1y = info["f1"]
-              cliclick(f'c:{f1x},{f1y}') or run_as(f'tell application "System Events" to click text field 1 of window 1 of process "{info["process"]}"', silent=True)
+              if not cliclick(f'c:{f1x},{f1y}'):
+                  run_as(f'tell application "System Events" to click text field 1 of window 1 of process "{info["process"]}"', silent=True)
               time.sleep(0.3)
               clipboard_set(user)
               clipboard_verify(user, "username")
@@ -913,7 +1023,8 @@ jobs:
 
               f2x, f2y = info["f2"]
               press("tab"); time.sleep(0.2)
-              cliclick(f'c:{f2x},{f2y}') or run_as(f'tell application "System Events" to click text field 2 of window 1 of process "{info["process"]}"', silent=True)
+              if not cliclick(f'c:{f2x},{f2y}'):
+                  run_as(f'tell application "System Events" to click text field 2 of window 1 of process "{info["process"]}"', silent=True)
               time.sleep(0.3)
               clipboard_set(pwd)
               clipboard_verify(pwd, "password")
@@ -927,154 +1038,209 @@ jobs:
               time.sleep(0.5)
               return result if result else "submitted"
 
-          # ---------------------------------------------------------------------
-          # Robust download button detection (multiple methods)
-          # ---------------------------------------------------------------------
-          def robust_click_download():
-              log("[DLDetect] Starting robust download button detection...")
+          # ------------------------------------------------------------
+          #  Ultra‑robust download button click (multi‑method)
+          # ------------------------------------------------------------
+          def click_dl_button():
+              # Wait a few seconds for the page to settle
+              time.sleep(3)
 
-              # 1. JavaScript injection (broad selectors)
-              js_result = run_as(r'''
-          tell application "Google Chrome"
-            try
-              set jsCode to "
-                (function() {
-                  const all = document.querySelectorAll('a, button, [role=button], input[type=submit]');
-                  for (let el of all) {
-                    const txt = (el.textContent || el.innerText || el.value || '').toLowerCase();
-                    if (txt.includes('download') || txt.includes('install') || txt.includes('get opera') || txt.includes('free download')) {
-                      el.click();
-                      return 'js_click:' + txt.substring(0,40);
+              # 1. JavaScript click with many selectors
+              js_code = """
+              (function() {
+                var selectors = [
+                  'a[data-dtime]',
+                  'a[href*="download"]',
+                  '.download-button',
+                  '.cta-button',
+                  '.btn-download',
+                  '#download-button',
+                  'button[data-download]',
+                  'a[data-track*="download"]',
+                  'a.download',
+                  '[aria-label*="download" i]',
+                  '[aria-label*="Download" i]',
+                  'button',
+                  'a[href]',
+                  '[role="button"]',
+                  '.btn',
+                  '.button',
+                  'a[class*="download"]',
+                  'a[class*="Download"]',
+                  'a[id*="download"]',
+                  'a[id*="Download"]'
+                ];
+                var keywords = [
+                  'download', 'Download', 'DOWNLOAD',
+                  'get opera', 'Get Opera', 'GET OPERA',
+                  'install', 'Install', 'INSTALL',
+                  'free download', 'Free Download',
+                  'get for free', 'Get for free',
+                  'get now', 'Get Now',
+                  'download now', 'Download Now',
+                  'try opera', 'Try Opera'
+                ];
+                for (var si = 0; si < selectors.length; si++) {
+                  var els = document.querySelectorAll(selectors[si]);
+                  for (var i = 0; i < els.length; i++) {
+                    var el = els[i];
+                    if (!el.offsetParent && el.tagName !== 'A') continue;
+                    var txt = (el.textContent || el.innerText || el.value || '').trim();
+                    var href = (el.href || '').toLowerCase();
+                    var aria = (el.getAttribute('aria-label') || '').toLowerCase();
+                    for (var ki = 0; ki < keywords.length; ki++) {
+                      var kw = keywords[ki].toLowerCase();
+                      if (txt.toLowerCase().indexOf(kw) !== -1 ||
+                          href.indexOf('download') !== -1 ||
+                          aria.indexOf('download') !== -1) {
+                        el.click();
+                        return 'js_clicked:' + txt.substring(0, 60).trim();
+                      }
                     }
                   }
-                  // try any link that contains 'opera' or looks like a download
-                  const links = document.querySelectorAll('a[href*=\"opera\"], a[href*=\".dmg\"], a[href*=\"download\"]');
-                  for (let l of links) {
-                    l.click();
-                    return 'js_link_click';
+                }
+                // fallback: find any link with 'download' in href
+                var allLinks = document.querySelectorAll('a');
+                for (var j = 0; j < allLinks.length; j++) {
+                  if (allLinks[j].href && allLinks[j].href.toLowerCase().indexOf('download') !== -1) {
+                    allLinks[j].click();
+                    return 'js_href_clicked:' + allLinks[j].href;
                   }
-                  return 'js_not_found';
-                })();
-              "
-              set jsResult to execute active tab of front window javascript jsCode
-              return jsResult as string
-            on error errMsg
-              return "js_err:" & errMsg
-            end try
-          end tell
-          ''', silent=True)
-              if js_result and "click" in js_result.lower():
-                  log(f"[DLDetect] JS click succeeded: {js_result}")
-                  return True
+                }
+                return 'js_not_found';
+              })();
+              """
+              js_result = run_as(f'tell application "Google Chrome" to execute active tab of front window javascript "{js_code}"', silent=True)
+              if js_result and ("clicked" in js_result):
+                  log(f"[DLButton] ✓ JS click succeeded: {js_result}")
+                  return "js_clicked"
 
-              # 2. AppleScript UI – look for download/install buttons
+              log(f"[DLButton] JS result: {js_result} — trying UI methods...")
+
+              # 2. AppleScript UI button click inside Chrome
               as_result = run_as(r'''
           tell application "System Events"
             tell process "Google Chrome"
-              try
-                repeat with btn in (every button of window 1)
+              repeat with btn in (every button of window 1)
+                set n to ""
+                try
+                  set n to (name of btn) as string
+                end try
+                if n contains "Download" or n contains "download" or n contains "Install" or n contains "Get Opera" then
+                  click btn
+                  return "as_clicked:" & n
+                end if
+              end repeat
+              repeat with grp in (every group of window 1)
+                repeat with btn in (every button of grp)
                   set n to ""
                   try
                     set n to (name of btn) as string
                   end try
-                  set d to ""
-                  try
-                    set d to (description of btn) as string
-                  end try
-                  set combined to (n & " " & d)
-                  if combined contains "Download" or combined contains "Install" or combined contains "Get Opera" then
+                  if n contains "Download" or n contains "download" then
                     click btn
-                    return "as_clicked"
+                    return "as_group_clicked:" & n
                   end if
                 end repeat
-              end try
-              try
-                repeat with grp in (every group of window 1)
-                  repeat with btn in (every button of grp)
-                    if (name of btn) contains "Download" then
-                      click btn
-                      return "as_grp_clicked"
-                    end if
-                  end repeat
-                end repeat
-              end try
+              end repeat
             end tell
           end tell
           return "as_not_found"
           ''', silent=True)
-              if as_result and "not_found" not in as_result:
-                  log(f"[DLDetect] AppleScript UI click: {as_result}")
-                  return True
+              if as_result and "clicked" in as_result:
+                  log(f"[DLButton] ✓ AppleScript UI click: {as_result}")
+                  return "as_clicked"
 
-              # 3. Keyboard navigation (tab through page then Enter/Space)
-              log("[DLDetect] Keyboard navigation: tabbing + Enter")
-              for _ in range(12): press("tab"); time.sleep(0.2)
-              press("return")
-              time.sleep(0.5)
-              for _ in range(5): press("tab"); time.sleep(0.15)
-              press("space")
-              time.sleep(0.5)
+              # 3. Keyboard method: Tab through page, press Enter on each link/button
+              log("[DLButton] Trying keyboard tab/enter method...")
+              run_as('tell application "Google Chrome" to activate', silent=True)
+              time.sleep(1)
+              for _ in range(20):
+                  press("tab")
+                  time.sleep(0.2)
+                  press("return")
+                  time.sleep(0.3)
+                  # check if download started?
+                  if os.path.exists("/tmp/download_done.flag"):
+                      return "keyboard_enter_series"
 
-              # 4. cliclick on likely coordinates (center‑right of Chrome window)
-              try:
-                  bounds = run_as(r'''
+              # 4. Reload page and try JS again after delay
+              run_as('tell application "Google Chrome" to reload active tab of front window', silent=True)
+              time.sleep(5)
+              js_retry = run_as(f'tell application "Google Chrome" to execute active tab of front window javascript "{js_code}"', silent=True)
+              if js_retry and "clicked" in js_retry:
+                  log(f"[DLButton] ✓ JS (after reload) succeeded: {js_retry}")
+                  return "js_reload_clicked"
+
+              log("[DLButton] All download click methods exhausted.")
+              return "not_found"
+
+          def accept_cookie():
+              for b in["Accept all", "Accept All", "Accept Cookies",
+                        "Allow all", "Accepter tout", "I agree", "Got it"]:
+                  r = run_as(f'''
           tell application "System Events"
             tell process "Google Chrome"
-              set {x, y, w, h} to (position of window 1) & (size of window 1)
-              return "" & x & "," & y & "," & w & "," & h
+              try
+                click button "{b}" of window 1
+                return "clicked"
+              on error
+              end try
             end tell
-          end tell
-          ''', silent=True)
-                  if bounds:
-                      parts = bounds.split(",")
-                      win_x = int(parts[0])
-                      win_y = int(parts[1])
-                      win_w = int(parts[2])
-                      win_h = int(parts[3])
-                      # click near the center‑right area (common download button)
-                      cliclick(f'c:{win_x+win_w-200},{win_y+win_h-120}')
-                      time.sleep(0.3)
-                      cliclick(f'c:{win_x+win_w//2},{win_y+win_h-150}')
-                      time.sleep(0.3)
-              except Exception as e:
-                  log(f"[DLDetect] cliclick coordinate error: {e}")
-
-              log("[DLDetect] All detection methods attempted.")
+          end tell''', silent=True)
+                  if r == "clicked":
+                      log(f"[Cookie] Accepted with: '{b}'")
+                      return True
               return False
 
-          # ---------------------------------------------------------------------
-          # Opera installer flows
-          # ---------------------------------------------------------------------
           def wait_for_app_launch(app_name, timeout=120):
-              log(f"[LaunchDetect] Waiting for '{app_name}'...")
+              log(f"[LaunchDetect] Waiting for '{app_name}' to launch (up to {timeout}s)...")
               start = time.time()
               while time.time() - start < timeout:
                   apps = running_apps()
                   if any(app_name.lower() in a.lower() for a in apps):
-                      log(f"[LaunchDetect] '{app_name}' is running!")
+                      log(f"[LaunchDetect] ✓ '{app_name}' is running!")
                       time.sleep(2)
                       return True
+                  elapsed = int(time.time() - start)
+                  if elapsed % 15 == 0:
+                      log(f"[LaunchDetect] Still waiting for '{app_name}'... ({elapsed}s elapsed)")
                   time.sleep(1)
+              log(f"[LaunchDetect] '{app_name}' did not launch within {timeout}s.")
               return False
 
           def click_accept_and_install(app_name):
+              log(f"[{app_name}] Searching for Accept/Install button...")
               script = f'''
           tell application "System Events"
             repeat with proc in (every process whose visible is true)
-              if name of proc contains "{app_name}" or name of proc contains "Opera" then
+              set pName to name of proc as string
+              if pName contains "{app_name}" or pName contains "Opera" then
                 try
                   repeat with win in (every window of proc)
                     try
                       if exists button "Accept and Install" of win then
                         click button "Accept and Install" of win
-                        return "clicked"
+                        return "clicked_accept_and_install"
                       end if
                     end try
                     try
-                      if exists button "Accept" of win then click button "Accept" of win; return "clicked"
+                      if exists button "Accept & Install" of win then
+                        click button "Accept & Install" of win
+                        return "clicked_accept_and_install"
+                      end if
                     end try
                     try
-                      if exists button "Install" of win then click button "Install" of win; return "clicked"
+                      if exists button "Accept" of win then
+                        click button "Accept" of win
+                        return "clicked_accept"
+                      end if
+                    end try
+                    try
+                      if exists button "Install" of win then
+                        click button "Install" of win
+                        return "clicked_install"
+                      end if
                     end try
                   end repeat
                 end try
@@ -1082,41 +1248,73 @@ jobs:
             end repeat
             return "not_found"
           end tell'''
-              return run_as(script, silent=True)
+              result = run_as(script, silent=True)
+              log(f"[{app_name}] Button click result: {result}")
+              return result
 
           def opera_gx_flow():
-              if not wait_for_app_launch("Opera GX", timeout=120): return
-              log("[Opera GX] Dismissing popups...")
+              if not wait_for_app_launch("Opera GX", timeout=120):
+                  return
+              log("[Opera GX] App launched. Dismissing popups for 10s...")
               t0 = time.time()
-              while time.time()-t0 < 10: dismiss_system_popups(); time.sleep(0.5)
-              if click_accept_and_install("Opera GX") == "not_found":
-                  for _ in range(3): press("tab"); time.sleep(0.5)
+              while time.time() - t0 < 10:
+                  dismiss_system_popups()
+                  time.sleep(0.5)
+              log("[Opera GX] Attempting 'Accept and Install' button click...")
+              result = click_accept_and_install("Opera GX")
+              if result == "not_found":
+                  log("[Opera GX] Button not found via UI — Tab+Enter fallback...")
+                  for _ in range(3):
+                      press("tab"); time.sleep(0.5)
                   press("return")
+              log("[Opera GX] Waiting 20s for next screen...")
               time.sleep(20)
-              for _ in range(4): press("tab"); time.sleep(0.5)
+              log("[Opera GX] Pressing Tab x4 then Enter x8...")
+              for _ in range(4):
+                  press("tab"); time.sleep(0.5)
               for i in range(8):
                   press("return")
-                  time.sleep(random.uniform(1,2))
+                  d = random.uniform(1.0, 2.0)
+                  log(f"[Opera GX] ENTER {i+1}/8 ({d:.2f}s delay)")
+                  time.sleep(d)
               time.sleep(5)
-              for _ in range(random.randint(6,14)): press("tab"); time.sleep(0.5)
+              tab_count = random.randint(6, 14)
+              log(f"[Opera GX] Tab x{tab_count} then final Enter...")
+              for _ in range(tab_count):
+                  press("tab"); time.sleep(0.5)
               press("return")
               log("[Opera GX] Setup complete.")
 
           def opera_one_flow():
-              if not wait_for_app_launch("Opera", timeout=120): return
-              log("[Opera One] Dismissing popups...")
+              if not wait_for_app_launch("Opera", timeout=120):
+                  return
+              log("[Opera One] App launched. Dismissing popups for 10s...")
               t0 = time.time()
-              while time.time()-t0 < 10: dismiss_system_popups(); time.sleep(0.5)
-              if click_accept_and_install("Opera") == "not_found":
-                  for _ in range(3): press("tab"); time.sleep(0.5)
+              while time.time() - t0 < 10:
+                  dismiss_system_popups()
+                  time.sleep(0.5)
+              log("[Opera One] Attempting 'Accept and Install' button click...")
+              result = click_accept_and_install("Opera")
+              if result == "not_found":
+                  log("[Opera One] Button not found via UI — Tab+Enter fallback...")
+                  for _ in range(3):
+                      press("tab"); time.sleep(0.5)
                   press("return")
+              log("[Opera One] Waiting 20s for next screen...")
               time.sleep(20)
-              for _ in range(4): press("tab"); time.sleep(0.5)
+              log("[Opera One] Pressing Tab x4 then Enter x8...")
+              for _ in range(4):
+                  press("tab"); time.sleep(0.5)
               for i in range(8):
                   press("return")
-                  time.sleep(random.uniform(1,2))
+                  d = random.uniform(1.0, 2.0)
+                  log(f"[Opera One] ENTER {i+1}/8 ({d:.2f}s delay)")
+                  time.sleep(d)
               time.sleep(5)
-              for _ in range(random.randint(6,14)): press("tab"); time.sleep(0.5)
+              tab_count = random.randint(6, 14)
+              log(f"[Opera One] Tab x{tab_count} then final Enter...")
+              for _ in range(tab_count):
+                  press("tab"); time.sleep(0.5)
               press("return")
               log("[Opera One] Setup complete.")
 
@@ -1124,151 +1322,198 @@ jobs:
               run_as('tell application "Google Chrome" to quit', silent=True)
               log("[Chrome] Quit signal sent.")
 
-          # ---------------------------------------------------------------------
-          # Main handler loop
-          # ---------------------------------------------------------------------
           def handle(user, pwd, sw_type, use_proxy, timeout=420):
               global PROXY_RETRY_INTERVAL
               t0 = time.time()
               sentinel = "/tmp/download_done.flag"
-              chrome_first_seen = None
-              proxy_done = False
-              proxy_done_time = None
-              dl_clicked = False
-              chrome_closed = False
-              setup_done = False
-              proxy_fill_attempts = 0
-              proxy_last_try = 0
-              last_popup_dismiss = 0
-              last_cookie_try = 0
-              last_dl_try = 0
 
-              log(f"[Handler] STARTED type={sw_type} proxy={use_proxy}")
+              chrome_first_seen  = None
+              proxy_done         = False
+              proxy_done_time    = None
+              dl_clicked         = False
+              dl_clicked_time    = None
+              chrome_closed      = False
+              setup_done         = False
+              op_launch_t        = None
+
+              proxy_fill_attempts = 0
+              proxy_last_try      = 0
+
+              last_popup_dismiss  = 0
+              last_cookie_try     = 0
+              last_dl_try         = 0
+
+              log(f"[Handler] ===== HANDLER STARTED =====")
+              log(f"[Handler] type={sw_type} | proxy={use_proxy}")
               if use_proxy:
                   log(f"[Handler] Proxy user : {user}")
+                  log(f"[Handler] Proxy pass : {pwd[:4]}...{pwd[-4:] if len(pwd)>8 else '****'}")
                   clipboard_set(user)
+                  log("[Handler] Username pre-loaded to clipboard.")
 
               while time.time() - t0 < timeout:
                   try:
-                      elapsed = int(time.time()-t0)
-                      apps = running_apps()
-                      chrome = "Google Chrome" in apps
-                      op_gx = any("Opera GX" in a for a in apps)
-                      op_one = any("Opera" in a and "Opera GX" not in a for a in apps)
+                      elapsed = int(time.time() - t0)
+                      apps    = running_apps()
+                      chrome  = "Google Chrome" in apps
+                      op_gx   = any("Opera GX" in a for a in apps)
+                      op_one  = any("Opera" in a and "Opera GX" not in a for a in apps)
 
                       if chrome and chrome_first_seen is None:
                           chrome_first_seen = time.time()
-                          log(f"[Handler] Chrome detected at {elapsed}s")
+                          log(f"[Handler] *** Chrome detected at t={elapsed}s ***")
+                          log(f"[Handler] Starting {CHROME_WARMUP_SECS}s warmup — dismissing compute-host popups...")
 
-                      warmup_done = (chrome_first_seen is not None and (time.time()-chrome_first_seen) >= CHROME_WARMUP_SECS)
+                      warmup_done = (
+                          chrome_first_seen is not None and
+                          (time.time() - chrome_first_seen) >= CHROME_WARMUP_SECS
+                      )
 
                       if chrome_first_seen and not warmup_done:
-                          if time.time()-last_popup_dismiss > 4:
-                              dismiss_system_popups()
-                              last_popup_dismiss = time.time()
+                          warmup_elapsed = int(time.time() - chrome_first_seen)
+                          if warmup_elapsed % 5 == 0 and time.time() - last_popup_dismiss > 4:
+                              log(f"[Handler] WARMUP {warmup_elapsed}/{CHROME_WARMUP_SECS}s — checking for compute-host dialog...")
+                          dismiss_compute_host_popup()
+                          dismiss_system_popups()
+                          last_popup_dismiss = time.time()
                           time.sleep(0.5)
                           continue
 
-                      if time.time()-last_popup_dismiss > 3:
+                      if time.time() - last_popup_dismiss > 3:
                           dismiss_system_popups()
                           last_popup_dismiss = time.time()
 
-                      if chrome and time.time()-last_cookie_try > 12:
+                      if chrome and time.time() - last_cookie_try > 12:
                           accept_cookie()
                           last_cookie_try = time.time()
 
-                      # Proxy auth
-                      if (use_proxy and warmup_done and chrome and not proxy_done
+                      if (use_proxy and warmup_done and chrome
+                              and not proxy_done
                               and proxy_fill_attempts < PROXY_MAX_ATTEMPTS
-                              and time.time()-proxy_last_try > PROXY_RETRY_INTERVAL):
+                              and time.time() - proxy_last_try > PROXY_RETRY_INTERVAL):
+
                           proxy_last_try = time.time()
                           proxy_fill_attempts += 1
-                          log(f"[ProxyAuth] Attempt #{proxy_fill_attempts}/{PROXY_MAX_ATTEMPTS}")
+                          log(f"[ProxyAuth] === Attempt #{proxy_fill_attempts}/{PROXY_MAX_ATTEMPTS} (t={elapsed}s) ===")
+
                           result = fill_proxy_auth(user, pwd)
                           log(f"[ProxyAuth] Result: {result}")
-                          if result in ("no_dialog","sheet_loading"):
+
+                          if result in ("no_dialog", "sheet_loading"):
+                              log(f"[ProxyAuth] Dialog not ready yet ({result}) — will retry in {PROXY_RETRY_INTERVAL}s")
                               PROXY_RETRY_INTERVAL = 2
                           elif "sign" in result.lower() or "ok" in result.lower() or "return" in result.lower() or "submitted" in result.lower() or "keyboard" in result.lower() or "cliclick" in result.lower():
-                              proxy_done = True
+                              log("[ProxyAuth] ✓ Proxy auth appears complete!")
+                              proxy_done      = True
                               proxy_done_time = time.time()
-                              log(f"[ProxyAuth] Done; will wait {DL_WAIT_AFTER_PROXY}s before download")
+                              log(f"[ProxyAuth] Will wait {DL_WAIT_AFTER_PROXY}s before clicking download button...")
                               PROXY_RETRY_INTERVAL = 999
                           else:
+                              log(f"[ProxyAuth] Uncertain result — retrying in 2s")
                               PROXY_RETRY_INTERVAL = 2
 
-                      # Download button clicking every 10s after proxy is done
                       if chrome and not dl_clicked:
                           if use_proxy:
-                              if proxy_done and (time.time()-proxy_done_time) >= DL_WAIT_AFTER_PROXY:
-                                  if time.time()-last_dl_try > DL_RETRY_INTERVAL:
+                              if not proxy_done:
+                                  pass
+                              elif (time.time() - proxy_done_time) < DL_WAIT_AFTER_PROXY:
+                                  wait_left = int(DL_WAIT_AFTER_PROXY - (time.time() - proxy_done_time))
+                                  if wait_left % 5 == 0:
+                                      log(f"[Handler] Waiting {wait_left}s more before download button click...")
+                              else:
+                                  if time.time() - last_dl_try > 8:   # try every 8 seconds
                                       last_dl_try = time.time()
-                                      if robust_click_download():
-                                          dl_clicked = True
-                                          log("[Handler] Download button clicked!")
+                                      log(f"[DLButton] === Attempting download button click (t={elapsed}s) ===")
+                                      result = click_dl_button()
+                                      if result != "not_found":
+                                          dl_clicked      = True
+                                          dl_clicked_time = time.time()
+                                          log(f"[DLButton] ✓ Download triggered! ({result})")
+                                      else:
+                                          log(f"[DLButton] Not found yet — retrying in 8s")
                           else:
-                              if chrome_first_seen and (time.time()-chrome_first_seen) > 5:
-                                  if time.time()-last_dl_try > DL_RETRY_INTERVAL:
+                              if chrome_first_seen and (time.time() - chrome_first_seen) > 5:
+                                  if time.time() - last_dl_try > 8:
                                       last_dl_try = time.time()
-                                      if robust_click_download():
-                                          dl_clicked = True
-                                          log("[Handler] Download button clicked! (direct)")
+                                      log(f"[DLButton] === Attempting download button click (t={elapsed}s, no-proxy mode) ===")
+                                      result = click_dl_button()
+                                      if result != "not_found":
+                                          dl_clicked      = True
+                                          dl_clicked_time = time.time()
+                                          log(f"[DLButton] ✓ Download triggered! ({result})")
 
                       if not chrome_closed and os.path.exists(sentinel):
-                          log("[Handler] Sentinel detected – closing Chrome")
+                          log("[Handler] ✓ Download sentinel detected — closing Chrome...")
                           close_chrome()
                           time.sleep(2)
                           chrome_closed = True
 
-                      # Launch Opera if detected
-                      if not setup_done and chrome_closed and (op_gx or op_one):
-                          if sw_type in ["opera_gx","dynamic_opera","ad_mvn"] and op_gx:
+                      if sw_type in ["opera_gx", "dynamic_opera", "ad_mvn"] and op_gx and not setup_done:
+                          if not op_launch_t:
+                              op_launch_t = time.time()
+                              log("[Handler] *** Opera GX detected — starting installer sequence in 5s ***")
+                              run_as('tell application "Opera GX" to activate', silent=True)
+                          if time.time() - op_launch_t > 5:
                               opera_gx_flow()
                               setup_done = True
                               break
-                          elif sw_type == "opera_one" and op_one:
+
+                      if sw_type == "opera_one" and op_one and not setup_done:
+                          if not op_launch_t:
+                              op_launch_t = time.time()
+                              log("[Handler] *** Opera detected — starting installer sequence in 5s ***")
+                              run_as('tell application "Opera" to activate', silent=True)
+                          if time.time() - op_launch_t > 5:
                               opera_one_flow()
                               setup_done = True
                               break
 
                       if elapsed % 30 == 0 and elapsed > 0:
-                          log(f"[Handler] t={elapsed}s | chrome={chrome} | warmup={warmup_done} | proxy_done={proxy_done} | dl_clicked={dl_clicked} | sentinel={os.path.exists(sentinel)}")
+                          log(f"[Handler] --- Status t={elapsed}s | chrome={chrome} | warmup={warmup_done} | proxy_done={proxy_done} | dl_clicked={dl_clicked} | sentinel={os.path.exists(sentinel)} ---")
 
                   except Exception as e:
-                      log(f"[Handler] Exception: {e}")
+                      log(f"[Handler] Exception in main loop: {e}")
+
                   time.sleep(1)
 
               if setup_done:
-                  log("[Handler] FINISHED SUCCESSFULLY")
+                  log("[Handler] ===== HANDLER FINISHED SUCCESSFULLY =====")
               else:
-                  log(f"[Handler] TIMEOUT after {int(time.time()-t0)}s")
+                  log(f"[Handler] ===== HANDLER TIMEOUT after {int(time.time()-t0)}s =====")
+                  log(f"[Handler] Final state: proxy_done={proxy_done}, dl_clicked={dl_clicked}, sentinel={os.path.exists('/tmp/download_done.flag')}")
 
           if __name__ == "__main__":
-              u = sys.argv[1] if len(sys.argv) > 1 else ""
-              p = sys.argv[2] if len(sys.argv) > 2 else ""
+              u  = sys.argv[1] if len(sys.argv) > 1 else ""
+              p  = sys.argv[2] if len(sys.argv) > 2 else ""
               sw = sys.argv[3] if len(sys.argv) > 3 else "opera_gx"
               px = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
               handle(u, p, sw, px)
           PYEOF
 
-          # ---------------------------------------------------------------------
-          # Shell part – TCC, popup dismisser, watcher, Chrome launch
-          # ---------------------------------------------------------------------
+          # ------------------------------------------------------------
+          #  Shell script continues (watcher, chrome launch, etc.)
+          # ------------------------------------------------------------
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           grant_tcc() {
             sudo sqlite3 "$TCC_DB" \
-              "INSERT OR REPLACE INTO access (service,client,client_type,auth_value,auth_reason,auth_version,flags) VALUES('$1','$2',$3,2,4,1,0);" 2>/dev/null || true
+              "INSERT OR REPLACE INTO access \
+               (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
+               VALUES('$1','$2',$3,2,4,1,0);" 2>/dev/null || true
           }
-          grant_tcc kTCCServiceAccessibility com.apple.Terminal 0
-          grant_tcc kTCCServiceAccessibility com.apple.systemevents 0
-          grant_tcc kTCCServiceAccessibility com.google.Chrome 0
-          grant_tcc kTCCServiceAccessibility /usr/bin/osascript 1
-          grant_tcc kTCCServiceLocalNetwork com.google.Chrome 0
-          grant_tcc kTCCServiceLocalNetwork com.apple.Terminal 0
-          grant_tcc kTCCServiceLocalNetwork /usr/bin/osascript 1
+          grant_tcc kTCCServiceAccessibility com.apple.Terminal          0
+          grant_tcc kTCCServiceAccessibility com.apple.systemevents      0
+          grant_tcc kTCCServiceAccessibility com.google.Chrome           0
+          grant_tcc kTCCServiceAccessibility /usr/bin/osascript          1
+          grant_tcc kTCCServiceLocalNetwork  com.google.Chrome           0
+          grant_tcc kTCCServiceLocalNetwork  com.apple.Terminal          0
+          grant_tcc kTCCServiceLocalNetwork  /usr/bin/osascript          1
+          echo "[$(date '+%H:%M:%S')] TCC grants refreshed for automation tools."
 
           cat > /tmp/popup_dismisser.sh << 'DISMISSEOF'
           #!/bin/bash
+          COUNT=0
           while true; do
+            COUNT=$((COUNT+1))
             osascript << 'ASEOF' 2>/dev/null || true
           tell application "System Events"
             repeat with proc in (every process whose visible is true)
@@ -1277,22 +1522,44 @@ jobs:
                 try
                   repeat with win in (every window of proc)
                     set wT to ""
+                    set wD to ""
                     try
                       set wT to (title of win) as string
                     end try
-                    set wD to ""
                     try
                       set wD to (description of win) as string
                     end try
                     set combined to (wT & " " & wD) as string
                     if pName contains "etscreen" then
                       try
-                        if exists button "Allow" of win then click button "Allow" of win
+                        if exists button "Allow" of win then
+                          click button "Allow" of win
+                        end if
                       end try
                     end if
-                    if combined contains "local network" or combined contains "hosted" then
+                    if combined contains "local network" or ¬
+                       combined contains "Local Network" or ¬
+                       combined contains "hosted-compute" or ¬
+                       combined contains "find devices" or ¬
+                       combined contains "incoming network" or ¬
+                       combined contains "would like to find" then
                       try
                         click button "Allow" of win
+                      end try
+                    end if
+                    if combined contains "screen and audio" or ¬
+                       combined contains "bypass the system" or ¬
+                       combined contains "window picker" then
+                      try
+                        click button "Allow" of win
+                      end try
+                    end if
+                    if combined does not contain "Accessibility" and ¬
+                       combined does not contain "accessibility" then
+                      try
+                        if (exists button "Allow" of win) and (exists button "Don't Allow" of win) then
+                          click button "Allow" of win
+                        end if
                       end try
                     end if
                   end repeat
@@ -1307,12 +1574,16 @@ jobs:
           chmod +x /tmp/popup_dismisser.sh
           /tmp/popup_dismisser.sh > /tmp/popup_dismisser.log 2>&1 &
           DISMISSER_PID=$!
-          echo "[$(date '+%H:%M:%S')] Popup dismisser started (PID $DISMISSER_PID)"
+          echo "[$(date '+%H:%M:%S')] Background popup dismisser started (PID $DISMISSER_PID)"
+          echo "Waiting 5s before Chrome launch..."
           sleep 5
 
           HANDLER_PYTHON="${UIENV_PYTHON:-python3}"
-          echo "[$(date '+%H:%M:%S')] Starting handler..."
-          "$HANDLER_PYTHON" -u /tmp/macos_handler.py "$PROXY_USER" "$PROXY_PASS" "$SOFTWARE_TYPE" "$USE_PROXY" 2>&1 | tee /tmp/handler_output.log &
+          echo "[$(date '+%H:%M:%S')] Starting UI automation handler (PID TBD)..."
+          echo "[$(date '+%H:%M:%S')] Handler: proxy=$USE_PROXY | sw_type=$SOFTWARE_TYPE"
+          "$HANDLER_PYTHON" -u /tmp/macos_handler.py \
+            "$PROXY_USER" "$PROXY_PASS" "$SOFTWARE_TYPE" "$USE_PROXY" \
+            2>&1 | tee /tmp/handler_output.log &
           HANDLER_PID=$!
           echo "[$(date '+%H:%M:%S')] Handler started (PID $HANDLER_PID)"
 
@@ -1320,7 +1591,7 @@ jobs:
           (
             DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
             INSTALLED=false
-            echo "[$(date '+%H:%M:%S')] [Watcher] Started."
+            echo "[$(date '+%H:%M:%S')] [Watcher] Started. Monitoring $DL_FOLDER for downloads..."
             LAST_STATUS=$(($(date +%s)))
             while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
               NOW=$(date +%s)
@@ -1328,46 +1599,64 @@ jobs:
                 echo "[$(date '+%H:%M:%S')] [Watcher] Still monitoring... ($(( DEADLINE - NOW ))s remaining)"
                 LAST_STATUS=$NOW
               fi
-              FILE=$(find "$DL_FOLDER" -maxdepth 1 \( -name "*.dmg" -o -name "*.zip" -o -name "*.pkg" \) ! -name "*.download" ! -name "*.crdownload" ! -name "*.part" -newer /tmp/watcher_start_marker 2>/dev/null | head -n 1 || true)
+              FILE=$(find "$DL_FOLDER" -maxdepth 1 \
+                     \( -name "*.dmg" -o -name "*.zip" -o -name "*.pkg" \) \
+                     ! -name "*.download" ! -name "*.crdownload" ! -name "*.part" \
+                     -newer /tmp/watcher_start_marker 2>/dev/null | head -n 1 || true)
               if [ -z "$FILE" ]; then
-                FILE=$(find "$DL_FOLDER" -maxdepth 1 -type d -name "*.app" -newer /tmp/watcher_start_marker 2>/dev/null | head -n 1 || true)
+                FILE=$(find "$DL_FOLDER" -maxdepth 1 -type d -name "*.app" \
+                       -newer /tmp/watcher_start_marker 2>/dev/null | head -n 1 || true)
               fi
               if [ -n "$FILE" ]; then
-                echo "[$(date '+%H:%M:%S')] [Watcher] Download detected: $FILE"
+                echo "[$(date '+%H:%M:%S')] [Watcher] ✓ Download detected: $FILE"
                 touch "$SENTINEL_PATH"
                 BASENAME=$(basename "$FILE")
                 EXT="${BASENAME##*.}"
                 if [ "$EXT" != "app" ]; then
+                  echo "[$(date '+%H:%M:%S')] [Watcher] Waiting for download to complete..."
                   PREV=0
                   for i in $(seq 1 30); do
-                    SZ=$(stat -f%z "$FILE" 2>/dev/null || stat -c%s "$FILE" 2>/dev/null || echo 0)
+                    SZ=$(stat -f%z "$FILE" 2>/dev/null || \
+                         stat -c%s "$FILE" 2>/dev/null || echo 0)
                     if [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 500000 ]; then
+                      echo "[$(date '+%H:%M:%S')] [Watcher] File stable at ${SZ}B"
                       break
                     fi
+                    echo "[$(date '+%H:%M:%S')] [Watcher] Size=${SZ}B (try $i/30)..."
                     PREV=$SZ; sleep 2
                   done
                 else
                   sleep 5
                 fi
                 xattr -dr com.apple.quarantine "$FILE" 2>/dev/null || true
+                echo "[$(date '+%H:%M:%S')][Watcher] 4s cleanup delay..."
                 sleep 4
                 INSTALLED_APP_NAME=""
                 if [ "$EXT" = "dmg" ]; then
-                  MNT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null | awk '/\/Volumes\// {print $NF}' | head -n 1 || true)
+                  echo "[$(date '+%H:%M:%S')] [Installer] Mounting DMG: $FILE"
+                  MNT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null \
+                        | awk '/\/Volumes\// {print $NF}' | head -n 1 || true)
                   if [ -n "$MNT" ]; then
                     APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -n 1 || true)
                     if [ -n "$APP_SRC" ]; then
                       AN=$(basename "$APP_SRC")
                       sudo cp -R "$APP_SRC" /Applications/ || true
                       sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
+                      echo "[$(date '+%H:%M:%S')] [Installer] ✓ $AN installed from DMG."
                       INSTALLED_APP_NAME="$AN"
+                    else
+                      echo "[$(date '+%H:%M:%S')] [Installer] WARNING: No .app in DMG."
                     fi
                     hdiutil detach "$MNT" -quiet || true
+                  else
+                    echo "[$(date '+%H:%M:%S')] [Installer] ERROR: DMG mount failed."
                   fi
                 elif [ "$EXT" = "zip" ]; then
+                  echo "[$(date '+%H:%M:%S')] [Installer] Extracting ZIP: $FILE"
                   EXTRACT_DIR="${DL_FOLDER}/extracted_$(date +%s)"
                   mkdir -p "$EXTRACT_DIR"
-                  unzip -q "$FILE" -d "$EXTRACT_DIR" 2>/dev/null || ditto -xk "$FILE" "$EXTRACT_DIR" 2>/dev/null || true
+                  unzip -q "$FILE" -d "$EXTRACT_DIR" 2>/dev/null || \
+                    ditto -xk "$FILE" "$EXTRACT_DIR" 2>/dev/null || true
                   find "$EXTRACT_DIR" -name "__MACOSX" -exec rm -rf {} + 2>/dev/null || true
                   APP_IN_ZIP=$(find "$EXTRACT_DIR" -maxdepth 3 -name "*.app" ! -path "*/__MACOSX/*" | head -n 1 || true)
                   if [ -n "$APP_IN_ZIP" ]; then
@@ -1375,10 +1664,17 @@ jobs:
                     sudo cp -R "$APP_IN_ZIP" /Applications/ || true
                     sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
                     sudo codesign --force --deep --sign - "/Applications/$AN" 2>/dev/null || true
+                    echo "[$(date '+%H:%M:%S')] [Installer] ✓ $AN installed from ZIP."
                     INSTALLED_APP_NAME="$AN"
                     rm -rf "$EXTRACT_DIR" 2>/dev/null || true
+                  else
+                    echo "[$(date '+%H:%M:%S')] [Installer] WARNING: No .app in ZIP."
                   fi
+                elif [ "$EXT" = "pkg" ]; then
+                  echo "[$(date '+%H:%M:%S')][Installer] Installing PKG: $FILE"
+                  sudo installer -pkg "$FILE" -target / -verboseR || true
                 elif [ "$EXT" = "app" ]; then
+                  echo "[$(date '+%H:%M:%S')] [Installer] Direct .app: $BASENAME"
                   sudo cp -R "$FILE" /Applications/ || true
                   sudo xattr -dr com.apple.quarantine "/Applications/$BASENAME" 2>/dev/null || true
                   sudo codesign --force --deep --sign - "/Applications/$BASENAME" 2>/dev/null || true
@@ -1386,21 +1682,36 @@ jobs:
                 fi
                 ACTUAL="$SOFTWARE_TYPE"
                 if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
-                  if echo "$INSTALLED_APP_NAME$BASENAME" | grep -qi "gx"; then ACTUAL="opera_gx"; else ACTUAL="opera_one"; fi
+                  if echo "$INSTALLED_APP_NAME$BASENAME" | grep -qi "gx"; then
+                    ACTUAL="opera_gx"
+                  else
+                    ACTUAL="opera_one"
+                  fi
                 fi
-                echo "[$(date '+%H:%M:%S')] [Watcher] App type: $ACTUAL"
+                echo "[$(date '+%H:%M:%S')] [Watcher] Determined app type: $ACTUAL"
+                echo "[$(date '+%H:%M:%S')] [Watcher] Quitting Chrome..."
                 osascript -e 'tell application "Google Chrome" to quit' >/dev/null 2>&1 || true
                 sleep 2
                 if [ "$ACTUAL" = "opera_gx" ]; then
-                  SEARCH_PATHS=("/Applications/$INSTALLED_APP_NAME" "/Applications/Opera GX.app" "$HOME/Applications/Opera GX.app")
+                  SEARCH_PATHS=(
+                    "/Applications/$INSTALLED_APP_NAME"
+                    "/Applications/Opera GX.app"
+                    "$HOME/Applications/Opera GX.app"
+                  )
                 else
-                  SEARCH_PATHS=("/Applications/$INSTALLED_APP_NAME" "/Applications/Opera.app" "$HOME/Applications/Opera.app")
+                  SEARCH_PATHS=(
+                    "/Applications/$INSTALLED_APP_NAME"
+                    "/Applications/Opera.app"
+                    "$HOME/Applications/Opera.app"
+                  )
                 fi
+                echo "[$(date '+%H:%M:%S')] [Watcher] Waiting for app to appear on disk..."
                 LAUNCHED=false
                 for i in $(seq 1 60); do
                   for P in "${SEARCH_PATHS[@]}"; do
                     if [ -d "$P" ]; then
                       sleep 3
+                      echo "[$(date '+%H:%M:%S')] [Watcher] Launching: $P"
                       open "$P" || true
                       sleep 5
                       LAUNCHED=true
@@ -1411,10 +1722,13 @@ jobs:
                 done
                 if [ "$LAUNCHED" = false ]; then
                   FOUND=$(find /Applications "$HOME/Applications" -maxdepth 2 -name "Opera*.app" 2>/dev/null | head -n 1 || true)
-                  [ -n "$FOUND" ] && open "$FOUND" || true
+                  if [ -n "$FOUND" ]; then
+                    echo "[$(date '+%H:%M:%S')] [Watcher] Fallback launch: $FOUND"
+                    open "$FOUND" || true
+                  fi
                 fi
                 INSTALLED=true
-                echo "[$(date '+%H:%M:%S')] [Watcher] Install + launch complete."
+                echo "[$(date '+%H:%M:%S')] [Watcher] ✓ Install + launch sequence complete."
               else
                 sleep 5
               fi
@@ -1426,47 +1740,70 @@ jobs:
 
           CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
           CHROME_FLAGS=(
-            --no-first-run --no-default-browser-check --disable-sync --disable-translate
-            --disable-infobars --disable-notifications --disable-background-networking
-            --disable-client-side-phishing-detection --safebrowsing-disable-download-protection
+            --no-first-run
+            --no-default-browser-check
+            --disable-sync
+            --disable-translate
+            --disable-infobars
+            --disable-notifications
+            --disable-background-networking
+            --disable-client-side-phishing-detection
+            --safebrowsing-disable-download-protection
             --disable-features=SafeBrowsingEnhancedProtection,MediaRouter,DialMediaRouteProvider
-            --disable-extensions --disable-default-apps --password-store=basic --use-mock-keychain
+            --disable-extensions
+            --disable-default-apps
+            --password-store=basic
+            --use-mock-keychain
           )
 
           if [ "$USE_PROXY" = "true" ]; then
             PROXY_SRV="residential-proxy.scrapeops.io:8181"
             echo "[$(date '+%H:%M:%S')] Launching Chrome WITH proxy → $TARGET_URL"
+            echo "[$(date '+%H:%M:%S')] Proxy server: $PROXY_SRV"
             if [ -f "$CHROME_BIN" ]; then
-              "$CHROME_BIN" "${CHROME_FLAGS[@]}" --proxy-server="http://$PROXY_SRV" "$TARGET_URL" &
+              "$CHROME_BIN" \
+                "${CHROME_FLAGS[@]}" \
+                --proxy-server="http://$PROXY_SRV" \
+                "$TARGET_URL" &
               CHROME_PID=$!
+              echo "[$(date '+%H:%M:%S')] Chrome launched (PID $CHROME_PID)"
             else
-              echo "[$(date '+%H:%M:%S')] ERROR: Chrome binary not found"
+              echo "[$(date '+%H:%M:%S')] ERROR: Chrome binary not found at $CHROME_BIN"
               exit 1
             fi
           else
-            echo "[$(date '+%H:%M:%S')] Launching Chrome DIRECT → $TARGET_URL"
+            echo "[$(date '+%H:%M:%S')] Launching Chrome DIRECT (no proxy) → $TARGET_URL"
             if [ -f "$CHROME_BIN" ]; then
-              "$CHROME_BIN" "${CHROME_FLAGS[@]}" "$TARGET_URL" &
+              "$CHROME_BIN" \
+                "${CHROME_FLAGS[@]}" \
+                "$TARGET_URL" &
               CHROME_PID=$!
+              echo "[$(date '+%H:%M:%S')] Chrome launched (PID $CHROME_PID)"
             else
+              echo "[$(date '+%H:%M:%S')] Chrome not found — Safari fallback."
               open -a Safari "$TARGET_URL" || true
             fi
           fi
 
-          echo "[$(date '+%H:%M:%S')] Chrome launched. Waiting for handler to finish..."
+          echo "[$(date '+%H:%M:%S')] Chrome launch complete. Handler automation is running."
+          echo "[$(date '+%H:%M:%S')] Monitoring handler output in real time below:"
+          echo "------------------------------------------------------------"
+
           HANDLER_TIMEOUT=600
           POLL_START=$(date +%s)
           while kill -0 $HANDLER_PID 2>/dev/null; do
             ELAPSED=$(($(date +%s) - POLL_START))
             if [ $ELAPSED -gt $HANDLER_TIMEOUT ]; then
-              echo "[$(date '+%H:%M:%S')] Handler timeout – killing."
+              echo "[$(date '+%H:%M:%S')] Handler timeout (${ELAPSED}s) — killing."
               kill $HANDLER_PID 2>/dev/null || true
               break
             fi
             sleep 5
           done
-          echo "[$(date '+%H:%M:%S')] Handler finished."
-          kill $WATCHER_PID 2>/dev/null || true
+
+          echo "------------------------------------------------------------"
+          echo "[$(date '+%H:%M:%S')] Handler process finished."
+          kill $WATCHER_PID   2>/dev/null || true
           kill $DISMISSER_PID 2>/dev/null || true
           echo "[$(date '+%H:%M:%S')] === Installation workflow complete ==="
 
