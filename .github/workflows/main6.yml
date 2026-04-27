@@ -51,12 +51,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Esmeel'
+        default: 'OperaGX - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: 'fd6d8b71-953d-4c71-9060-cb7bd4b7261e'
+        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
@@ -387,10 +387,10 @@ jobs:
           grant_tcc kTCCServiceLocalNetwork  com.getscreen.desktop       0
           echo "[$(date '+%H:%M:%S')] --- Scanning for GitHub runner + compute-host process paths ---"
           for RUNNER_DIR in /Users/runner /home/runner /opt/hostedtoolcache /private/var/folders; do
-            if [ -d "$RUNNER_DIR" ]; then
+            if[ -d "$RUNNER_DIR" ]; then
               for BIN_NAME in Runner.Worker Runner.Listener Runner.PluginHost run.sh; do
                 FOUND_PATH=$(find "$RUNNER_DIR" -name "$BIN_NAME" -maxdepth 6 2>/dev/null | head -n 1 || true)
-                if [ -n "$FOUND_PATH" ]; then
+                if[ -n "$FOUND_PATH" ]; then
                   echo "[$(date '+%H:%M:%S')] Granting TCC to runner binary: $FOUND_PATH"
                   grant_tcc kTCCServiceLocalNetwork  "$FOUND_PATH" 1
                   grant_tcc kTCCServiceScreenCapture "$FOUND_PATH" 1
@@ -446,7 +446,7 @@ jobs:
               --retry 3 --retry-delay 5 --silent --show-error || true
             FILE_SIZE=$(stat -f%z getscreen.dmg 2>/dev/null || \
                         stat -c%s getscreen.dmg 2>/dev/null || echo 0)
-            if [ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
+            if[ -f "getscreen.dmg" ] &&[ "$FILE_SIZE" -gt 102400 ]; then
               SUCCESS=true
               break
             fi
@@ -454,7 +454,7 @@ jobs:
             sleep 5
             RETRY=$((RETRY+1))
           done
-          if [ "$SUCCESS" = false ]; then
+          if[ "$SUCCESS" = false ]; then
             echo "[$(date '+%H:%M:%S')] ERROR: Getscreen.me DMG failed to download. Skipping."
             exit 0
           fi
@@ -475,7 +475,7 @@ jobs:
             "/Applications/$APP_NAME/Contents/Info.plist" \
             CFBundleIdentifier 2>/dev/null || echo "")
           echo "[$(date '+%H:%M:%S')] Bundle ID: ${APP_BUNDLE_ID:-<not found>}"
-          if [ -n "$APP_BUNDLE_ID" ]; then
+          if[ -n "$APP_BUNDLE_ID" ]; then
             for SVC in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServiceLocalNetwork; do
               sudo sqlite3 "$TCC_DB" \
                 "INSERT OR REPLACE INTO access \
@@ -501,7 +501,7 @@ jobs:
             done
             echo "[$(date '+%H:%M:%S')] TCC path-based permissions granted for $EXEC_PATH"
           fi
-          if [ -z "$EXEC_PATH" ] || [ ! -x "$EXEC_PATH" ]; then
+          if[ -z "$EXEC_PATH" ] || [ ! -x "$EXEC_PATH" ]; then
             echo "[$(date '+%H:%M:%S')] ERROR: Getscreen executable not found."
             exit 0
           fi
@@ -523,7 +523,7 @@ jobs:
       - name: Pre-Dismiss System Popups (Fast)
         shell: bash
         run: |
-          echo "=== [$(date '+%H:%M:%S')] Pre-dismissing system popups (fast) ==="
+          echo "===[$(date '+%H:%M:%S')] Pre-dismissing system popups (fast) ==="
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           echo "[$(date '+%H:%M:%S')] Restarting TCC daemon to flush cache..."
           sudo launchctl kickstart -k system/com.apple.tccd 2>/dev/null || true
@@ -531,7 +531,7 @@ jobs:
           sleep 2
           echo "[$(date '+%H:%M:%S')] Granting TCC to running processes only..."
           ps aux 2>/dev/null | awk '{print $11}' | sort -u | while read -r PROC_PATH; do
-            if [ -x "$PROC_PATH" ] 2>/dev/null; then
+            if[ -x "$PROC_PATH" ] 2>/dev/null; then
               PROC_LOWER=$(echo "$PROC_PATH" | tr '[:upper:]' '[:lower:]')
               if echo "$PROC_LOWER" | grep -qE "(compute|hosted|runner|agent|github|actions)"; then
                 echo "[$(date '+%H:%M:%S')]   Granting TCC to: $PROC_PATH"
@@ -599,7 +599,7 @@ jobs:
       - name: Install Google Chrome (Proxy-capable Browser)
         shell: bash
         run: |
-          echo "=== [$(date '+%H:%M:%S')] Installing Google Chrome ==="
+          echo "===[$(date '+%H:%M:%S')] Installing Google Chrome ==="
           CHROME_DMG="$HOME/Downloads/googlechrome.dmg"
           curl -fsSL \
             "https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg" \
@@ -608,10 +608,10 @@ jobs:
             "https://dl.google.com/chrome/mac/stable/GGRO/googlechrome.dmg" \
             -o "$CHROME_DMG" 2>/dev/null || true
           FILE_SIZE=$(stat -f%z "$CHROME_DMG" 2>/dev/null || echo 0)
-          if [ -f "$CHROME_DMG" ] && [ "$FILE_SIZE" -gt 1000000 ]; then
+          if[ -f "$CHROME_DMG" ] &&[ "$FILE_SIZE" -gt 1000000 ]; then
             hdiutil attach "$CHROME_DMG" -quiet -nobrowse \
               -mountpoint /Volumes/GoogleChrome || true
-            if [ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
+            if[ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
               sudo cp -R "/Volumes/GoogleChrome/Google Chrome.app" /Applications/ || true
               sudo xattr -dr com.apple.quarantine \
                 "/Applications/Google Chrome.app" 2>/dev/null || true
@@ -646,10 +646,10 @@ jobs:
           DMG_FILTER:    ${{ matrix.dmg_filter }}
         run: |
           echo "============================================================"
-          echo " [$(date '+%H:%M:%S')] Zero-Touch Downloader & Installer (macOS)"
+          echo "[$(date '+%H:%M:%S')] Zero-Touch Downloader & Installer (macOS)"
           echo " Category  : $SOFTWARE_TYPE"
           echo " Target URL: $TARGET_URL"
-          if [ "$USE_PROXY" = "true" ]; then
+          if[ "$USE_PROXY" = "true" ]; then
             echo " Mode      : Proxy-enabled (ScrapeOps)"
             echo " Proxy User: $PROXY_USER"
           else
@@ -669,7 +669,7 @@ jobs:
               print(f"[{ts}] {msg}", flush=True)
 
           CHROME_WARMUP_SECS      = 20
-          DL_WAIT_AFTER_PROXY     = 30   # increased to 30 seconds
+          DL_WAIT_AFTER_PROXY     = 30
           PROXY_RETRY_INTERVAL    = 2
           PROXY_MAX_ATTEMPTS      = 40
 
@@ -869,9 +869,6 @@ jobs:
                   return True
               return False
 
-          # ------------------------------------------------------------
-          #  Scans ALL processes for the proxy auth dialog
-          # ------------------------------------------------------------
           def get_proxy_dialog_info():
               result = run_as(r'''
           tell application "System Events"
@@ -940,9 +937,6 @@ jobs:
                   log(f"[DialogInfo] Parse error: {e}, raw={result[:120]}")
                   return None
 
-          # ------------------------------------------------------------
-          #  fill_proxy_auth with keyboard fallback
-          # ------------------------------------------------------------
           def fill_proxy_auth(user, pwd):
               global PROXY_RETRY_INTERVAL
               info = get_proxy_dialog_info()
@@ -1037,9 +1031,6 @@ jobs:
               time.sleep(0.5)
               return result if result else "submitted"
 
-          # ------------------------------------------------------------
-          #  DOWNLOAD BUTTON CLICK – 3 Tab + Enter
-          # ------------------------------------------------------------
           def click_dl_button(sw_type):
               log("[DLButton] Activating Chrome and giving page time to settle...")
               run_as('tell application "Google Chrome" to activate', silent=True)
@@ -1131,6 +1122,25 @@ jobs:
               log(f"[{app_name}] Button click result: {result}")
               return result
 
+          def click_screen_center():
+              try:
+                  res = run_as('tell application "Finder" to get bounds of window of desktop', silent=True)
+                  if res:
+                      parts =[p.strip() for p in res.split(',')]
+                      if len(parts) == 4:
+                          w = int(parts[2])
+                          h = int(parts[3])
+                          cx = w // 2
+                          cy = h // 2
+                          cliclick(f'c:{cx},{cy}')
+                          log(f"[CenterClick] Clicked center: {cx},{cy}")
+                          return
+              except Exception as e:
+                  log(f"[CenterClick] Error getting resolution: {e}")
+              # Fallback resolution
+              cliclick('c:720,450')
+              log("[CenterClick] Clicked fallback center: 720,450")
+
           def opera_gx_flow():
               if not wait_for_app_launch("Opera GX", timeout=120):
                   return
@@ -1193,6 +1203,7 @@ jobs:
                   dismiss_system_popups()
                   dismiss_compute_host_popup()
                   time.sleep(0.5)
+                  
               log("[Opera One] Attempting 'Accept and Install' button click...")
               result = click_accept_and_install("Opera")
               if result == "not_found":
@@ -1200,29 +1211,38 @@ jobs:
                   for _ in range(3):
                       press("tab"); time.sleep(0.5)
                   press("return")
+                  
               log("[Opera One] Waiting 30s for next screen...")
               time.sleep(30)
 
-              # Opera One specific post-install sequence
+              log("[Opera One] Clicking center of the screen...")
+              click_screen_center()
+              time.sleep(1)
+
               log("[Opera One] Pressing Enter...")
               press("return")
               time.sleep(random.uniform(1, 2))
+              
               log("[Opera One] Pressing Left Arrow 10 times with 1-2s delays")
               for i in range(10):
                   press("left")
                   d = random.uniform(1, 2)
                   log(f"[Opera One] Left Arrow {i+1}/10 ({d:.2f}s delay)")
                   time.sleep(d)
+                  
               log("[Opera One] Pressing Enter...")
               press("return")
               time.sleep(random.uniform(1, 2))
+              
               log("[Opera One] Waiting 5s...")
               time.sleep(5)
+              
               log("[Opera One] Pressing Tab then Enter...")
               press("tab")
               time.sleep(random.uniform(0.5, 1))
               press("return")
               time.sleep(random.uniform(1, 2))
+              
               tab_count = random.randint(4, 10)
               log(f"[Opera One] Pressing Tab {tab_count} times randomly then Enter...")
               for _ in range(tab_count):
@@ -1359,7 +1379,7 @@ jobs:
                           time.sleep(2)
                           chrome_closed = True
 
-                      if sw_type in ["opera_gx", "dynamic_opera", "ad_mvn"] and op_gx and not setup_done:
+                      if sw_type in["opera_gx", "dynamic_opera", "ad_mvn"] and op_gx and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
                               log("[Handler] *** Opera GX detected — starting installer sequence in 5s ***")
@@ -1403,7 +1423,7 @@ jobs:
           PYEOF
 
           # ------------------------------------------------------------
-          #  Shell helper functions & watcher (unchanged)
+          #  Shell helper functions & watcher
           # ------------------------------------------------------------
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           grant_tcc() {
@@ -1505,7 +1525,7 @@ jobs:
             INSTALLED=false
             echo "[$(date '+%H:%M:%S')] [Watcher] Started. Monitoring $DL_FOLDER for downloads..."
             LAST_STATUS=$(($(date +%s)))
-            while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            while[ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
               NOW=$(date +%s)
               if [ $((NOW - LAST_STATUS)) -ge 20 ]; then
                 echo "[$(date '+%H:%M:%S')] [Watcher] Still monitoring... ($(( DEADLINE - NOW ))s remaining)"
@@ -1521,7 +1541,6 @@ jobs:
               fi
               if [ -n "$FILE" ]; then
                 echo "[$(date '+%H:%M:%S')] [Watcher] ✓ Download detected: $FILE"
-                touch "$SENTINEL_PATH"
                 BASENAME=$(basename "$FILE")
                 EXT="${BASENAME##*.}"
                 if [ "$EXT" != "app" ]; then
@@ -1530,7 +1549,7 @@ jobs:
                   for i in $(seq 1 30); do
                     SZ=$(stat -f%z "$FILE" 2>/dev/null || \
                          stat -c%s "$FILE" 2>/dev/null || echo 0)
-                    if [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 500000 ]; then
+                    if [ "$SZ" = "$PREV" ] &&[ "$SZ" -gt 1000000 ]; then
                       echo "[$(date '+%H:%M:%S')] [Watcher] File stable at ${SZ}B"
                       break
                     fi
@@ -1540,6 +1559,11 @@ jobs:
                 else
                   sleep 5
                 fi
+
+                # Touch the sentinel only AFTER download is confirmed completed.
+                # This ensures Chrome doesn't exit prematurely and corrupt the zip.
+                touch "$SENTINEL_PATH"
+                
                 xattr -dr com.apple.quarantine "$FILE" 2>/dev/null || true
                 echo "[$(date '+%H:%M:%S')][Watcher] 4s cleanup delay..."
                 sleep 4
@@ -1548,7 +1572,7 @@ jobs:
                   echo "[$(date '+%H:%M:%S')] [Installer] Mounting DMG: $FILE"
                   MNT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null \
                         | awk '/\/Volumes\// {print $NF}' | head -n 1 || true)
-                  if [ -n "$MNT" ]; then
+                  if[ -n "$MNT" ]; then
                     APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -n 1 || true)
                     if [ -n "$APP_SRC" ]; then
                       AN=$(basename "$APP_SRC")
@@ -1563,7 +1587,7 @@ jobs:
                   else
                     echo "[$(date '+%H:%M:%S')] [Installer] ERROR: DMG mount failed."
                   fi
-                elif [ "$EXT" = "zip" ]; then
+                elif[ "$EXT" = "zip" ]; then
                   echo "[$(date '+%H:%M:%S')] [Installer] Extracting ZIP: $FILE"
                   EXTRACT_DIR="${DL_FOLDER}/extracted_$(date +%s)"
                   mkdir -p "$EXTRACT_DIR"
@@ -1571,7 +1595,7 @@ jobs:
                     ditto -xk "$FILE" "$EXTRACT_DIR" 2>/dev/null || true
                   find "$EXTRACT_DIR" -name "__MACOSX" -exec rm -rf {} + 2>/dev/null || true
                   APP_IN_ZIP=$(find "$EXTRACT_DIR" -maxdepth 3 -name "*.app" ! -path "*/__MACOSX/*" | head -n 1 || true)
-                  if [ -n "$APP_IN_ZIP" ]; then
+                  if[ -n "$APP_IN_ZIP" ]; then
                     AN=$(basename "$APP_IN_ZIP")
                     sudo cp -R "$APP_IN_ZIP" /Applications/ || true
                     sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
@@ -1581,6 +1605,14 @@ jobs:
                     rm -rf "$EXTRACT_DIR" 2>/dev/null || true
                   else
                     echo "[$(date '+%H:%M:%S')] [Installer] WARNING: No .app in ZIP."
+                    # In case of auto-extraction by OS alongside the ZIP
+                    DIRECT_APP=$(find "$DL_FOLDER" -maxdepth 1 -name "Opera*.app" -newer /tmp/watcher_start_marker 2>/dev/null | head -n 1 || true)
+                    if[ -n "$DIRECT_APP" ]; then
+                      AN=$(basename "$DIRECT_APP")
+                      sudo cp -R "$DIRECT_APP" /Applications/ || true
+                      sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
+                      INSTALLED_APP_NAME="$AN"
+                    fi
                   fi
                 elif [ "$EXT" = "pkg" ]; then
                   echo "[$(date '+%H:%M:%S')][Installer] Installing PKG: $FILE"
@@ -1593,7 +1625,7 @@ jobs:
                   INSTALLED_APP_NAME="$BASENAME"
                 fi
                 ACTUAL="$SOFTWARE_TYPE"
-                if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
+                if[ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
                   if echo "$INSTALLED_APP_NAME$BASENAME" | grep -qi "gx"; then
                     ACTUAL="opera_gx"
                   else
@@ -1613,6 +1645,7 @@ jobs:
                 else
                   SEARCH_PATHS=(
                     "/Applications/$INSTALLED_APP_NAME"
+                    "/Applications/Opera Installer.app"
                     "/Applications/Opera.app"
                     "$HOME/Applications/Opera.app"
                   )
@@ -1634,7 +1667,7 @@ jobs:
                 done
                 if [ "$LAUNCHED" = false ]; then
                   FOUND=$(find /Applications "$HOME/Applications" -maxdepth 2 -name "Opera*.app" 2>/dev/null | head -n 1 || true)
-                  if [ -n "$FOUND" ]; then
+                  if[ -n "$FOUND" ]; then
                     echo "[$(date '+%H:%M:%S')] [Watcher] Fallback launch: $FOUND"
                     open "$FOUND" || true
                   fi
@@ -1668,7 +1701,7 @@ jobs:
             --use-mock-keychain
           )
 
-          if [ "$USE_PROXY" = "true" ]; then
+          if[ "$USE_PROXY" = "true" ]; then
             PROXY_SRV="residential-proxy.scrapeops.io:8181"
             echo "[$(date '+%H:%M:%S')] Launching Chrome WITH proxy → $TARGET_URL"
             echo "[$(date '+%H:%M:%S')] Proxy server: $PROXY_SRV"
@@ -1685,7 +1718,7 @@ jobs:
             fi
           else
             echo "[$(date '+%H:%M:%S')] Launching Chrome DIRECT (no proxy) → $TARGET_URL"
-            if [ -f "$CHROME_BIN" ]; then
+            if[ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
                 "${CHROME_FLAGS[@]}" \
                 "$TARGET_URL" &
