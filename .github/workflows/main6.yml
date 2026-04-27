@@ -51,12 +51,12 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Esmeel'
+        default: 'OperaGX - B4Books'
       scrapeops_api_key:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '9215b08e-0b9d-4c13-a6d5-5d587e6a885b'
+        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
@@ -1054,6 +1054,31 @@ jobs:
               run_as('tell application "Google Chrome" to execute active tab of front window javascript "if(document.activeElement) document.activeElement.click()"', silent=True)
               return "tab3_enter"
 
+          def click_screen_center():
+              """Click at the centre of the main screen using actual bounds."""
+              try:
+                  # Get screen bounds via AppleScript (returns e.g. "0, 0, 1440, 900")
+                  raw = run_as(
+                      'tell application "Finder" to get bounds of window of desktop',
+                      silent=True, timeout=10
+                  )
+                  # raw might be empty; fallback to default
+                  if not raw:
+                      raise Exception("No bounds returned")
+                  parts = [int(x.strip()) for x in raw.split(",")]
+                  if len(parts) >= 4:
+                      cx = (parts[0] + parts[2]) // 2
+                      cy = (parts[1] + parts[3]) // 2
+                      log(f"[ClickCenter] Clicking at ({cx},{cy})")
+                      cliclick(f'c:{cx},{cy}')
+                      return True
+              except Exception as e:
+                  log(f"[ClickCenter] Error getting screen bounds: {e}")
+              # Fallback: click at common center (1440x900)
+              log("[ClickCenter] Using fallback centre (720,450)")
+              cliclick('c:720,450')
+              return True
+
           def accept_cookie():
               for b in["Accept all", "Accept All", "Accept Cookies",
                         "Allow all", "Accepter tout", "I agree", "Got it"]:
@@ -1184,6 +1209,11 @@ jobs:
                   press("return")
               log("[Opera One] Waiting 30s for next screen...")
               time.sleep(30)
+
+              # New step: click at screen centre to focus the Opera window
+              log("[Opera One] Clicking at screen centre...")
+              click_screen_center()
+              time.sleep(1)
 
               # Opera One specific post-install sequence
               log("[Opera One] Pressing Enter...")
