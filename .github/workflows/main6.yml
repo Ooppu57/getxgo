@@ -56,7 +56,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '689fa34c-955a-469a-96ec-1fad7a328270'
+        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
@@ -696,7 +696,7 @@ jobs:
           fi
 
       # ================================================================== #
-      # STEP 6 — Download, Install & Automate Software                     #
+      # STEP 6 — Download, Install & Automate Software (ROBUST PROXY AUTH) #
       # ================================================================== #
       - name: Setup Auto-Downloader & Software Installation (macOS)
         shell: bash
@@ -1047,68 +1047,19 @@ jobs:
                   return None
 
           def fill_proxy_auth(user, pwd):
+              global PROXY_RETRY_INTERVAL
               info = get_proxy_dialog_info()
-
               if info is None:
                   return "no_dialog"
               if info.get("type") == "sheet_loading":
                   return "sheet_loading"
 
               log(f"[ProxyAuth] Dialog type={info['type']} | fields at {info['f1']} and {info['f2']} | btn at {info['btn']} | {info.get('info','')}")
-              run_as('tell application "System Events" to tell process "Google Chrome" to set frontmost to true', silent=True)
-              time.sleep(0.4)
 
-              f1x, f1y = info["f1"]
-              log(f"[ProxyAuth] Clicking username field at ({f1x},{f1y})")
-              if not cliclick(f'c:{f1x},{f1y}'):
-                  run_as(f'''
-          tell application "System Events"
-            tell process "Google Chrome"
-              try
-                click text field 1 of sheet 1 of window 1
-              end try
-            end tell
-          end tell''', silent=True)
-              time.sleep(0.3)
-
-              clipboard_set(user)
-              clipboard_verify(user, "username")
-              run_as('tell application "System Events" to keystroke "a" using command down', silent=True)
-              time.sleep(0.15)
-              run_as('tell application "System Events" to keystroke "v" using command down', silent=True)
-              time.sleep(0.4)
-              log(f"[ProxyAuth] Username paste sent (user={user[:20]}...)")
-
-              f2x, f2y = info["f2"]
-              log(f"[ProxyAuth] Clicking password field at ({f2x},{f2y})")
-              if not cliclick(f'c:{f2x},{f2y}'):
-                  run_as(f'''
-          tell application "System Events"
-            tell process "Google Chrome"
-              try
-                click text field 2 of sheet 1 of window 1
-              on error
-                key code 48
-              end try
-            end tell
-          end tell''', silent=True)
-              time.sleep(0.3)
-
-              clipboard_set(pwd)
-              clipboard_verify(pwd, "password")
-              run_as('tell application "System Events" to keystroke "a" using command down', silent=True)
-              time.sleep(0.15)
-              run_as('tell application "System Events" to keystroke "v" using command down', silent=True)
-              time.sleep(0.4)
-              log("[ProxyAuth] Password paste sent")
-
-              btnx, btny = info["btn"]
-              log(f"[ProxyAuth] Clicking Sign In button at ({btnx},{btny})")
-              time.sleep(0.2)
-              cliclick(f'c:{btnx},{btny}')
-              time.sleep(0.3)
-
-              result = run_as(r'''
+              def _click_sign_in():
+                  # Try multiple ways to click Sign In
+                  # 1. AppleScript UI click
+                  r = run_as(r'''
           tell application "System Events"
             tell process "Google Chrome"
               set frontmost to true
@@ -1140,14 +1091,61 @@ jobs:
             end tell
           end tell
           ''', silent=False)
+                  if "no_button" not in (r or ""):
+                      return r
+                  # 2. cliclick coordinate press (if we have coordinates)
+                  if info:
+                      btnx, btny = info["btn"]
+                      log(f"[ProxyAuth] cliclick Sign In at ({btnx},{btny})")
+                      cliclick(f'c:{btnx},{btny}')
+                      time.sleep(0.3)
+                      # Check if dialog disappeared
+                      if not get_proxy_dialog_info():
+                          return "cliclick_sign_in"
+                  # 3. Keyboard navigation: Tab to button and press Space/Enter
+                  log("[ProxyAuth] Keyboard fallback for Sign In")
+                  for _ in range(2):
+                      press("tab"); time.sleep(0.15)
+                  press("space"); time.sleep(0.2)
+                  press("return"); time.sleep(0.2)
+                  # 4. Direct Enter keycode
+                  run_as('tell application "System Events" to key code 36', silent=True)
+                  return "keyboard_sign_in"
 
-              log(f"[ProxyAuth] Sign In button result: {result}")
-              if "no_button" in (result or ""):
-                  log("[ProxyAuth] Button not found via AppleScript — pressing Return as fallback")
-                  run_as('tell application "System Events" to tell process "Google Chrome" to key code 36', silent=True)
-                  time.sleep(0.3)
-                  result = "return_pressed"
+              # Activate Chrome
+              run_as('tell application "System Events" to tell process "Google Chrome" to set frontmost to true', silent=True)
+              time.sleep(0.4)
 
+              # Fill username
+              f1x, f1y = info["f1"]
+              log(f"[ProxyAuth] Clicking username field at ({f1x},{f1y})")
+              if not cliclick(f'c:{f1x},{f1y}'):
+                  run_as('tell application "System Events" to click text field 1 of sheet 1 of window 1', silent=True)
+              time.sleep(0.3)
+              clipboard_set(user)
+              clipboard_verify(user, "username")
+              run_as('tell application "System Events" to keystroke "a" using command down', silent=True)
+              time.sleep(0.15)
+              run_as('tell application "System Events" to keystroke "v" using command down', silent=True)
+              time.sleep(0.4)
+
+              # Fill password via Tab or cliclick
+              f2x, f2y = info["f2"]
+              log(f"[ProxyAuth] Moving to password field at ({f2x},{f2y})")
+              # Use Tab to move to next text field
+              press("tab"); time.sleep(0.2)
+              if not cliclick(f'c:{f2x},{f2y}'):
+                  run_as('tell application "System Events" to click text field 2 of sheet 1 of window 1', silent=True)
+              time.sleep(0.3)
+              clipboard_set(pwd)
+              clipboard_verify(pwd, "password")
+              run_as('tell application "System Events" to keystroke "a" using command down', silent=True)
+              time.sleep(0.15)
+              run_as('tell application "System Events" to keystroke "v" using command down', silent=True)
+              time.sleep(0.4)
+
+              result = _click_sign_in()
+              log(f"[ProxyAuth] Sign In attempt result: {result}")
               time.sleep(0.5)
               return result if result else "submitted"
 
@@ -1447,6 +1445,7 @@ jobs:
               log("[Chrome] Quit signal sent.")
 
           def handle(user, pwd, sw_type, use_proxy, timeout=420):
+              global PROXY_RETRY_INTERVAL
               t0 = time.time()
               sentinel = "/tmp/download_done.flag"
 
@@ -1525,7 +1524,7 @@ jobs:
                           if result in ("no_dialog", "sheet_loading"):
                               log(f"[ProxyAuth] Dialog not ready yet ({result}) — will retry in {PROXY_RETRY_INTERVAL}s")
                               PROXY_RETRY_INTERVAL = 2
-                          elif "sign" in result.lower() or "ok" in result.lower() or "return" in result.lower() or "submitted" in result.lower():
+                          elif "sign" in result.lower() or "ok" in result.lower() or "return" in result.lower() or "submitted" in result.lower() or "keyboard" in result.lower() or "cliclick" in result.lower():
                               log("[ProxyAuth] ✓ Proxy auth appears complete!")
                               proxy_done      = True
                               proxy_done_time = time.time()
