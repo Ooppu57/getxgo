@@ -51,7 +51,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'AVG - Trader'
+        default: 'AVG - F.ahmad'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
