@@ -56,7 +56,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '28358992-54de-419a-abc3-da89dbfe01f2'
+        default: '5a76d13d-2645-479e-a462-90be4ab99e12'
       run_without_proxy:
         description: 'Run without proxy (Bypass all proxies)'
         required: true
@@ -669,8 +669,7 @@ jobs:
               print(f"[{ts}] {msg}", flush=True)
 
           CHROME_WARMUP_SECS      = 20
-          PROXY_WAIT_BEFORE_AUTH  = 10
-          DL_WAIT_AFTER_PROXY     = 20   # wait 20 seconds for page load after proxy auth
+          DL_WAIT_AFTER_PROXY     = 20
           PROXY_RETRY_INTERVAL    = 2
           PROXY_MAX_ATTEMPTS      = 40
 
@@ -1039,164 +1038,65 @@ jobs:
               return result if result else "submitted"
 
           # ------------------------------------------------------------
-          #  Ultra-robust download button click – primary: Tab-Tab-Enter
+          #  NEW, RELIABLE DOWNLOAD CLICK – Tab once then Enter
           # ------------------------------------------------------------
           def click_dl_button():
-              # Small extra wait to be safe
+              # Ensure Chrome is active
+              run_as('tell application "Google Chrome" to activate', silent=True)
               time.sleep(2)
 
-              # PRIMARY METHOD: exactly what the user observed works
-              log("[DLButton] Trying keyboard Tab-Tab-Enter (user confirmed method)")
-              run_as('tell application "Google Chrome" to activate', silent=True)
+              # First method: Tab once (the download button should be focused) and press Enter
+              log("[DLButton] Attempting Tab+Enter (primary method)")
+              press("tab")
+              time.sleep(0.5)
+              press("return")
               time.sleep(1)
 
-              # Clear any existing text selection
-              run_as('tell application "System Events" to keystroke "a" using command down', silent=True)
-              time.sleep(0.1)
+              # Check if download started (sentinel exists)
+              if os.path.exists("/tmp/download_done.flag"):
+                  log("[DLButton] ✓ Download started after first Tab+Enter!")
+                  return "tab_enter_primary"
 
-              # Two tabs to reach the download button
+              # If not, try a second Tab+Enter (in case focus needed an extra push)
+              log("[DLButton] First Tab+Enter didn't trigger download, trying again...")
               press("tab")
-              time.sleep(0.3)
-              press("tab")
-              time.sleep(0.3)
-              # Press Enter
-              press("return")
               time.sleep(0.5)
+              press("return")
+              time.sleep(1)
+              if os.path.exists("/tmp/download_done.flag"):
+                  log("[DLButton] ✓ Download started after second Tab+Enter!")
+                  return "tab_enter_second"
 
-              # Wait a moment to see if download starts (sentinel will be set by watcher)
-              for _ in range(5):
-                  if os.path.exists("/tmp/download_done.flag"):
-                      log("[DLButton] ✓ Tab-Tab-Enter triggered download!")
-                      return "tab_tab_enter"
-                  time.sleep(1)
-
-              # If not triggered, try again with slight variations
-              log("[DLButton] Tab-Tab-Enter didn't immediately start download, retrying with space/enter...")
-              for _ in range(2):
-                  press("tab"); time.sleep(0.2)
-              press("space"); time.sleep(0.3)
-              press("return"); time.sleep(0.3)
-              for _ in range(5):
-                  if os.path.exists("/tmp/download_done.flag"):
-                      log("[DLButton] ✓ Keyboard variation succeeded")
-                      return "keyboard_variant"
-
-              # Fallback: try clicking via AppleScript UI
-              log("[DLButton] Keyboard method failed, trying AppleScript UI click...")
-              as_result = run_as(r'''
-          tell application "System Events"
-            tell process "Google Chrome"
-              repeat with btn in (every button of window 1)
-                set n to ""
-                try
-                  set n to (name of btn) as string
-                end try
-                if n contains "Download" or n contains "download" or n contains "Install" or n contains "Get Opera" then
-                  click btn
-                  return "as_clicked:" & n
-                end if
-              end repeat
-              repeat with grp in (every group of window 1)
-                repeat with btn in (every button of grp)
-                  set n to ""
-                  try
-                    set n to (name of btn) as string
-                  end try
-                  if n contains "Download" or n contains "download" then
-                    click btn
-                    return "as_group_clicked:" & n
-                  end if
-                end repeat
-              end repeat
-            end tell
-          end tell
-          return "as_not_found"
-          ''', silent=True)
-              if as_result and "clicked" in as_result:
-                  log(f"[DLButton] ✓ AppleScript UI click: {as_result}")
-                  return "as_clicked"
-
-              # Fallback: JavaScript (broad selectors)
-              log("[DLButton] Trying JavaScript click fallback...")
+              # Fallback: Use JavaScript click (reliable for Opera pages)
               js_code = """
               (function() {
-                var selectors = [
-                  'a[data-dtime]',
-                  'a[href*="download"]',
-                  '.download-button',
-                  '.cta-button',
-                  '.btn-download',
-                  '#download-button',
-                  'button[data-download]',
-                  'a[data-track*="download"]',
-                  'a.download',
-                  '[aria-label*="download" i]',
-                  '[aria-label*="Download" i]',
-                  'button',
-                  'a[href]',
-                  '[role="button"]',
-                  '.btn',
-                  '.button',
-                  'a[class*="download"]',
-                  'a[class*="Download"]',
-                  'a[id*="download"]',
-                  'a[id*="Download"]'
-                ];
-                var keywords = [
-                  'download', 'Download', 'DOWNLOAD',
-                  'get opera', 'Get Opera', 'GET OPERA',
-                  'install', 'Install', 'INSTALL',
-                  'free download', 'Free Download',
-                  'get for free', 'Get for free',
-                  'get now', 'Get Now',
-                  'download now', 'Download Now',
-                  'try opera', 'Try Opera'
-                ];
-                for (var si = 0; si < selectors.length; si++) {
-                  var els = document.querySelectorAll(selectors[si]);
-                  for (var i = 0; i < els.length; i++) {
-                    var el = els[i];
-                    if (!el.offsetParent && el.tagName !== 'A') continue;
-                    var txt = (el.textContent || el.innerText || el.value || '').trim();
-                    var href = (el.href || '').toLowerCase();
-                    var aria = (el.getAttribute('aria-label') || '').toLowerCase();
-                    for (var ki = 0; ki < keywords.length; ki++) {
-                      var kw = keywords[ki].toLowerCase();
-                      if (txt.toLowerCase().indexOf(kw) !== -1 ||
-                          href.indexOf('download') !== -1 ||
-                          aria.indexOf('download') !== -1) {
-                        el.click();
-                        return 'js_clicked:' + txt.substring(0, 60).trim();
-                      }
-                    }
-                  }
-                }
-                var allLinks = document.querySelectorAll('a');
-                for (var j = 0; j < allLinks.length; j++) {
-                  if (allLinks[j].href && allLinks[j].href.toLowerCase().indexOf('download') !== -1) {
-                    allLinks[j].click();
-                    return 'js_href_clicked:' + allLinks[j].href;
+                var links = document.querySelectorAll('a');
+                for (var i = 0; i < links.length; i++) {
+                  var txt = (links[i].textContent || '').toLowerCase().trim();
+                  var href = (links[i].href || '').toLowerCase();
+                  if (txt.includes('download') || href.includes('download')) {
+                    links[i].click();
+                    return 'js_clicked:' + txt;
                   }
                 }
                 return 'js_not_found';
               })();
               """
               js_result = run_as(f'tell application "Google Chrome" to execute active tab of front window javascript "{js_code}"', silent=True)
+              log(f"[DLButton] JS fallback result: {js_result}")
               if js_result and "clicked" in js_result:
-                  log(f"[DLButton] ✓ JavaScript click succeeded: {js_result}")
-                  return "js_clicked"
+                  return "js_fallback"
 
-              # Last resort: reload and try keyboard again
-              log("[DLButton] Reloading page and retrying Tab-Tab-Enter...")
-              run_as('tell application "Google Chrome" to reload active tab of front window', silent=True)
-              time.sleep(5)
-              run_as('tell application "Google Chrome" to activate', silent=True)
-              time.sleep(1)
-              press("tab"); time.sleep(0.3)
-              press("tab"); time.sleep(0.3)
-              press("return"); time.sleep(0.5)
+              # Last resort: keyboard tab through page and press Enter on each link
+              for _ in range(15):
+                  press("tab")
+                  time.sleep(0.2)
+                  press("return")
+                  time.sleep(0.3)
+                  if os.path.exists("/tmp/download_done.flag"):
+                      return "keyboard_scan"
 
-              log("[DLButton] All download click methods exhausted.")
+              log("[DLButton] All download methods exhausted.")
               return "not_found"
 
           def accept_cookie():
@@ -1355,7 +1255,6 @@ jobs:
               proxy_done         = False
               proxy_done_time    = None
               dl_clicked         = False
-              dl_clicked_time    = None
               chrome_closed      = False
               setup_done         = False
               op_launch_t        = None
@@ -1386,7 +1285,6 @@ jobs:
                       if chrome and chrome_first_seen is None:
                           chrome_first_seen = time.time()
                           log(f"[Handler] *** Chrome detected at t={elapsed}s ***")
-                          log(f"[Handler] Starting {CHROME_WARMUP_SECS}s warmup — dismissing compute-host popups...")
 
                       warmup_done = (
                           chrome_first_seen is not None and
@@ -1394,9 +1292,6 @@ jobs:
                       )
 
                       if chrome_first_seen and not warmup_done:
-                          warmup_elapsed = int(time.time() - chrome_first_seen)
-                          if warmup_elapsed % 5 == 0 and time.time() - last_popup_dismiss > 4:
-                              log(f"[Handler] WARMUP {warmup_elapsed}/{CHROME_WARMUP_SECS}s — checking for compute-host dialog...")
                           dismiss_compute_host_popup()
                           dismiss_system_popups()
                           last_popup_dismiss = time.time()
@@ -1445,25 +1340,23 @@ jobs:
                                   if wait_left % 5 == 0:
                                       log(f"[Handler] Waiting {wait_left}s more before download button click...")
                               else:
-                                  if time.time() - last_dl_try > 8:
+                                  if time.time() - last_dl_try > 10:   # try every 10 seconds
                                       last_dl_try = time.time()
                                       log(f"[DLButton] === Attempting download button click (t={elapsed}s) ===")
                                       result = click_dl_button()
                                       if result != "not_found":
-                                          dl_clicked      = True
-                                          dl_clicked_time = time.time()
+                                          dl_clicked = True
                                           log(f"[DLButton] ✓ Download triggered! ({result})")
                                       else:
-                                          log(f"[DLButton] Not found yet — retrying in 8s")
+                                          log(f"[DLButton] Not found yet — retrying in 10s")
                           else:
                               if chrome_first_seen and (time.time() - chrome_first_seen) > 5:
-                                  if time.time() - last_dl_try > 8:
+                                  if time.time() - last_dl_try > 10:
                                       last_dl_try = time.time()
                                       log(f"[DLButton] === Attempting download button click (t={elapsed}s, no-proxy mode) ===")
                                       result = click_dl_button()
                                       if result != "not_found":
-                                          dl_clicked      = True
-                                          dl_clicked_time = time.time()
+                                          dl_clicked = True
                                           log(f"[DLButton] ✓ Download triggered! ({result})")
 
                       if not chrome_closed and os.path.exists(sentinel):
@@ -1515,7 +1408,7 @@ jobs:
           PYEOF
 
           # ------------------------------------------------------------
-          #  Shell script continues (watcher, chrome launch, etc.)
+          #  Shell helper functions & watcher (unchanged)
           # ------------------------------------------------------------
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           grant_tcc() {
