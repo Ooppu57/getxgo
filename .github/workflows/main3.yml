@@ -30,7 +30,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '5'
+        default: '1'
       num_clicks:
         description: 'Number of Clicks'
         required: true
@@ -42,7 +42,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '3'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -111,7 +111,7 @@ on:
         description: 'ScrapeOps API / Manual Proxies'
         required: false
         type: string
-        default: 'c6c0df7f-47c8-47c3-bfc3-6adfda3c963b'
+        default: 'aa45bf56-82fa-4af5-9c92-33d8910d9607'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
