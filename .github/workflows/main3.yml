@@ -16,7 +16,7 @@ on:
         description: 'Getscreen.me Account Email'
         required: true
         type: string
-        default: 'techx@highmail.site'
+        default: 'techx@justzeus.com'
       num_devices:
         description: 'Number of Devices to Spawn'
         required: true
@@ -39,7 +39,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '2'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -63,30 +63,58 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera - Oliver'
+        default: 'Ad-MVN - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
         type: string
         default: ''
       run_manual_link:
-        description: 'Run manual link'
+        description: 'Run Manual link'
         required: true
         type: boolean
         default: false
+      # -----------------------------------------------------------------------
+      # MULTI-FUNCTIONAL PROXY / API KEY INPUT
+      # -----------------------------------------------------------------------
+      # Accepts ONE of three input styles — auto-detected at runtime:
+      #
+      #   1. SCRAPEOPS API KEY  →  single token, no spaces, no "://"
+      #      Example:  fd6d8b71-953d-4c71-9060-cb7bd4b7261e
+      #
+      #   2. SINGLE MANUAL PROXY  →  one proxy string in any supported format
+      #      Supported formats (HTTPS or SOCKS5):
+      #        host:port
+      #        host:port:user:pass
+      #        user:pass@host:port
+      #        http://host:port
+      #        http://user:pass@host:port
+      #        https://host:port
+      #        https://user:pass@host:port
+      #        socks5://host:port
+      #        socks5://user:pass@host:port
+      #
+      #   3. MULTIPLE MANUAL PROXIES  →  paste several proxies separated by
+      #      spaces, commas, semicolons, or pipe characters (|).
+      #      GitHub Actions collapses multi-line textarea input into one line
+      #      so any of those separators work as line delimiters.
+      #      Example:
+      #        socks5://user:pass@1.2.3.4:1080 http://u:p@5.6.7.8:3128 9.10.11.12:8080:usr:pwd
+      #
+      # NOTE: If use_without_proxy is checked this field is ignored entirely.
+      # -----------------------------------------------------------------------
       scrapeops_api_key:
-        description: |
-          ScrapeOps / Proxies  
+        description: 'ScrapeOps API / Manual Proxies'
         required: false
         type: string
-        default: '7863e946-935d-4b03-b42a-79ebf7f43868'
+        default: 'fd6d8b71-953d-4c71-9060-cb7bd4b7261e'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
         type: boolean
         default: false
       proxy_country:
-        description: 'Proxy Country'
+        description: 'Proxy Country Geotargeting'
         required: true
         type: choice
         options:
@@ -105,14 +133,14 @@ on:
           - 'Italy'
           - 'Netherlands'
           - 'Poland'
-        default: 'Australia'
+        default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
         default: false
       sticky_sessions:
-        description: 'Use Unique Sticky Sessions'
+        description: 'Enable Unique Sticky Sessions'
         required: true
         type: boolean
         default: true
@@ -129,6 +157,9 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT }}
 
+      - name: Install Python proxy-check dependencies
+        run: pip install requests PySocks --quiet
+
       - name: Generate Dynamic Matrix & Proxy Config
         id: set-matrix
         shell: python
@@ -140,43 +171,293 @@ jobs:
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
           MANUAL_URL: ${{ inputs.manual_software_url }}
           RUN_MANUAL: ${{ inputs.run_manual_link }}
-          API_KEY: ${{ inputs.scrapeops_api_key }}
+          PROXY_INPUT: ${{ inputs.scrapeops_api_key }}
           WITHOUT_PROXY: ${{ inputs.use_without_proxy }}
           COUNTRY: ${{ inputs.proxy_country }}
           MOBILE: ${{ inputs.mobile_proxies }}
           STICKY: ${{ inputs.sticky_sessions }}
         run: |
-          import os, json, uuid, random, re, sys, subprocess, time
-          from urllib.parse import urlparse
-
-          # Ensure required packages are available
-          subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "pysocks", "--quiet"])
-          import requests
+          import os, json, uuid, random, re, socket, time
+          import urllib.request, urllib.error
 
           print("========== INITIALIZING MATRIX GENERATION ==========")
 
-          email = os.environ.get("EMAIL", "").strip()
+          # ================================================================
+          # SECTION 1 — PROXY INPUT CLASSIFIER
+          # ================================================================
+          # Rules (applied in order):
+          #   1. If use_without_proxy → no proxy at all
+          #   2. If input is empty / null-like → no proxy
+          #   3. If input contains "://" OR contains a colon-separated token
+          #      that looks like host:port (with optional user:pass) → MANUAL
+          #   4. Otherwise → treat as ScrapeOps API key
+          #
+          # "Looks like proxies" heuristic:
+          #   • Contains "://"  (http://, https://, socks5://)
+          #   • OR multiple tokens (space/comma/semicolon/pipe separated)
+          #     where at least one contains ":" and a digit run that could
+          #     be a port (i.e. last colon-segment is 2–5 digits)
+          #   • OR single token matching  host:port  or  host:port:user:pass
+          #     (port portion is numeric, 2–5 digits)
+          # ================================================================
+
+          SCRAPEOPS_MODE  = "scrapeops"
+          MANUAL_MODE     = "manual"
+          NO_PROXY_MODE   = "none"
+
+          def _looks_like_proxy_token(token):
+              """Return True if a whitespace-stripped token looks like a proxy address."""
+              t = token.strip()
+              if not t:
+                  return False
+              # explicit scheme
+              if re.match(r'^(https?|socks[45])://', t, re.I):
+                  return True
+              # host:port  or  host:port:user:pass  or  user:pass@host:port
+              parts = t.split(':')
+              if len(parts) >= 2:
+                  # last numeric part is a port candidate
+                  port_candidate = parts[-1] if '@' not in parts[-1] else parts[-1].split('@')[-1]
+                  if re.match(r'^\d{2,5}$', port_candidate):
+                      return True
+              return False
+
+          def classify_proxy_input(raw):
+              """
+              Returns (mode, tokens_list)
+              mode  : SCRAPEOPS_MODE | MANUAL_MODE | NO_PROXY_MODE
+              tokens: list of raw proxy strings (only meaningful in MANUAL_MODE)
+              """
+              # Normalise
+              raw = (raw or "").strip()
+
+              NULL_VALS = {"", "none", "null", "false", "blank", "empty", "''", '""'}
+              if raw.lower() in NULL_VALS:
+                  return NO_PROXY_MODE, []
+
+              # Split on whitespace, commas, semicolons, pipes
+              tokens = [t.strip() for t in re.split(r'[\s,;|]+', raw) if t.strip()]
+
+              if not tokens:
+                  return NO_PROXY_MODE, []
+
+              # If any token looks like a proxy → MANUAL mode
+              proxy_like = [t for t in tokens if _looks_like_proxy_token(t)]
+              if proxy_like:
+                  print(f"[Classifier] Detected MANUAL PROXY mode. Raw proxy tokens: {len(tokens)}")
+                  return MANUAL_MODE, tokens
+
+              # Single non-proxy-like token → ScrapeOps API key
+              if len(tokens) == 1:
+                  print(f"[Classifier] Detected SCRAPEOPS API KEY mode.")
+                  return SCRAPEOPS_MODE, []
+
+              # Multiple tokens, none look like proxies → still treat as API key
+              # (edge case: user pasted a UUID with spaces — rejoin)
+              rejoined = "".join(tokens)
+              print(f"[Classifier] Multi-token non-proxy input. Treating rejoined value as SCRAPEOPS API KEY.")
+              return SCRAPEOPS_MODE, [rejoined]
+
+          # ================================================================
+          # SECTION 2 — MANUAL PROXY PARSER
+          # ================================================================
+
+          def parse_proxy_token(token):
+              """
+              Parse a proxy token into a normalised dict:
+                { scheme, host, port, user, password, raw_http, raw_socks5 }
+
+              Supported input formats:
+                socks5://user:pass@host:port
+                http://user:pass@host:port
+                https://user:pass@host:port
+                http://host:port
+                host:port
+                host:port:user:pass
+                user:pass@host:port
+              """
+              token = token.strip()
+              result = {"scheme": None, "host": None, "port": None,
+                        "user": None, "password": None}
+
+              # --- Strip explicit scheme ---
+              scheme_match = re.match(r'^(https?|socks[45])://(.+)$', token, re.I)
+              if scheme_match:
+                  result["scheme"] = scheme_match.group(1).lower()
+                  token = scheme_match.group(2)
+
+              # --- user:pass@host:port ---
+              at_match = re.match(r'^([^@:]+):([^@]*)@([^:]+):(\d{2,5})$', token)
+              if at_match:
+                  result.update(user=at_match.group(1), password=at_match.group(2),
+                                host=at_match.group(3), port=int(at_match.group(4)))
+                  if not result["scheme"]:
+                      result["scheme"] = "http"
+                  return _finalise_proxy(result)
+
+              # --- host:port:user:pass ---
+              colon_4 = re.match(r'^([^:]+):(\d{2,5}):([^:]*):(.*)$', token)
+              if colon_4:
+                  result.update(host=colon_4.group(1), port=int(colon_4.group(2)),
+                                user=colon_4.group(3), password=colon_4.group(4))
+                  if not result["scheme"]:
+                      result["scheme"] = "http"
+                  return _finalise_proxy(result)
+
+              # --- host:port ---
+              colon_2 = re.match(r'^([^:]+):(\d{2,5})$', token)
+              if colon_2:
+                  result.update(host=colon_2.group(1), port=int(colon_2.group(2)))
+                  if not result["scheme"]:
+                      result["scheme"] = "http"
+                  return _finalise_proxy(result)
+
+              print(f"  [Parser] WARNING: Could not parse proxy token: '{token}' — skipping.")
+              return None
+
+          def _finalise_proxy(p):
+              """Build convenience URL strings from parsed dict."""
+              auth = f"{p['user']}:{p['password']}@" if p.get("user") else ""
+              scheme_http   = "https" if p["scheme"] in ("https",) else "http"
+              scheme_socks5 = "socks5"
+
+              p["raw_http"]   = f"{scheme_http}://{auth}{p['host']}:{p['port']}"
+              p["raw_socks5"] = f"socks5://{auth}{p['host']}:{p['port']}"
+
+              # For requests library proxies dict
+              p["proxies_http"]   = {"http": p["raw_http"],  "https": p["raw_http"]}
+              p["proxies_socks5"] = {"http": p["raw_socks5"],"https": p["raw_socks5"]}
+
+              # Which scheme was originally specified
+              p["preferred_scheme"] = p["scheme"]  # http/https/socks5/socks4
+              return p
+
+          # ================================================================
+          # SECTION 3 — PROXY CHECKER (active/working test)
+          # ================================================================
+
+          CHECK_URL     = "https://httpbin.org/ip"
+          CHECK_TIMEOUT = 12   # seconds per attempt
+
+          def _try_proxy(proxy_dict, label=""):
+              """
+              Try a single proxy dict via requests.
+              Returns (success:bool, response_text:str|None)
+              """
+              try:
+                  import requests
+                  resp = requests.get(CHECK_URL, proxies=proxy_dict,
+                                      timeout=CHECK_TIMEOUT, verify=False)
+                  if resp.status_code == 200:
+                      return True, resp.text
+              except Exception as e:
+                  pass
+              return False, None
+
+          def check_proxy(parsed):
+              """
+              Test proxy in its preferred scheme first, then fallback.
+              Returns (working:bool, working_scheme:str, exit_ip:str, country_code:str)
+              """
+              import requests, warnings
+              warnings.filterwarnings("ignore")  # suppress SSL InsecureRequestWarning
+
+              label = f"{parsed['host']}:{parsed['port']}"
+
+              # Build attempt order — preferred scheme first
+              if parsed["preferred_scheme"] and "socks" in parsed["preferred_scheme"]:
+                  attempts = [
+                      ("socks5", parsed["proxies_socks5"]),
+                      ("http",   parsed["proxies_http"]),
+                  ]
+              else:
+                  attempts = [
+                      ("http",   parsed["proxies_http"]),
+                      ("socks5", parsed["proxies_socks5"]),
+                  ]
+
+              for scheme_label, proxy_dict in attempts:
+                  print(f"    [Check] {label} via {scheme_label.upper()} ... ", end="", flush=True)
+                  ok, body = _try_proxy(proxy_dict, label)
+                  if ok:
+                      # Parse exit IP from httpbin response
+                      exit_ip = ""
+                      cc = "us"
+                      try:
+                          data = json.loads(body)
+                          exit_ip = data.get("origin", "").split(",")[0].strip()
+                      except Exception:
+                          pass
+
+                      # Geo-lookup the exit IP
+                      if exit_ip:
+                          try:
+                              geo_resp = requests.get(
+                                  f"http://ip-api.com/json/{exit_ip}?fields=countryCode",
+                                  timeout=8)
+                              if geo_resp.status_code == 200:
+                                  cc = geo_resp.json().get("countryCode", "US").lower()
+                          except Exception:
+                              pass
+
+                      print(f"OK  →  exit IP: {exit_ip}  country: {cc.upper()}")
+                      # Store working proxy string for PowerShell use
+                      if scheme_label == "socks5":
+                          parsed["working_proxy_str"] = parsed["raw_socks5"]
+                      else:
+                          parsed["working_proxy_str"] = parsed["raw_http"]
+                      parsed["working_scheme"] = scheme_label
+                      parsed["exit_ip"]        = exit_ip
+                      parsed["country_code"]   = cc
+                      return True, scheme_label, exit_ip, cc
+                  else:
+                      print("FAILED")
+
+              return False, None, None, None
+
+          def validate_proxies(raw_tokens):
+              """
+              Parse and validate a list of raw proxy tokens.
+              Returns list of active proxy dicts (already checked).
+              """
+              parsed_list = []
+              for tok in raw_tokens:
+                  p = parse_proxy_token(tok)
+                  if p:
+                      parsed_list.append(p)
+                  else:
+                      print(f"  [Parser] Skipped unparseable token: '{tok}'")
+
+              print(f"\n[ProxyCheck] Parsed {len(parsed_list)} proxy candidates. Starting liveness tests...")
+              active = []
+              for idx, p in enumerate(parsed_list, 1):
+                  print(f"  [{idx}/{len(parsed_list)}] Testing {p['host']}:{p['port']}")
+                  ok, scheme, exit_ip, cc = check_proxy(p)
+                  if ok:
+                      active.append(p)
+                      print(f"    ✓ ACTIVE  (scheme={scheme}, country={cc.upper() if cc else '?'})")
+                  else:
+                      print(f"    ✗ DEAD    — excluded from pool")
+
+              print(f"\n[ProxyCheck] Active proxies: {len(active)} / {len(parsed_list)}")
+              return active
+
+          # ================================================================
+          # SECTION 4 — MAIN INPUT READING & CLASSIFICATION
+          # ================================================================
+
+          email       = os.environ.get("EMAIL", "").strip()
           num_devices = int(os.environ.get("NUM_DEVICES", "1"))
-          os_version = os.environ.get("OS_VERSION", "windows-2025")
-
-          api_key_raw = os.environ.get("API_KEY", "").strip()
+          os_version  = os.environ.get("OS_VERSION", "windows-2025")
           without_proxy = os.environ.get("WITHOUT_PROXY", "false").lower() == "true"
-
-          if without_proxy:
-              print("[Proxy] 'Run without proxy' checked. Disabling proxy.")
-              api_key_raw = ""
-          elif not api_key_raw or api_key_raw.lower() in ["none", "null", "false", "blank", "empty", "''", '""']:
-              print("[Proxy] API key empty or invalid. Disabling proxy.")
-              api_key_raw = ""
-
+          proxy_raw   = os.environ.get("PROXY_INPUT", "").strip()
           country_input = os.environ.get("COUNTRY", "USA")
-          mobile = os.environ.get("MOBILE", "false").lower() == "true"
-          sticky = os.environ.get("STICKY", "false").lower() == "true"
+          mobile      = os.environ.get("MOBILE", "false").lower() == "true"
+          sticky      = os.environ.get("STICKY", "false").lower() == "true"
           software_choice = os.environ.get("SOFTWARE_CHOICE", "AVG - B4Books")
 
-          # --- Number of Clicks logic ---
           num_clicks_raw = int(os.environ.get("NUM_CLICKS", "0"))
-          num_clicks = min(num_clicks_raw, num_devices)
+          num_clicks  = min(num_clicks_raw, num_devices)
           num_installs = num_devices - num_clicks
           action_list = ["install"] * num_installs + ["click"] * num_clicks
           random.shuffle(action_list)
@@ -186,11 +467,18 @@ jobs:
           print(f"[Action Matrix] Click Paths   : {num_clicks}")
           print(f"[Action Matrix] Randomized Queue: {action_list}")
 
-          run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
+          run_manual      = os.environ.get("RUN_MANUAL", "false").lower() == "true"
           manual_url_input = os.environ.get("MANUAL_URL", "").strip()
-          manual_url = manual_url_input if run_manual else ""
+          manual_url      = manual_url_input if run_manual else ""
 
-          # Country mapping for ScrapeOps
+          # ================================================================
+          # SECTION 5 — PROXY MODE RESOLUTION
+          # ================================================================
+
+          proxy_mode   = NO_PROXY_MODE
+          active_proxies = []   # list of checked proxy dicts (MANUAL_MODE only)
+          scrapeops_key  = ""   # (SCRAPEOPS_MODE only)
+
           country_map = {
               "USA": "us", "UK": "uk", "Canada": "ca",
               "Australia": "au", "Germany": "de", "France": "fr",
@@ -198,9 +486,43 @@ jobs:
               "Vietnam": "vn", "Switzerland": "ch", "Indonesia": "id",
               "Italy": "it", "Netherlands": "nl", "Poland": "pl"
           }
-          cc = country_map.get(country_input, "us")
+          cc_default = country_map.get(country_input, "us")
 
-          # Software Mappings (unchanged)
+          if without_proxy:
+              proxy_mode = NO_PROXY_MODE
+              print("[Proxy] 'Run without proxy' is checked. All proxies disabled.")
+          else:
+              proxy_mode, raw_tokens = classify_proxy_input(proxy_raw)
+
+              if proxy_mode == SCRAPEOPS_MODE:
+                  # raw_tokens may be [rejoined_str] or empty; rebuild from original
+                  if raw_tokens:
+                      scrapeops_key = raw_tokens[0]
+                  else:
+                      scrapeops_key = proxy_raw.strip()
+                  # Final sanity check — must be non-empty non-null
+                  if not scrapeops_key or scrapeops_key.lower() in \
+                          {"none", "null", "false", "blank", "empty", "''", '""'}:
+                      proxy_mode = NO_PROXY_MODE
+                      print("[Proxy] ScrapeOps key is blank/invalid. Disabling proxy.")
+                  else:
+                      print(f"[Proxy] ScrapeOps mode. Key: {scrapeops_key[:8]}****")
+
+              elif proxy_mode == MANUAL_MODE:
+                  raw_tokens_list = raw_tokens
+                  print(f"[Proxy] Manual proxy mode. Validating {len(raw_tokens_list)} candidate(s)...")
+                  active_proxies = validate_proxies(raw_tokens_list)
+                  if not active_proxies:
+                      print("[Proxy] WARNING: No active manual proxies found. Falling back to NO-PROXY mode.")
+                      proxy_mode = NO_PROXY_MODE
+                  elif len(active_proxies) < num_devices:
+                      print(f"[Proxy] WARNING: Only {len(active_proxies)} active proxies for {num_devices} devices. "
+                            f"Proxies will be cycled/reused.")
+
+          # ================================================================
+          # SECTION 6 — SOFTWARE URL MAPPING (unchanged from original)
+          # ================================================================
+
           avg_urls = {
               "AVG - TechxTrader": "https://u.to/a-trdr/GoeNIg",
               "AVG - B4Books":     "https://u.to/a-b4b/O4eNIg",
@@ -228,166 +550,39 @@ jobs:
               "Ad-MVN - A2Z":        "https://u.to/a2zadmvnxsmrt/Y-t7Ig",
           }
           all_urls = {**avg_urls, **opera_urls, **opera_one_urls, **ad_mvn_urls}
-          dynamic_links = ["Opera - Techx", "Opera - Fatradez", "Opera - James", "Opera - Oliver", "Opera - Mahal"]
+          dynamic_links = ["Opera - Techx", "Opera - Fatradez", "Opera - James",
+                           "Opera - Oliver", "Opera - Mahal"]
 
           if manual_url:
-              target_url = manual_url
+              target_url    = manual_url
               software_type = "dynamic_opera"
-              exe_filter = "*.exe"
+              exe_filter    = "*.exe"
               print(f"[Target] Manual URL selected: {target_url}")
           else:
-              target_url = all_urls.get(software_choice, avg_urls.get("AVG - B4Books", "https://u.to/a-b4b/O4eNIg"))
+              target_url = all_urls.get(software_choice,
+                           avg_urls.get("AVG - B4Books", "https://u.to/a-b4b/O4eNIg"))
               if software_choice in dynamic_links:
                   software_type = "opera_smart_link"
-                  exe_filter = "*Opera*Setup*.exe"
+                  exe_filter    = "*Opera*Setup*.exe"
               elif software_choice.startswith("Ad-MVN"):
                   software_type = "dynamic_opera"
-                  exe_filter = "*Opera*Setup*.exe"
+                  exe_filter    = "*Opera*Setup*.exe"
               elif software_choice.startswith("OperaGX"):
                   software_type = "opera_gx"
-                  exe_filter = "OperaGXSetup*.exe"
+                  exe_filter    = "OperaGXSetup*.exe"
               elif software_choice.startswith("Opera-One"):
                   software_type = "opera_one"
-                  exe_filter = "OperaSetup*.exe"
+                  exe_filter    = "OperaSetup*.exe"
               else:
                   software_type = "avg"
-                  exe_filter = "*avg*.exe"
+                  exe_filter    = "*avg*.exe"
               print(f"[Target] Software: {software_choice} -> URL: {target_url}")
               print(f"[Target] Engine Type: {software_type} | Filter: {exe_filter}")
 
-          # ============= PROXY DETECTION & MANAGEMENT =============
-          use_proxy = False
-          proxy_type = "none"
-          manual_proxies_list = []
+          # ================================================================
+          # SECTION 7 — DEVICE NAME HELPERS (unchanged from original)
+          # ================================================================
 
-          if api_key_raw:
-              # Robust detection: manual if contains @, ://, or whitespace; else ScrapeOps key
-              if any(c in api_key_raw for c in ["@", "://", "\n", "\r", " "]):
-                  proxy_type = "manual"
-                  print("[Proxy] Detected MANUAL proxy list (contains @, ://, or whitespace).")
-              else:
-                  proxy_type = "scrapeops"
-                  print("[Proxy] Detected ScrapeOps API key.")
-
-          if proxy_type == "scrapeops" and api_key_raw:
-              use_proxy = True
-              print(f"[Proxy] Using ScrapeOps with country={cc}, mobile={mobile}, sticky={sticky}")
-              device_country = cc.upper()
-          elif proxy_type == "manual":
-              print("[Proxy] Starting manual proxy validation...")
-              # Split by any whitespace (spaces, newlines, tabs)
-              raw_proxies = [p for p in re.split(r'\s+', api_key_raw.strip()) if p]
-              print(f"[Proxy] Found {len(raw_proxies)} potential proxy entries.")
-
-              def parse_proxy_entry(entry):
-                  """Convert a raw entry (ip:port@user:pass, http://..., etc.) into full HTTP URL."""
-                  entry = entry.strip()
-                  if "://" not in entry:
-                      # No scheme – default to HTTP. But first figure out format.
-                      # It could be ip:port@user:pass (host first) or user:pass@ip:port.
-                      if "@" in entry:
-                          left, right = entry.rsplit("@", 1)
-                          if re.match(r'^\d+\.\d+\.\d+\.\d+:\d+$', left):
-                              # host:port@user:pass
-                              host_port, user_pass = left, right
-                          else:
-                              # user:pass@host:port (standard)
-                              user_pass, host_port = left, right
-                          return f"http://{user_pass}@{host_port}"
-                      else:
-                          # No auth, just host:port
-                          return f"http://{entry}"
-                  else:
-                      # Already has a scheme. Might still need to rearrange if it's e.g. socks5://ip:port
-                      return entry
-
-              def test_proxy_http(proxy_url, timeout=8):
-                  try:
-                      proxies = {"http": proxy_url, "https": proxy_url}
-                      r = requests.get("http://httpbin.org/ip", proxies=proxies, timeout=timeout)
-                      if r.status_code == 200:
-                          return True
-                  except Exception:
-                      pass
-                  return False
-
-              def test_proxy_socks5(proxy_url, timeout=8):
-                  try:
-                      # Convert to socks5 schema
-                      parsed = urlparse(proxy_url)
-                      if parsed.scheme in ("socks5", "socks5h"):
-                          socks_url = proxy_url
-                      else:
-                          loc = parsed.hostname
-                          port = parsed.port or 1080
-                          auth = f"{parsed.username}:{parsed.password}@" if parsed.username else ""
-                          socks_url = f"socks5://{auth}{loc}:{port}"
-                      proxies = {"http": socks_url, "https": socks_url}
-                      r = requests.get("http://httpbin.org/ip", proxies=proxies, timeout=timeout)
-                      if r.status_code == 200:
-                          return True
-                  except Exception:
-                      pass
-                  return False
-
-              def get_country_via_proxy(proxy_url):
-                  api = "http://ip-api.com/json/?fields=countryCode"
-                  # Try HTTP first
-                  try:
-                      proxies = {"http": proxy_url}
-                      r = requests.get(api, proxies=proxies, timeout=8)
-                      if r.status_code == 200:
-                          return r.json().get("countryCode", "").upper()
-                  except Exception:
-                      pass
-                  # Try as SOCKS5
-                  try:
-                      parsed = urlparse(proxy_url)
-                      if parsed.scheme in ("socks5", "socks5h"):
-                          socks_url = proxy_url
-                      else:
-                          loc = parsed.hostname
-                          port = parsed.port or 1080
-                          auth = f"{parsed.username}:{parsed.password}@" if parsed.username else ""
-                          socks_url = f"socks5://{auth}{loc}:{port}"
-                      proxies = {"http": socks_url}
-                      r = requests.get(api, proxies=proxies, timeout=8)
-                      if r.status_code == 200:
-                          return r.json().get("countryCode", "").upper()
-                  except Exception:
-                      pass
-                  return ""
-
-              active_proxies = []
-              for i, raw in enumerate(raw_proxies, 1):
-                  print(f"[Proxy] Testing entry {i}: {raw}")
-                  full_http = parse_proxy_entry(raw)
-                  http_ok = test_proxy_http(full_http)
-                  socks_ok = test_proxy_socks5(full_http)
-                  active = http_ok or socks_ok
-                  status = "ACTIVE" if active else "DEAD"
-                  print(f"   HTTP: {'OK' if http_ok else 'FAIL'} | SOCKS5: {'OK' if socks_ok else 'FAIL'} -> {status}")
-
-                  if active:
-                      country = get_country_via_proxy(full_http if http_ok else full_http)  # will try HTTP then SOCKS
-                      print(f"   Country: {country or '??'}")
-                      final_url = full_http if http_ok else f"socks5://{urlparse(full_http).username}:{urlparse(full_http).password}@{urlparse(full_http).hostname}:{urlparse(full_http).port or 1080}" if socks_ok else full_http
-                      active_proxies.append({
-                          "url": final_url,
-                          "country": country or cc,  # fallback to dropdown if detection fails
-                          "http_ok": http_ok,
-                          "socks_ok": socks_ok
-                      })
-
-              if active_proxies:
-                  use_proxy = True
-                  manual_proxies_list = active_proxies
-                  print(f"[Proxy] {len(active_proxies)} active proxy(es) ready for assignment.")
-              else:
-                  print("[Proxy] No active proxies found. Proceeding without proxy!")
-                  use_proxy = False
-
-          # ============= MATRIX GENERATION =============
           def short_os(os_ver):
               if os_ver == "windows-2025": return "W25"
               elif os_ver == "windows-2022": return "W22"
@@ -395,7 +590,8 @@ jobs:
               else: return "W" + os_ver.replace("windows-", "").replace("-", "")
 
           def short_software(choice):
-              prefix_map = {"OperaGX": "OPX", "Opera-One": "OPO", "Ad-MVN": "MVN", "AVG": "AVG", "Opera": "OP"}
+              prefix_map = {"OperaGX": "OPX", "Opera-One": "OPO",
+                            "Ad-MVN": "MVN", "AVG": "AVG", "Opera": "OP"}
               for key, prefix in prefix_map.items():
                   if choice.startswith(key):
                       parts = choice.split(" - ", 1)
@@ -406,76 +602,78 @@ jobs:
           short_os_tag = short_os(os_version)
           short_sw_tag = "MANUAL" if manual_url else short_software(software_choice)
 
+          # ================================================================
+          # SECTION 8 — BUILD MATRIX INCLUDES
+          # ================================================================
+
           includes = []
-          if use_proxy and proxy_type == "scrapeops":
+
+          if email:
+              # Pre-assign proxies to device slots
+              # For MANUAL mode: cycle through active proxies (no repeats if enough)
+              # For SCRAPEOPS mode: build per-device user strings with sticky sessions
+              proxy_assignments = []
+
+              if proxy_mode == MANUAL_MODE:
+                  for i in range(num_devices):
+                      proxy_assignments.append(active_proxies[i % len(active_proxies)])
+
               for i in range(1, num_devices + 1):
                   action_mode = action_list[i - 1]
-                  device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_mode.capitalize()}-{cc.upper()}"
-                  proxy_user = f"scrapeops.country={cc}"
-                  if mobile: proxy_user += ".mobile=true"
-                  if sticky:
-                      session_id = str(uuid.uuid4())[:8]
-                      proxy_user += f".sticky_session={session_id}"
-                  proxy_pass = api_key_raw
+                  action_cap  = action_mode.capitalize()
+
+                  # ---- Resolve per-device proxy values ----
+                  if proxy_mode == NO_PROXY_MODE:
+                      proxy_user     = ""
+                      proxy_pass     = ""
+                      use_proxy_str  = "false"
+                      device_cc      = cc_default
+                      proxy_type_str = "none"
+
+                  elif proxy_mode == SCRAPEOPS_MODE:
+                      proxy_user = f"scrapeops.country={cc_default}"
+                      if mobile:
+                          proxy_user += ".mobile=true"
+                      if sticky:
+                          session_id  = str(uuid.uuid4())[:8]
+                          proxy_user += f".sticky_session={session_id}"
+                      proxy_pass     = scrapeops_key
+                      use_proxy_str  = "true"
+                      device_cc      = cc_default
+                      proxy_type_str = "scrapeops"
+
+                  else:  # MANUAL_MODE
+                      p = proxy_assignments[i - 1]
+                      # proxy_user = full proxy URL (host:port or scheme://user:pass@host:port)
+                      # proxy_pass = empty (credentials embedded in URL)
+                      proxy_user     = p["working_proxy_str"]
+                      proxy_pass     = ""
+                      use_proxy_str  = "true"
+                      device_cc      = p.get("country_code", "us")
+                      proxy_type_str = p.get("working_scheme", "http")
+
+                  country_cap  = device_cc.upper()
+                  device_name  = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{country_cap}"
+
                   includes.append({
-                      "device": device_name,
-                      "email": email,
-                      "os": os_version,
-                      "use_proxy": str(use_proxy).lower(),
-                      "proxy_server": "",
-                      "proxy_user": proxy_user,
-                      "proxy_pass": proxy_pass,
-                      "target_url": target_url,
+                      "device":        device_name,
+                      "email":         email,
+                      "os":            os_version,
+                      "use_proxy":     use_proxy_str,
+                      "proxy_user":    proxy_user,
+                      "proxy_pass":    proxy_pass,
+                      "proxy_type":    proxy_type_str,   # "scrapeops" | "http" | "socks5" | "none"
+                      "proxy_country": device_cc,
+                      "target_url":    target_url,
                       "software_type": software_type,
-                      "exe_filter": exe_filter,
-                      "action_mode": action_mode,
-                      "country_code": cc.upper()
+                      "exe_filter":    exe_filter,
+                      "action_mode":   action_mode
                   })
-          elif use_proxy and proxy_type == "manual":
-              proxy_pool = manual_proxies_list
-              if len(proxy_pool) < num_devices:
-                  print("[Warning] Fewer active proxies than devices. Some devices will share proxies.")
-                  proxy_cycle = [proxy_pool[i % len(proxy_pool)] for i in range(num_devices)]
-              else:
-                  random.shuffle(proxy_pool)
-                  proxy_cycle = proxy_pool[:num_devices]
-              for i in range(1, num_devices + 1):
-                  proxy = proxy_cycle[i-1]
-                  action_mode = action_list[i - 1]
-                  device_country = proxy["country"]
-                  device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_mode.capitalize()}-{device_country}"
-                  includes.append({
-                      "device": device_name,
-                      "email": email,
-                      "os": os_version,
-                      "use_proxy": str(use_proxy).lower(),
-                      "proxy_server": proxy["url"],
-                      "proxy_user": "",
-                      "proxy_pass": "",
-                      "target_url": target_url,
-                      "software_type": software_type,
-                      "exe_filter": exe_filter,
-                      "action_mode": action_mode,
-                      "country_code": device_country
-                  })
-          else:
-              for i in range(1, num_devices + 1):
-                  action_mode = action_list[i - 1]
-                  device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_mode.capitalize()}-NOPROXY"
-                  includes.append({
-                      "device": device_name,
-                      "email": email,
-                      "os": os_version,
-                      "use_proxy": "false",
-                      "proxy_server": "",
-                      "proxy_user": "",
-                      "proxy_pass": "",
-                      "target_url": target_url,
-                      "software_type": software_type,
-                      "exe_filter": exe_filter,
-                      "action_mode": action_mode,
-                      "country_code": "NOPROXY"
-                  })
+
+                  proxy_info = (f"ScrapeOps country={device_cc.upper()}" if proxy_type_str == "scrapeops"
+                                else proxy_user if proxy_user
+                                else "NONE")
+                  print(f"[Device Added] {device_name} | Proxy: {proxy_info}")
 
           if not includes:
               print("Error: Valid configuration could not be generated. Exiting.")
@@ -524,7 +722,8 @@ jobs:
                               val_str = "true" if str(new_val).lower() == "true" else "false"
                               lines[i] = f"{indent}default: {val_str}"
                           else:
-                              if new_val is None or str(new_val).strip().lower() in ["none", "null", "blank", "empty", "''", '""']:
+                              if new_val is None or str(new_val).strip().lower() in \
+                                      ["none", "null", "blank", "empty", "''", '""']:
                                   safe_val = ""
                               else:
                                   safe_val = str(new_val).replace("'", "\\'")
@@ -539,30 +738,20 @@ jobs:
                   content = f.read()
 
               run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
-              content = update_yaml_default(content, "os_version", os.environ.get("OS_VERSION"))
-              content = update_yaml_default(content, "getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
-              content = update_yaml_default(content, "num_devices", os.environ.get("NUM_DEVICES"))
-              content = update_yaml_default(content, "num_clicks", os.environ.get("NUM_CLICKS"))
-              content = update_yaml_default(content, "software_choice", os.environ.get("SOFTWARE_CHOICE"))
+              content = update_yaml_default(content, "os_version",       os.environ.get("OS_VERSION"))
+              content = update_yaml_default(content, "getscreen_email",   os.environ.get("GETSCREEN_EMAIL"))
+              content = update_yaml_default(content, "num_devices",       os.environ.get("NUM_DEVICES"))
+              content = update_yaml_default(content, "num_clicks",        os.environ.get("NUM_CLICKS"))
+              content = update_yaml_default(content, "software_choice",   os.environ.get("SOFTWARE_CHOICE"))
 
               manual_url_to_save = os.environ.get("MANUAL_URL") if run_manual else ""
               content = update_yaml_default(content, "manual_software_url", manual_url_to_save)
-              content = update_yaml_default(content, "run_manual_link", run_manual, is_bool=True)
-
-              # Smart save for API key: only save ScrapeOps key, clear manual proxies
-              api_key_raw = os.environ.get("API_KEY", "").strip()
-              if api_key_raw and any(c in api_key_raw for c in ["@", "://", " ", "\n", "\r"]):
-                  # It's a manual proxy list – do NOT save it
-                  api_key_to_save = ""
-                  print("[Workflow State] Manual proxy detected – not saving to defaults.")
-              else:
-                  api_key_to_save = api_key_raw
-              content = update_yaml_default(content, "scrapeops_api_key", api_key_to_save)
-
-              content = update_yaml_default(content, "use_without_proxy", os.environ.get("WITHOUT_PROXY"), is_bool=True)
-              content = update_yaml_default(content, "proxy_country", os.environ.get("COUNTRY"))
-              content = update_yaml_default(content, "mobile_proxies", os.environ.get("MOBILE"), is_bool=True)
-              content = update_yaml_default(content, "sticky_sessions", os.environ.get("STICKY"), is_bool=True)
+              content = update_yaml_default(content, "run_manual_link",    run_manual, is_bool=True)
+              content = update_yaml_default(content, "scrapeops_api_key",  os.environ.get("API_KEY"))
+              content = update_yaml_default(content, "use_without_proxy",  os.environ.get("WITHOUT_PROXY"), is_bool=True)
+              content = update_yaml_default(content, "proxy_country",      os.environ.get("COUNTRY"))
+              content = update_yaml_default(content, "mobile_proxies",     os.environ.get("MOBILE"), is_bool=True)
+              content = update_yaml_default(content, "sticky_sessions",    os.environ.get("STICKY"), is_bool=True)
 
               with open(file_path, "w", encoding="utf-8") as f:
                   f.write(content)
@@ -640,35 +829,48 @@ jobs:
           }
           if (-not $Success) { Write-Host "[Getscreen] Failed to download agent. Exiting."; exit 1 }
 
-          Write-Host "[Getscreen] Executing silent install for account: ${{ matrix.email }}"
-          $InstallArgs = "/i getscreen.msi /qn REGISTER=`"${{ matrix.email }}`" CONFIG=`"name='${{ matrix.device }}' autostart=true nonadmin=true control=true disable_confirmation=true`""
+          # -----------------------------------------------------------------------
+          # proxy_country is the 2-letter ISO code resolved at matrix-build time:
+          #   • ScrapeOps mode → from proxy_country dropdown (e.g. "us")
+          #   • Manual mode    → geo-detected from the proxy's exit IP (e.g. "de")
+          #   • No-proxy mode  → from proxy_country dropdown default
+          # -----------------------------------------------------------------------
+          $proxyCountry = "${{ matrix.proxy_country }}"
+          Write-Host "[Getscreen] Registering device '${{ matrix.device }}' for account '${{ matrix.email }}' (country: $($proxyCountry.ToUpper()))..."
+          $InstallArgs = "/i getscreen.msi /qn REGISTER=`"${{ matrix.email }}`" CONFIG=`"name='${{ matrix.device }}' autostart=true nonadmin=true control=true disable_confirmation=true country=$proxyCountry`""
           Start-Process msiexec.exe -Wait -ArgumentList $InstallArgs
           Write-Host "[Getscreen] Agent configured and running in background." -ForegroundColor Green
 
       - name: Setup Auto-Downloader & Software Installation
         shell: pwsh
         env:
-          USE_PROXY: ${{ matrix.use_proxy }}
-          PROXY_SERVER: ${{ matrix.proxy_server }}
-          PROXY_USER: ${{ matrix.proxy_user }}
-          PROXY_PASS: ${{ matrix.proxy_pass }}
-          TARGET_URL: ${{ matrix.target_url }}
+          USE_PROXY:     ${{ matrix.use_proxy }}
+          PROXY_USER:    ${{ matrix.proxy_user }}
+          PROXY_PASS:    ${{ matrix.proxy_pass }}
+          PROXY_TYPE:    ${{ matrix.proxy_type }}
+          TARGET_URL:    ${{ matrix.target_url }}
           SOFTWARE_TYPE: ${{ matrix.software_type }}
-          EXE_FILTER: ${{ matrix.exe_filter }}
-          ACTION_MODE: ${{ matrix.action_mode }}
+          EXE_FILTER:    ${{ matrix.exe_filter }}
+          ACTION_MODE:   ${{ matrix.action_mode }}
         run: |
-          $useProxy = $env:USE_PROXY -eq "true"
+          $useProxy   = $env:USE_PROXY   -eq "true"
+          $proxyType  = $env:PROXY_TYPE          # "scrapeops" | "http" | "socks5" | "none"
+          $proxyUser  = $env:PROXY_USER          # full proxy URL  (manual) or ScrapeOps user string (scrapeops)
+          $proxyPass  = $env:PROXY_PASS          # ScrapeOps API key or "" (manual embeds creds in URL)
 
           Write-Host "============================================================" -ForegroundColor Cyan
           Write-Host " Zero-Touch Downloader & Installer Active" -ForegroundColor Cyan
-          Write-Host " Target URL: $env:TARGET_URL" -ForegroundColor Gray
+          Write-Host " Target URL: $env:TARGET_URL"   -ForegroundColor Gray
           Write-Host " Category  : $env:SOFTWARE_TYPE" -ForegroundColor Cyan
           Write-Host " Action    : $($env:ACTION_MODE.ToUpper()) PATHWAY ASSIGNED" -ForegroundColor Magenta
           if ($useProxy) {
-              if ($env:PROXY_SERVER) {
-                  Write-Host " Mode      : Manual Proxy ($env:PROXY_SERVER)" -ForegroundColor Cyan
+              Write-Host " Proxy Type: $($proxyType.ToUpper())" -ForegroundColor Cyan
+              if ($proxyType -eq "scrapeops") {
+                  Write-Host " Mode      : ScrapeOps ($proxyUser)" -ForegroundColor Cyan
               } else {
-                  Write-Host " Mode      : ScrapeOps Proxy (auth: $env:PROXY_USER)" -ForegroundColor Cyan
+                  # Mask credentials in log output
+                  $maskedProxy = $proxyUser -replace '(?<=://)([^:@]+:[^@]+@)', '****:****@'
+                  Write-Host " Mode      : Manual Proxy ($maskedProxy)" -ForegroundColor Cyan
               }
           } else {
               Write-Host " Mode      : Direct (Proxy Completely Bypassed)" -ForegroundColor Yellow
@@ -678,9 +880,36 @@ jobs:
           Write-Host "[Dependencies] Installing python UIA modules (pywinauto, pyautogui, etc)..." -ForegroundColor DarkGray
           python -m pip install pywinauto pyautogui pygetwindow keyboard --quiet
 
-          # ---------------------------------------------------------------
-          # Python UI background handler (identical to original, fully preserved)
-          # ---------------------------------------------------------------
+          # -----------------------------------------------------------------------
+          # Resolve Edge proxy argument
+          # -----------------------------------------------------------------------
+          # ScrapeOps  → --proxy-server=http://residential-proxy.scrapeops.io:8181
+          #              --proxy-auth injected by Python via pywinauto dialog handler
+          #
+          # Manual HTTP/HTTPS → --proxy-server=http://host:port  (creds via dialog)
+          #   OR               → --proxy-server=http://user:pass@host:port
+          #
+          # Manual SOCKS5 → Edge does not natively support SOCKS5 via --proxy-server
+          #   Workaround   → launch a local Privoxy/miniproxy bridge OR pass raw URL
+          #   We use the raw socks5:// URL — Chromium-based Edge supports it since M91
+          #
+          # -----------------------------------------------------------------------
+          $edgeProxyArg = ""
+          if ($useProxy) {
+              if ($proxyType -eq "scrapeops") {
+                  $edgeProxyArg = "--proxy-server=`"http://residential-proxy.scrapeops.io:8181`""
+              } elseif ($proxyType -eq "socks5") {
+                  # Edge/Chromium accepts socks5:// in --proxy-server since ~M91
+                  $edgeProxyArg = "--proxy-server=`"$proxyUser`""
+              } else {
+                  # http / https manual proxy
+                  $edgeProxyArg = "--proxy-server=`"$proxyUser`""
+              }
+          }
+
+          # -----------------------------------------------------------------------
+          # Python UI background handler (unchanged logic, proxy_type awareness added)
+          # -----------------------------------------------------------------------
           $handlerPy = @'
           import time, sys, subprocess, random, os, tempfile, ctypes
           from pywinauto import Desktop
@@ -732,17 +961,14 @@ jobs:
                               log_msg("TabClose", "Setting focus to window before executing close sequence...")
                               window.set_focus()
                               time.sleep(0.3)
-
                               sw, sh = pyautogui.size()
                               cx, cy = sw // 2, sh // 2
-                              log_msg("TabClose", f"Executing PyAutoGUI center screen click at ({cx}, {cy}) to ensure page context...")
+                              log_msg("TabClose", f"Executing PyAutoGUI center screen click at ({cx}, {cy})...")
                               pyautogui.click(cx, cy)
-
                               delay = random.uniform(1.0, 2.0)
-                              log_msg("TabClose", f"Center click executed. Waiting {delay:.2f} seconds before sending Ctrl+W...")
+                              log_msg("TabClose", f"Center click executed. Waiting {delay:.2f} seconds before Ctrl+W...")
                               time.sleep(delay)
-
-                              log_msg("TabClose", "Sending '^w' (Ctrl+W) keyboard shortcut...")
+                              log_msg("TabClose", "Sending '^w' (Ctrl+W)...")
                               send_keys('^w')
                               closed = True
                               log_msg("TabClose", "Successfully executed Ctrl+W tab close sequence.")
@@ -768,19 +994,22 @@ jobs:
 
           def opera_one_post_install_sequence(opera_window):
               log_msg("PostInstall-OP1", "=== Opera One Post-Install Sequence Starting ===")
+
               log_msg("PostInstall-OP1", "Phase 1: Waiting 35 seconds for installer to complete and wizard to appear...")
               for s in range(1, 36):
                   log_msg("PostInstall-OP1", f"  Installer wait: {s}/35 seconds elapsed...")
                   time.sleep(1)
-              log_msg("PostInstall-OP1", "Phase 1 complete. 35-second installer wait finished.")
+              log_msg("PostInstall-OP1", "Phase 1 complete.")
+
               log_msg("PostInstall-OP1", "Phase 2: Waiting additional 10 seconds for UI to fully render...")
               for s in range(1, 11):
                   log_msg("PostInstall-OP1", f"  Render wait: {s}/10 seconds elapsed...")
                   time.sleep(1)
-              log_msg("PostInstall-OP1", "Phase 2 complete. Render wait finished.")
+              log_msg("PostInstall-OP1", "Phase 2 complete.")
+
               sw, sh = pyautogui.size()
               cx, cy = sw // 2, sh // 2
-              log_msg("PostInstall-OP1", f"Phase 3: Executing center-screen DOUBLE-CLICK at ({cx}, {cy}) to ensure wizard focus...")
+              log_msg("PostInstall-OP1", f"Phase 3: Executing center-screen DOUBLE-CLICK at ({cx}, {cy})...")
               try:
                   pyautogui.click(cx, cy)
                   log_msg("PostInstall-OP1", "  First click executed.")
@@ -788,39 +1017,42 @@ jobs:
                   pyautogui.click(cx, cy)
                   log_msg("PostInstall-OP1", "  Second click executed. Double-click complete.")
               except Exception as e:
-                  log_msg("PostInstall-OP1", f"Phase 3 WARNING: Double-click failed: {e}. Attempting pyautogui.doubleClick fallback...")
+                  log_msg("PostInstall-OP1", f"Phase 3 WARNING: Double-click failed: {e}. Fallback...")
                   try:
                       pyautogui.doubleClick(cx, cy)
                       log_msg("PostInstall-OP1", "  pyautogui.doubleClick fallback succeeded.")
                   except Exception as e2:
                       log_msg("PostInstall-OP1", f"  Fallback also failed: {e2}. Continuing anyway.")
               log_msg("PostInstall-OP1", "Phase 3 complete.")
+
               d = random.uniform(1.0, 2.0)
               log_msg("PostInstall-OP1", f"Phase 4: Post-double-click delay of {d:.2f} seconds...")
               time.sleep(d)
               log_msg("PostInstall-OP1", "Phase 4 complete.")
-              log_msg("PostInstall-OP1", "Phase 5: Pressing LEFT arrow key 8 times (1-2s delay each) to navigate wizard options...")
+
+              log_msg("PostInstall-OP1", "Phase 5: Pressing LEFT arrow key 8 times (1-2s delay each)...")
               for i in range(1, 9):
                   log_msg("PostInstall-OP1", f"  Sending LEFT arrow key ({i}/8)...")
                   send_keys('{LEFT}')
                   d = random.uniform(1.0, 2.0)
                   log_msg("PostInstall-OP1", f"  LEFT key {i}/8 sent. Waiting {d:.2f} seconds...")
                   time.sleep(d)
-              log_msg("PostInstall-OP1", "Phase 5 complete. All 8 LEFT arrow keys sent.")
+              log_msg("PostInstall-OP1", "Phase 5 complete.")
+
               log_msg("PostInstall-OP1", "Phase 6: Sending ENTER key to confirm wizard selection...")
               send_keys('{ENTER}')
-              log_msg("PostInstall-OP1", "Phase 6 complete. ENTER key sent.")
+              log_msg("PostInstall-OP1", "Phase 6 complete.")
               d = random.uniform(1.0, 2.0)
-              log_msg("PostInstall-OP1", f"  Post-ENTER delay of {d:.2f} seconds...")
               time.sleep(d)
+
               log_msg("PostInstall-OP1", "Phase 7: Sending Ctrl+T to open new tab...")
               send_keys('^t')
-              log_msg("PostInstall-OP1", "Phase 7 complete. Ctrl+T sent.")
+              log_msg("PostInstall-OP1", "Phase 7 complete.")
               d = random.uniform(1.0, 2.0)
-              log_msg("PostInstall-OP1", f"  Post-Ctrl+T delay of {d:.2f} seconds...")
               time.sleep(d)
+
               tab_count = random.randint(6, 12)
-              log_msg("PostInstall-OP1", f"Phase 8: Pressing TAB key {tab_count} times (randomly selected, 1-2s delay each)...")
+              log_msg("PostInstall-OP1", f"Phase 8: Pressing TAB key {tab_count} times (randomly selected, 1-2s each)...")
               for i in range(1, tab_count + 1):
                   log_msg("PostInstall-OP1", f"  Sending TAB key ({i}/{tab_count})...")
                   send_keys('{TAB}')
@@ -828,17 +1060,18 @@ jobs:
                   log_msg("PostInstall-OP1", f"  TAB {i}/{tab_count} sent. Waiting {d:.2f} seconds...")
                   time.sleep(d)
               log_msg("PostInstall-OP1", f"Phase 8 complete. All {tab_count} TAB keys sent.")
+
               log_msg("PostInstall-OP1", "Phase 9: Sending final ENTER key...")
               send_keys('{ENTER}')
-              log_msg("PostInstall-OP1", "Phase 9 complete. Final ENTER key sent.")
+              log_msg("PostInstall-OP1", "Phase 9 complete.")
               log_msg("PostInstall-OP1", "=== Opera One Post-Install Sequence Completed Successfully ===")
 
-          def handle_automation(username, password, software_type, use_proxy, action_mode, timeout=360):
+          def handle_automation(proxy_user, proxy_pass, proxy_type, software_type, use_proxy, action_mode, timeout=360):
               desktop = Desktop(backend="uia")
               start_time = time.time()
               proxy_auth_time = start_time
 
-              log_msg("UI-Engine", f"Started monitoring. Action Mode: {action_mode.upper()} | Type: {software_type}")
+              log_msg("UI-Engine", f"Started monitoring. Action Mode: {action_mode.upper()} | Type: {software_type} | Proxy: {proxy_type.upper() if use_proxy else 'NONE'}")
 
               last_ctrl_j_time = time.time()
               last_dl_click_time = 0
@@ -859,6 +1092,14 @@ jobs:
               download_windows_closed = False
               installer_executed_sentinel = os.path.join(tempfile.gettempdir(), "installer_executed.flag")
 
+              # ----------------------------------------------------------------
+              # For manual proxies (http/socks5) the credentials are embedded
+              # in the proxy URL so there is no separate username/password to
+              # inject into an auth dialog.  Auth dialogs are only shown for
+              # ScrapeOps (where Edge sees bare host:port with no creds).
+              # ----------------------------------------------------------------
+              needs_proxy_auth_dialog = use_proxy and proxy_type == "scrapeops"
+
               while time.time() - start_time < timeout:
                   try:
                       edge_window = None
@@ -873,6 +1114,7 @@ jobs:
                               if "Microsoft Edge" not in wt and "Edge" not in wt and "Chrome Web Store" not in wt:
                                   opera_window = window
 
+                      # G. Close download/thanks windows once sentinel file is written
                       if not download_windows_closed and os.path.exists(sentinel_path):
                           log_msg("Sentinel", "Flag detected (EXE found). Initiating download window cleanup sequence...")
                           for attempt in range(1, 6):
@@ -884,6 +1126,7 @@ jobs:
                           download_windows_closed = True
                           edge_window = None
 
+                      # Opera One post-install sentinel trigger
                       if (software_type == "opera_one"
                               and action_mode == "install"
                               and not opera_one_post_install_done):
@@ -895,14 +1138,14 @@ jobs:
                                       f"Post-install sequence will fire in 35s.")
                           if (opera_one_installer_executed_time is not None
                                   and (time.time() - opera_one_installer_executed_time) >= 35):
-                              log_msg("PostInstall-OP1",
-                                      "35-second threshold reached. Launching post-install sequence now.")
+                              log_msg("PostInstall-OP1", "35-second threshold reached. Launching post-install sequence now.")
                               opera_one_post_install_sequence(opera_window)
                               opera_one_post_install_done = True
                               opera_setup_completed = True
 
-                      # Proxy Authentication dialog (only if using ScrapeOps with separate user/pass)
-                      if use_proxy and username and password and (edge_window or opera_window):
+                      # A. Proxy Authentication dialog
+                      # Only handle for ScrapeOps — manual proxies embed creds in URL
+                      if needs_proxy_auth_dialog and (edge_window or opera_window):
                           for w in [edge_window, opera_window]:
                               if w:
                                   user_fields = w.descendants(control_type="Edit", title="Username")
@@ -915,11 +1158,11 @@ jobs:
                                           log_msg("Proxy", "Clicking Username field...")
                                           user_fields[0].click_input()
                                           log_msg("Proxy", "Typing Username...")
-                                          user_fields[0].type_keys(username, with_spaces=True, pause=0.02)
+                                          user_fields[0].type_keys(proxy_user, with_spaces=True, pause=0.02)
                                           log_msg("Proxy", "Clicking Password field...")
                                           pass_fields[0].click_input()
                                           log_msg("Proxy", "Typing Password...")
-                                          pass_fields[0].type_keys(password, with_spaces=True, pause=0.02)
+                                          pass_fields[0].type_keys(proxy_pass, with_spaces=True, pause=0.02)
                                           btn = w.descendants(control_type="Button", title="Sign in")
                                           if btn:
                                               log_msg("Proxy", "Clicking 'Sign in' button...")
@@ -931,11 +1174,11 @@ jobs:
                                           log_msg("Proxy", "Credentials injected. Resetting load timers.")
                                       except Exception as e:
                                           log_msg("Proxy", f"Auth injection failed: {e}")
-                                          pass
 
                       # Cookie Handling
                       if edge_window:
-                          for cookie_btn in ["Accept all", "Accepter tout", "Tout accepter", "Accept Cookies", "Allow all", "Accept selection"]:
+                          for cookie_btn in ["Accept all", "Accepter tout", "Tout accepter",
+                                             "Accept Cookies", "Allow all", "Accept selection"]:
                               btns = edge_window.descendants(control_type="Button", title=cookie_btn)
                               if btns:
                                   try:
@@ -945,7 +1188,7 @@ jobs:
                                       time.sleep(1)
                                   except: pass
 
-                      # Smart Link interstitial TAB+ENTER
+                      # H. Smart Link Interstitial TAB+ENTER
                       if edge_window and software_type == "opera_smart_link":
                           elapsed = time.time() - proxy_auth_time
                           if not smart_link_interstitial_done:
@@ -963,7 +1206,7 @@ jobs:
                                   smart_link_interstitial_done = True
                                   smart_link_interstitial_time = time.time()
 
-                      # --- Skip logic for Click-Only mode ---
+                      # Skip logic for Click-Only mode
                       if action_mode == "click":
                           if software_type == "opera_smart_link":
                               if not smart_link_interstitial_done:
@@ -996,10 +1239,13 @@ jobs:
                           if not smart_link_interstitial_done or (time.time() - smart_link_interstitial_time < 15):
                               can_click_download = False
 
-                      if edge_window and action_mode == "install" and can_click_download and software_type in ["opera_gx", "opera_one", "ad_mvn", "dynamic_opera", "opera_smart_link"]:
+                      if (edge_window and action_mode == "install" and can_click_download
+                              and software_type in ["opera_gx", "opera_one", "ad_mvn",
+                                                    "dynamic_opera", "opera_smart_link"]):
                           if time.time() - last_dl_click_time > 5:
                               clicked_something = False
-                              dl_keywords = ["download opera", "download now", "télécharger", "baixar", "herunterladen", "descargar", "download"]
+                              dl_keywords = ["download opera", "download now", "télécharger",
+                                             "baixar", "herunterladen", "descargar", "download"]
                               for btn in edge_window.descendants(control_type="Button"):
                                   btntxt = btn.window_text()
                                   if btntxt and any(k in btntxt.lower() for k in dl_keywords):
@@ -1007,7 +1253,6 @@ jobs:
                                           log_msg("Download", f"Targeting Final Download Button: '{btntxt}'...")
                                           edge_window.set_focus()
                                           time.sleep(0.5)
-                                          log_msg("Download", "Clicking button...")
                                           btn.click_input()
                                           last_dl_click_time = time.time()
                                           clicked_something = True
@@ -1020,11 +1265,12 @@ jobs:
                                       if el.element_info.control_type in ["Hyperlink", "Text", "Image"]:
                                           wt = el.window_text()
                                           if wt and "opera" in wt.lower() and len(wt) < 150:
-                                              if "smart link" not in wt.lower() and "http" not in wt.lower() and "playabledownloads" not in wt.lower():
+                                              if ("smart link" not in wt.lower()
+                                                      and "http" not in wt.lower()
+                                                      and "playabledownloads" not in wt.lower()):
                                                   try:
                                                       log_msg("Download", f"Targeting Interstitial Link: '{wt}'...")
                                                       edge_window.set_focus()
-                                                      log_msg("Download", "Clicking link...")
                                                       el.click_input()
                                                       last_dl_click_time = time.time()
                                                       log_msg("Download", "Link clicked successfully.")
@@ -1032,27 +1278,21 @@ jobs:
                                                   except Exception as e:
                                                       log_msg("Download", f"Failed to click link: {e}")
 
-                      # I. Specific AVG Download Trigger
+                      # I. AVG Download Trigger
                       if edge_window and action_mode == "install" and software_type == "avg":
                           elapsed = time.time() - proxy_auth_time
                           if not avg_download_clicked and (elapsed > 20):
-                              log_msg("AVG", f"{elapsed:.1f}s elapsed (Threshold: 20s). Initiating AVG TAB+ENTER download trigger.")
+                              log_msg("AVG", f"{elapsed:.1f}s elapsed. Initiating AVG TAB+ENTER download trigger.")
                               try:
-                                  log_msg("AVG", "Setting focus to Edge window...")
                                   edge_window.set_focus()
                                   time.sleep(0.5)
-                                  log_msg("AVG", "Sending '{TAB}' keystroke...")
                                   send_keys('{TAB}')
                                   delay = random.uniform(1.0, 2.0)
-                                  log_msg("AVG", f"'TAB' sent. Delaying for {delay:.2f} seconds...")
                                   time.sleep(delay)
-                                  log_msg("AVG", "Sending '{ENTER}' keystroke...")
                                   send_keys('{ENTER}')
-                                  log_msg("AVG", "'ENTER' sent. Starting 10-second wait phase for download initialization...")
                                   for w in range(1, 11):
                                       log_msg("AVG", f"Download init wait: {w}/10 seconds...")
                                       time.sleep(1)
-                                  log_msg("AVG", "10-second initialization wait completed. Proceeding.")
                               except Exception as e:
                                   log_msg("AVG", f"Keyboard sequence error: {e}")
                               avg_download_clicked = True
@@ -1062,12 +1302,10 @@ jobs:
                           add_ext_btns = edge_window.descendants(control_type="Button", title="Add extension")
                           if add_ext_btns:
                               try:
-                                  log_msg("Extension", "Found 'Add extension' confirmation dialog. Setting focus...")
+                                  log_msg("Extension", "Found 'Add extension' confirmation dialog. Clicking...")
                                   edge_window.set_focus()
                                   time.sleep(0.5)
-                                  log_msg("Extension", "Clicking 'Add extension'...")
                                   add_ext_btns[0].click_input()
-                                  log_msg("Extension", "Clicked successfully. Waiting 2s...")
                                   time.sleep(2)
                               except Exception as e:
                                   log_msg("Extension", f"Failed to click 'Add extension': {e}")
@@ -1076,12 +1314,10 @@ jobs:
                                   install_btns = edge_window.descendants(control_type="Button", title=btn_name)
                                   if install_btns:
                                       try:
-                                          log_msg("Extension", f"Found '{btn_name}' on web store. Setting focus...")
+                                          log_msg("Extension", f"Found '{btn_name}' on web store. Clicking...")
                                           edge_window.set_focus()
                                           time.sleep(0.5)
-                                          log_msg("Extension", f"Clicking '{btn_name}'...")
                                           install_btns[0].click_input()
-                                          log_msg("Extension", "Clicked successfully. Waiting 2s...")
                                           time.sleep(2)
                                           break
                                       except Exception as e:
@@ -1091,12 +1327,14 @@ jobs:
                       can_ctrl_j = True
                       if software_type == "avg" and not avg_download_clicked:
                           can_ctrl_j = False
-                      if action_mode == "install" and not keep_clicked and edge_window and can_ctrl_j and (time.time() - last_ctrl_j_time > 15) and ctrl_j_attempts < 4:
+
+                      if (action_mode == "install" and not keep_clicked and edge_window
+                              and can_ctrl_j and (time.time() - last_ctrl_j_time > 15)
+                              and ctrl_j_attempts < 4):
                           try:
-                              log_msg("Utility", "Setting window focus to open downloads flyout...")
+                              log_msg("Utility", f"Sending '^j' (Ctrl+J)... (Attempt {ctrl_j_attempts + 1}/4)")
                               edge_window.set_focus()
                               time.sleep(0.5)
-                              log_msg("Utility", f"Sending '^j' (Ctrl+J)... (Attempt {ctrl_j_attempts + 1}/4)")
                               send_keys('^j')
                               last_ctrl_j_time = time.time()
                               ctrl_j_attempts += 1
@@ -1104,7 +1342,7 @@ jobs:
                           except Exception as e:
                               log_msg("Utility", f"Ctrl+J failed: {e}")
 
-                      # F. Opera Post-install Keyboard Automation Flow
+                      # F. Opera Post-install Keyboard Automation
                       if (action_mode == "install"
                               and software_type in ["opera_gx", "ad_mvn", "dynamic_opera", "opera_smart_link"]
                               and opera_window
@@ -1114,15 +1352,16 @@ jobs:
                               is_gx_flow = "GX" in wt.upper()
                           else:
                               is_gx_flow = (software_type == "opera_gx")
+
                           if not opera_launched_time:
                               opera_launched_time = time.time()
                               wait_msg = "15s" if is_gx_flow else "90s"
-                              log_msg("PostInstall", f"Launched browser detected: '{wt}'. Flow={is_gx_flow}. Waiting {wait_msg} for full render...")
+                              log_msg("PostInstall", f"Launched browser detected: '{wt}'. Flow={is_gx_flow}. Waiting {wait_msg}...")
                               try:
-                                  log_msg("PostInstall", "Maximizing browser window...")
                                   opera_window.set_focus()
                                   opera_window.maximize()
                               except Exception: pass
+
                           wait_time = 15 if is_gx_flow else 90
                           if time.time() - opera_launched_time > wait_time:
                               try: opera_window.set_focus()
@@ -1132,69 +1371,59 @@ jobs:
                                   log_msg("PostInstall", "[Opera GX] Initiating TAB/ENTER sequence...")
                                   try:
                                       for t in range(4):
-                                          log_msg("PostInstall", f"[Opera GX] Sending '{{TAB}}' ({t+1}/4)...")
                                           send_keys('{TAB}')
                                           time.sleep(0.5)
-                                      log_msg("PostInstall", "[Opera GX] Pushed 4 TABs.")
                                       for i in range(8):
-                                          log_msg("PostInstall", f"[Opera GX] Sending '{{ENTER}}' ({i+1}/8)...")
                                           send_keys('{ENTER}')
-                                          delay = random.uniform(1.0, 2.0)
-                                          log_msg("PostInstall", f"[Opera GX] Waiting {delay:.2f} seconds...")
-                                          time.sleep(delay)
-                                      random_tabs = random.randint(4, 10)
-                                      for t in range(random_tabs):
-                                          log_msg("PostInstall", f"[Opera GX] Sending random '{{TAB}}' ({t+1}/{random_tabs})...")
+                                          time.sleep(random.uniform(1.0, 2.0))
+                                      for t in range(random.randint(4, 10)):
                                           send_keys('{TAB}')
                                           time.sleep(0.3)
-                                      log_msg("PostInstall", "[Opera GX] Sending final '{ENTER}'...")
                                       send_keys('{ENTER}')
                                       opera_setup_completed = True
-                                      log_msg("PostInstall", "[Opera GX] Setup automation completed successfully.")
-                                  except Exception as e: log_msg("PostInstall", f"[Opera GX] Error: {e}")
+                                      log_msg("PostInstall", "[Opera GX] Setup automation completed.")
+                                  except Exception as e:
+                                      log_msg("PostInstall", f"[Opera GX] Error: {e}")
                               else:
-                                  log_msg("PostInstall", "[Opera One (legacy flow)] Initiating post-install sequence...")
+                                  log_msg("PostInstall", "[Opera One (legacy flow)] Post-install sequence...")
                                   try:
                                       sw, sh = pyautogui.size()
                                       cx, cy = sw // 2, sh // 2
-                                      log_msg("PostInstall", f"[Opera One] Executing PyAutoGUI clicks at center screen coords: ({cx}, {cy})")
                                       for i in range(3):
-                                          log_msg("PostInstall", f"[Opera One] Center click {i+1}/3...")
                                           pyautogui.click(cx, cy)
-                                          delay = random.uniform(1.0, 2.0)
-                                          time.sleep(delay)
-                                      log_msg("PostInstall", "[Opera One] Swiping through setup via RIGHT arrows.")
+                                          time.sleep(random.uniform(1.0, 2.0))
                                       for i in range(10):
-                                          log_msg("PostInstall", f"[Opera One] Sending '{{RIGHT}}' ({i+1}/10)...")
                                           send_keys('{RIGHT}')
-                                          delay = random.uniform(1.0, 2.0)
-                                          time.sleep(delay)
-                                      log_msg("PostInstall", "[Opera One] Sending final '{ENTER}'...")
+                                          time.sleep(random.uniform(1.0, 2.0))
                                       send_keys('{ENTER}')
                                       opera_setup_completed = True
-                                      log_msg("PostInstall", "[Opera One] Setup automation completed successfully.")
-                                  except Exception as e: log_msg("PostInstall", f"[Opera One] Error: {e}")
+                                      log_msg("PostInstall", "[Opera One] Setup automation completed.")
+                                  except Exception as e:
+                                      log_msg("PostInstall", f"[Opera One] Error: {e}")
+
                   except Exception as e: pass
                   time.sleep(1)
 
           if __name__ == "__main__":
-              username      = sys.argv[1] if len(sys.argv) > 1 else ""
-              password      = sys.argv[2] if len(sys.argv) > 2 else ""
-              software_type = sys.argv[3] if len(sys.argv) > 3 else "avg"
-              use_proxy     = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
-              action_mode   = sys.argv[5] if len(sys.argv) > 5 else "install"
-              handle_automation(username, password, software_type, use_proxy, action_mode)
+              proxy_user    = sys.argv[1] if len(sys.argv) > 1 else ""
+              proxy_pass    = sys.argv[2] if len(sys.argv) > 2 else ""
+              proxy_type    = sys.argv[3] if len(sys.argv) > 3 else "none"
+              software_type = sys.argv[4] if len(sys.argv) > 4 else "avg"
+              use_proxy     = (sys.argv[5].lower() == "true") if len(sys.argv) > 5 else False
+              action_mode   = sys.argv[6] if len(sys.argv) > 6 else "install"
+
+              handle_automation(proxy_user, proxy_pass, proxy_type, software_type, use_proxy, action_mode)
           '@
           $handlerPy | Out-File -FilePath "$env:TEMP\auto_handler.py" -Encoding utf8
 
           Write-Host "[UI-Engine] Spinning up background Python process..." -ForegroundColor DarkGray
           Start-Process -FilePath "python" `
-              -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`" `"$env:SOFTWARE_TYPE`" `"$env:USE_PROXY`" `"$env:ACTION_MODE`"" `
+              -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`" `"$env:PROXY_TYPE`" `"$env:SOFTWARE_TYPE`" `"$env:USE_PROXY`" `"$env:ACTION_MODE`"" `
               -WindowStyle Hidden
 
-          # ---------------------------------------------------------------
+          # -----------------------------------------------------------------------
           # Software Watcher / Installer background job (INSTALL path only)
-          # ---------------------------------------------------------------
+          # -----------------------------------------------------------------------
           $dlFolder    = "$env:USERPROFILE\Downloads"
           $timeoutSecs = 330
           $softwareType = $env:SOFTWARE_TYPE
@@ -1222,16 +1451,16 @@ jobs:
                           Write-Output "[$($softwareType.ToUpper())-WATCHER] SUCCESS: Payload binary found -> $($file.Name)"
 
                           try { Set-Content -Path $sentinelPath -Value "done" -ErrorAction SilentlyContinue } catch {}
-                          Write-Output "[$($softwareType.ToUpper())-WATCHER] Sentinel flag generated. Instructing Python UI to execute Ctrl+W tab close sequence."
+                          Write-Output "[$($softwareType.ToUpper())-WATCHER] Sentinel flag generated."
 
                           $actualSoftware = $softwareType
                           if ($softwareType -eq "ad_mvn" -or $softwareType -eq "dynamic_opera" -or $softwareType -eq "opera_smart_link") {
                               if ($file.Name -match "OperaGX") {
                                   $actualSoftware = "opera_gx"
-                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Payload fingerprinted as Opera GX Setup."
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Fingerprinted as Opera GX."
                               } else {
                                   $actualSoftware = "opera_one"
-                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Payload fingerprinted as Opera One Standard Setup."
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Fingerprinted as Opera One."
                               }
                           }
 
@@ -1247,19 +1476,18 @@ jobs:
                               } catch { }
                           }
 
-                          Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Writing installer-executed sentinel flag for Python post-install timer..."
+                          Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Writing installer-executed sentinel..."
                           try { Set-Content -Path $installerExecutedSentinel -Value "done" -ErrorAction SilentlyContinue } catch {}
-                          Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Sentinel written: $installerExecutedSentinel"
 
-                          Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Executing silent payload installer -> $($file.FullName) /silent"
+                          Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Executing: $($file.FullName) /silent"
                           try {
                               Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
                               Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Binary deployed successfully."
                           } catch {
-                              Write-Output "[$($actualSoftware.ToUpper())-INSTALL] EXCEPTION ERROR running installer: $_"
+                              Write-Output "[$($actualSoftware.ToUpper())-INSTALL] EXCEPTION: $_"
                           }
 
-                          Write-Output "[$($actualSoftware.ToUpper())-POST] Scanning deployment directories for executable..."
+                          Write-Output "[$($actualSoftware.ToUpper())-POST] Scanning deployment directories..."
                           if ($actualSoftware -eq "opera_gx") {
                               $appPaths = @(
                                   "$env:LOCALAPPDATA\Programs\Opera GX\launcher.exe",
@@ -1292,7 +1520,7 @@ jobs:
                               foreach ($p in $appPaths) {
                                   if (Test-Path $p) {
                                       Start-Sleep -Seconds 3
-                                      Write-Output "[$($actualSoftware.ToUpper())-POST] Spawning process: $p"
+                                      Write-Output "[$($actualSoftware.ToUpper())-POST] Spawning: $p"
                                       Start-Process -FilePath $p
                                       $launched = $true
                                       break
@@ -1303,7 +1531,7 @@ jobs:
                           }
 
                           if (-not $launched) {
-                              Write-Output "[$($actualSoftware.ToUpper())-POST] FATAL: Executable was not found within timeout."
+                              Write-Output "[$($actualSoftware.ToUpper())-POST] FATAL: Executable not found within timeout."
                           }
 
                           $installed = $true
@@ -1311,13 +1539,15 @@ jobs:
                           Start-Sleep -Seconds 5
                       }
                   }
-                  if (-not $installed) { Write-Output "[$($softwareType.ToUpper())-WATCHER] Timeout reached. No files matching pattern downloaded." }
+                  if (-not $installed) {
+                      Write-Output "[$($softwareType.ToUpper())-WATCHER] Timeout reached. No matching file downloaded."
+                  }
               } -ArgumentList $dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath, $installerExecutedSentinel
           }
 
-          # ---------------------------------------------------------------
-          # Find Edge Path & Build launch args
-          # ---------------------------------------------------------------
+          # -----------------------------------------------------------------------
+          # Find Edge path & build launch args
+          # -----------------------------------------------------------------------
           $edgeExe = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
           if (-Not (Test-Path $edgeExe)) {
               $edgeExe = "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
@@ -1331,25 +1561,19 @@ jobs:
               "--disable-features=msSmartScreenProtection,SmartScreenPuaEnabled"
           )
 
-          if ($useProxy) {
-              if ($env:PROXY_SERVER) {
-                  # Manual proxy: use the full URL (already contains auth)
-                  $edgeArgs += "--proxy-server=`"$env:PROXY_SERVER`""
-              } else {
-                  # ScrapeOps: auth handled by Python dialog, so just point to server
-                  $proxyServer = "residential-proxy.scrapeops.io:8181"
-                  $edgeArgs += "--proxy-server=`"http://$proxyServer`""
-              }
+          if ($useProxy -and $edgeProxyArg -ne "") {
+              $edgeArgs += $edgeProxyArg
           }
           $edgeArgs += "`"$env:TARGET_URL`""
 
           Write-Host "[System] Launching Edge browser context..." -ForegroundColor Cyan
+          Write-Host "[System] Proxy arg: $edgeProxyArg" -ForegroundColor DarkGray
           Start-Process -FilePath $edgeExe -ArgumentList ($edgeArgs -join " ")
 
-          # ---------------------------------------------------------------
+          # -----------------------------------------------------------------------
           # INSTALL PATH: monitor background watcher job until done
-          # CLICK PATH:   75-second wait then exit cleanly
-          # ---------------------------------------------------------------
+          # CLICK PATH:   75-second session then exit cleanly
+          # -----------------------------------------------------------------------
           Write-Host "========== RUNTIME EXECUTION ==========" -ForegroundColor Cyan
 
           if ($env:ACTION_MODE -eq "install") {
@@ -1364,13 +1588,11 @@ jobs:
               Write-Host "[Runtime] Install job concluded. Task complete." -ForegroundColor Green
 
           } else {
-              # ----- CLICK PATH: 75-second session + optional random reload then EXIT -----
-              Write-Host "[Runtime] Operating in CLICK-ONLY pathway. All binaries and installations are bypassed." -ForegroundColor Magenta
-
+              Write-Host "[Runtime] Operating in CLICK-ONLY pathway." -ForegroundColor Magenta
               if ($env:SOFTWARE_TYPE -eq "opera_smart_link") {
-                  Write-Host "[Runtime] Allowing 75 seconds for TAB/ENTER interstitial page routing and download page load..." -ForegroundColor Yellow
+                  Write-Host "[Runtime] Allowing 75 seconds for TAB/ENTER interstitial routing..." -ForegroundColor Yellow
               } else {
-                  Write-Host "[Runtime] Allowing 75 seconds to ensure webpage fully loads and view registers..." -ForegroundColor Yellow
+                  Write-Host "[Runtime] Allowing 75 seconds for full page load..." -ForegroundColor Yellow
               }
 
               $clickStart      = Get-Date
@@ -1380,32 +1602,29 @@ jobs:
               $reloadThreshold = Get-Random -Minimum 20 -Maximum 61
               $reloadChance    = Get-Random -Minimum 10 -Maximum 101
 
-              Write-Host "[$env:SOFTWARE_TYPE] Click session started. Reload threshold: ${reloadThreshold}s elapsed | Reload chance roll: ${reloadChance}%" -ForegroundColor DarkGray
+              Write-Host "[$env:SOFTWARE_TYPE] Click session started. Reload threshold: ${reloadThreshold}s | Chance: ${reloadChance}%" -ForegroundColor DarkGray
 
               for ($w = 0; $w -lt $clickTotal; $w += $step) {
-                  Write-Host "[$env:SOFTWARE_TYPE] Click tracker maintaining session: $w / $clickTotal seconds elapsed..." -ForegroundColor Yellow
-
+                  Write-Host "[$env:SOFTWARE_TYPE] Click tracker: $w / $clickTotal seconds elapsed..." -ForegroundColor Yellow
                   if (-not $reloadFired) {
                       $elapsed = [int]((Get-Date) - $clickStart).TotalSeconds
                       if ($elapsed -ge $reloadThreshold) {
-                          Write-Host "[$env:SOFTWARE_TYPE] Reload threshold reached at ${elapsed}s. Chance roll was ${reloadChance}% - executing page reload..." -ForegroundColor Cyan
+                          Write-Host "[$env:SOFTWARE_TYPE] Reload threshold at ${elapsed}s. Sending F5..." -ForegroundColor Cyan
                           try {
                               Add-Type -AssemblyName UIAutomationClient
                               $wsh = New-Object -ComObject WScript.Shell
                               $wsh.SendKeys('{F5}')
-                              Write-Host "[$env:SOFTWARE_TYPE] F5 (page reload) sent to foreground window successfully." -ForegroundColor Green
+                              Write-Host "[$env:SOFTWARE_TYPE] F5 sent successfully." -ForegroundColor Green
                           } catch {
-                              Write-Host "[$env:SOFTWARE_TYPE] F5 reload attempt failed: $_" -ForegroundColor Red
+                              Write-Host "[$env:SOFTWARE_TYPE] F5 attempt failed: $_" -ForegroundColor Red
                           }
                           $reloadFired = $true
                       }
                   }
-
                   Start-Sleep -Seconds $step
               }
 
-              Write-Host "[Runtime] Click tracking wait complete (75s elapsed). All click-path tasks finished." -ForegroundColor Green
-              Write-Host "[Runtime] Click pathway exiting cleanly — no Keep Runner Alive extension." -ForegroundColor Magenta
+              Write-Host "[Runtime] Click tracking complete (75s). Exiting cleanly." -ForegroundColor Green
               exit 0
           }
 
