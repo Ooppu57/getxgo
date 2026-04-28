@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '5'
+        default: '3'
       num_clicks:
         description: 'Number of Clicks'
         required: true
@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Ad-MVN - Techx'
+        default: 'OperaGX - B4Books'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -108,7 +108,7 @@ on:
         description: 'ScrapeOps API / Manual Proxies'
         required: false
         type: string
-        default: 'fd6d8b71-953d-4c71-9060-cb7bd4b7261e'
+        default: 'http://j8hmmIozEg15F90Q:tJ4jzHVaqCU26Tpm@geo.floppydata.com:10080 http://Hb14q5AvWrgZ7vw2:Sqn9zOjr79ihD851@geo.floppydata.com:10080 http://yC8elPZfI4AiKy3l:9XMGQMIa6IEu4fuk@geo.floppydata.com:10080 http://mZi9ibOQ6e5I5a9c:1YI4la3PBAu0CoHO@geo.floppydata.com:10080'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
