@@ -39,7 +39,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '0'
+        default: '2'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Ad-MVN - Techx'
+        default: 'AVG - TechxTrader'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -78,7 +78,7 @@ on:
         description: 'ScrapeOps API Key (or paste manual proxies, one per line: http://user:pass@host:port or socks5://host:port)'
         required: false
         type: string
-        default: ''
+        default: '148.251.5.30:10000@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10001@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10002@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10003@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10004@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10005@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10006@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10007@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10008@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10009@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10010@a3bfa845c3182fb757b8:46b2320298396d24'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
