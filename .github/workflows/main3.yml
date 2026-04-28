@@ -19,7 +19,7 @@ on:
         description: 'Getscreen.me Account Email'
         required: true
         type: string
-        default: 'techx@justzeus.com'
+        default: 'techx@highmail.site'
       num_devices:
         description: 'Number of Devices to Spawn'
         required: true
@@ -42,7 +42,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '0'
+        default: '4'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -66,7 +66,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Ad-MVN - Techx'
+        default: 'OperaGX - B4Books'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -111,7 +111,7 @@ on:
         description: 'ScrapeOps API / Manual Proxies'
         required: false
         type: string
-        default: 'fd6d8b71-953d-4c71-9060-cb7bd4b7261e'
+        default: 'geolocation://DTudsikixRulVVCW:cc4jmTxtnQ4qkObK@geo.floppydata.com:10080:United States - 11 geolocation://cs2zgYe1UrqAOh98:JCln9ybaCZEI8hxn@geo.floppydata.com:10080:United States - 10 geolocation://TH7WH3kLPTHJ9daR:MXvc0pdjJgJlwYkn@geo.floppydata.com:10080:United States - 9 geolocation://VjV3KFMMHyMR5llu:8ER7ooJpfpbitkM9@geo.floppydata.com:10080:United States - 8 geolocation://viBJVGgcegqz5YTv:QoqLmg8N49iR3N2O@geo.floppydata.com:10080:US - New York - 7 geolocation://clAEqvtWfMGQcof9:EpH88vggFY3dPIBr@geo.floppydata.com:10080:United States - 6'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
