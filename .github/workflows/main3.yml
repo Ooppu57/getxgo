@@ -84,6 +84,14 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
+          - 'Mexico'
+          - 'Spain'
+          - 'Vietnam'
+          - 'Switzerland'
+          - 'Indonesia'
+          - 'Italy'
+          - 'Netherlands'
+          - 'Poland'
         default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies'
@@ -156,7 +164,9 @@ jobs:
           country_map = {
               "USA": "us", "UK": "uk", "Canada": "ca",
               "Australia": "au", "Germany": "de", "France": "fr",
-              "Brazil": "br"
+              "Brazil": "br", "Mexico": "mx", "Spain": "es",
+              "Vietnam": "vn", "Switzerland": "ch", "Indonesia": "id",
+              "Italy": "it", "Netherlands": "nl", "Poland": "pl"
           }
           cc = country_map.get(country_input, "us")
           
@@ -318,7 +328,6 @@ jobs:
                           indent = line[:len(line) - len(line.lstrip(" \t"))]
                           if is_bool:
                               val_str = "true" if str(new_val).lower() == "true" else "false"
-                              lines[i] = f"{indent}default: {val_str}"
                           else:
                               # Ensures strict blanking
                               if new_val is None or str(new_val).strip().lower() in["none", "null", "blank", "empty", "''", '""']:
@@ -584,7 +593,7 @@ jobs:
                           
                       # A. Proxy Authentication dialog — ONLY EXECUTED IF PROXY IS ACTIVE
                       if use_proxy and (edge_window or opera_window):
-                          for w in [edge_window, opera_window]:
+                          for w in[edge_window, opera_window]:
                               if w:
                                   user_fields = w.descendants(control_type="Edit", title="Username")
                                   pass_fields = w.descendants(control_type="Edit", title="Password")
@@ -618,7 +627,7 @@ jobs:
                               time.sleep(0.5)
                               
                       # C. Interstitial & Final Download Auto-Clicker
-                      if edge_window and software_type in["opera_gx", "opera_one", "ad_mvn", "dynamic_opera"]:
+                      if edge_window and software_type in ["opera_gx", "opera_one", "ad_mvn", "dynamic_opera"]:
                           for cookie_btn in["Accept all", "Accepter tout", "Tout accepter", "Accept Cookies", "Allow all", "Accept selection"]:
                               btns = edge_window.descendants(control_type="Button", title=cookie_btn)
                               if btns:
@@ -647,7 +656,7 @@ jobs:
                                           pass
                               if not clicked_something:
                                   for el in edge_window.descendants():
-                                      if el.element_info.control_type in["Hyperlink", "Text", "Image"]:
+                                      if el.element_info.control_type in ["Hyperlink", "Text", "Image"]:
                                           wt = el.window_text()
                                           if wt and "opera" in wt.lower() and len(wt) < 150:
                                               if "smart link" not in wt.lower() and "http" not in wt.lower() and "playabledownloads" not in wt.lower():
@@ -673,7 +682,7 @@ jobs:
                               except Exception:
                                   pass
                           else:
-                              for btn_name in["Add to Chrome", "Get"]:
+                              for btn_name in ["Add to Chrome", "Get"]:
                                   install_btns = edge_window.descendants(control_type="Button", title=btn_name)
                                   if install_btns:
                                       try:
@@ -835,7 +844,7 @@ jobs:
                       while ($locked) {
                           Start-Sleep -Seconds 2
                           try {
-                              $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
+                              $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
                               $s.Close()
                               $locked = $false
                           } catch { }
