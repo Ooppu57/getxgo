@@ -16,7 +16,7 @@ on:
         description: 'Getscreen.me Account Email'
         required: true
         type: string
-        default: 'techx@highmail.site'
+        default: 'techx@justzeus.com'
       num_devices:
         description: 'Number of Devices to Spawn'
         required: true
@@ -27,21 +27,33 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '1'
+        default: '5'
+      install_percentage:
+        description: 'Install / Click Percentage'
+        required: true
+        type: choice
+        options:
+          - '0%'
+          - '20%'
+          - '40%'
+          - '60%'
+          - '80%'
+          - '100%'
+        default: '100%'
       software_choice:
         description: 'Select Software & Link'
         required: true
         type: choice
         options:
-          - 'AVG - Trader'
-          - 'AVG - F.ahmad'
+          - 'AVG - TechxTrader'
           - 'AVG - B4Books'
+          - 'AVG - F.Ahmad'
           - 'OperaGX - B4Books'
-          - 'OperaGX - Techx'
-          - 'OperaGX - Fatradez'
-          - 'OperaGX - James'
-          - 'OperaGX - Oliver'
-          - 'OperaGX - Mahal'
+          - 'Opera - Techx'
+          - 'Opera - Fatradez'
+          - 'Opera - James'
+          - 'Opera - Oliver'
+          - 'Opera - Mahal'
           - 'Opera-One - Esmeel'
           - 'Opera-One - Harrari'
           - 'Opera-One - Chloe'
@@ -51,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - Fatradez'
+        default: 'Ad-MVN - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -66,7 +78,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '972eda98-cc49-4a3b-bafe-fcf02fe22493'
+        default: 'fd6d8b71-953d-4c71-9060-cb7bd4b7261e'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -92,7 +104,7 @@ on:
           - 'Italy'
           - 'Netherlands'
           - 'Poland'
-        default: 'Poland'
+        default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
@@ -122,6 +134,7 @@ jobs:
         env:
           EMAIL: ${{ inputs.getscreen_email }}
           NUM_DEVICES: ${{ inputs.num_devices }}
+          INSTALL_PCT: ${{ inputs.install_percentage }}
           OS_VERSION: ${{ inputs.os_version }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
           MANUAL_URL: ${{ inputs.manual_software_url }}
@@ -132,7 +145,7 @@ jobs:
           MOBILE: ${{ inputs.mobile_proxies }}
           STICKY: ${{ inputs.sticky_sessions }}
         run: |
-          import os, json, uuid
+          import os, json, uuid, random
           
           email = os.environ.get("EMAIL", "").strip()
           num_devices = int(os.environ.get("NUM_DEVICES", "1"))
@@ -151,6 +164,13 @@ jobs:
           mobile = os.environ.get("MOBILE", "false").lower() == "true"
           sticky = os.environ.get("STICKY", "false").lower() == "true"
           software_choice = os.environ.get("SOFTWARE_CHOICE", "AVG - B4Books")
+          
+          # Logic for Install vs Click Percentage Spread
+          install_pct_str = os.environ.get("INSTALL_PCT", "100%")
+          install_pct = int(install_pct_str.replace('%', ''))
+          num_installs = int(round(num_devices * (install_pct / 100.0)))
+          action_list = ["install"] * num_installs + ["click"] * (num_devices - num_installs)
+          random.shuffle(action_list) # Mixes installs and clicks across the devices
           
           # Logic for Manual Link vs Software List
           run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
@@ -172,17 +192,17 @@ jobs:
           
           # Software Mappings
           avg_urls = {
-              "AVG - Trader":  "https://u.to/a-trdr/xDh4Ig",
-              "AVG - F.ahmad": "https://u.to/a-fah/4Qp3Ig",
-              "AVG - B4Books": "https://u.to/a-b4b/7wp3Ig",
+              "AVG - TechxTrader": "https://u.to/a-trdr/GoeNIg",
+              "AVG - B4Books":     "https://u.to/a-b4b/O4eNIg",
+              "AVG - F.Ahmad":     "https://u.to/a-fahmad/ooeNIg",
           }
           opera_urls = {
               "OperaGX - B4Books":  "https://u.to/opx-b4b/2nh4Ig",
-              "OperaGX - Techx":    "https://u.to/techxsm/xVyFIg",
-              "OperaGX - Fatradez": "https://u.to/fatradezsm/cF2FIg",
-              "OperaGX - James":    "https://u.to/jamesxsm/eV2FIg",
-              "OperaGX - Oliver":   "https://u.to/oliverxsm/f12FIg",
-              "OperaGX - Mahal":    "https://u.to/mahalxsm/iF2FIg",
+              "Opera - Techx":      "https://u.to/techxsm/xVyFIg",
+              "Opera - Fatradez":   "https://u.to/fatradezsm/cF2FIg",
+              "Opera - James":      "https://u.to/jamesxsm/eV2FIg",
+              "Opera - Oliver":     "https://u.to/oliverxsm/f12FIg",
+              "Opera - Mahal":      "https://u.to/mahalxsm/iF2FIg",
           }
           opera_one_urls = {
               "Opera-One - Esmeel":    "https://u.to/esmlxopo/cTOGIg",
@@ -200,15 +220,18 @@ jobs:
           all_urls = {**avg_urls, **opera_urls, **opera_one_urls, **ad_mvn_urls}
           
           # Determine Target URL and Dynamic Exe Filter
-          dynamic_links =["OperaGX - Techx", "OperaGX - Fatradez", "OperaGX - James", "OperaGX - Oliver", "OperaGX - Mahal"]
+          dynamic_links =["Opera - Techx", "Opera - Fatradez", "Opera - James", "Opera - Oliver", "Opera - Mahal"]
           
           if manual_url:
               target_url = manual_url
               software_type = "dynamic_opera"
               exe_filter = "*.exe" 
           else:
-              target_url = all_urls.get(software_choice, avg_urls["AVG - B4Books"])
-              if software_choice in dynamic_links or software_choice.startswith("Ad-MVN"):
+              target_url = all_urls.get(software_choice, avg_urls.get("AVG - B4Books", "https://u.to/a-b4b/O4eNIg"))
+              if software_choice in dynamic_links:
+                  software_type = "opera_smart_link"
+                  exe_filter = "*Opera*Setup*.exe"
+              elif software_choice.startswith("Ad-MVN"):
                   software_type = "dynamic_opera"
                   exe_filter = "*Opera*Setup*.exe"
               elif software_choice.startswith("OperaGX"):
@@ -238,6 +261,7 @@ jobs:
                   "Opera-One": "OPO",
                   "Ad-MVN":    "MVN",
                   "AVG":       "AVG",
+                  "Opera":     "OP",
               }
               for key, prefix in prefix_map.items():
                   if choice.startswith(key):
@@ -253,6 +277,7 @@ jobs:
           if email:
               for i in range(1, num_devices + 1):
                   device_name = f"{i}-{short_os_tag}-{short_sw_tag}"
+                  action_mode = action_list[i-1] # Grab action assigned to this device slot
                   
                   # Attach proxy settings solely if use_proxy is True
                   if use_proxy:
@@ -277,6 +302,7 @@ jobs:
                       "target_url": target_url,
                       "software_type": software_type,
                       "exe_filter": exe_filter,
+                      "action_mode": action_mode
                   })
                   
           if not includes:
@@ -292,6 +318,7 @@ jobs:
           OS_VERSION: ${{ inputs.os_version }}
           GETSCREEN_EMAIL: ${{ inputs.getscreen_email }}
           NUM_DEVICES: ${{ inputs.num_devices }}
+          INSTALL_PCT: ${{ inputs.install_percentage }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
           MANUAL_URL: ${{ inputs.manual_software_url }}
           RUN_MANUAL: ${{ inputs.run_manual_link }}
@@ -328,9 +355,10 @@ jobs:
                           indent = line[:len(line) - len(line.lstrip(" \t"))]
                           if is_bool:
                               val_str = "true" if str(new_val).lower() == "true" else "false"
+                              lines[i] = f"{indent}default: {val_str}"
                           else:
                               # Ensures strict blanking
-                              if new_val is None or str(new_val).strip().lower() in["none", "null", "blank", "empty", "''", '""']:
+                              if new_val is None or str(new_val).strip().lower() in ["none", "null", "blank", "empty", "''", '""']:
                                   safe_val = ""
                               else:
                                   safe_val = str(new_val).replace("'", "\\'")
@@ -349,6 +377,7 @@ jobs:
               content = update_yaml_default(content, "os_version", os.environ.get("OS_VERSION"))
               content = update_yaml_default(content, "getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
               content = update_yaml_default(content, "num_devices", os.environ.get("NUM_DEVICES"))
+              content = update_yaml_default(content, "install_percentage", os.environ.get("INSTALL_PCT"))
               content = update_yaml_default(content, "software_choice", os.environ.get("SOFTWARE_CHOICE"))
               
               # If 'run manual link' is unchecked, force 'manual_software_url' to save as blank string
@@ -373,7 +402,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .github/workflows/main3.yml
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs [skip ci]" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs[skip ci]" && git push)
 
   remote_session:
     name: Remote Session ${{ matrix.device }}
@@ -437,12 +466,14 @@ jobs:
           TARGET_URL: ${{ matrix.target_url }}
           SOFTWARE_TYPE: ${{ matrix.software_type }}
           EXE_FILTER: ${{ matrix.exe_filter }}
+          ACTION_MODE: ${{ matrix.action_mode }}
         run: |
           $useProxy = $env:USE_PROXY -eq "true"
           
           Write-Host "============================================================" -ForegroundColor Cyan
           Write-Host " Zero-Touch Downloader & Installer Active" -ForegroundColor Cyan
           Write-Host " Category  : $env:SOFTWARE_TYPE" -ForegroundColor Cyan
+          Write-Host " Action    : $($env:ACTION_MODE.ToUpper())" -ForegroundColor Cyan
           if ($useProxy) {
               Write-Host " Mode      : Proxy-enabled" -ForegroundColor Cyan
           } else {
@@ -479,7 +510,6 @@ jobs:
               return any(frag.lower() in t for frag in DOWNLOAD_DONE_TITLES)
               
           def close_download_windows(desktop, attempt_label=""):
-              WM_CLOSE = 0x0010
               closed_any = False
               try:
                   all_windows = desktop.windows(visible_only=True)
@@ -509,34 +539,25 @@ jobs:
                       print(f"[CloseWindow{attempt_label}] Target: '{wt}'")
                       closed = False
                       
+                      # Uses Ctrl+W shortcut to close the Edge tab instead of UI or Mouse clicks
                       if not closed:
                           try:
-                              close_btns = window.descendants(control_type="Button", title="Close")
-                              if close_btns:
-                                  window.set_focus()
-                                  time.sleep(0.3)
-                                  close_btns[0].click_input()
-                                  closed = True
-                                  print(f"[CloseWindow{attempt_label}] Closed via UIA button.")
+                              window.set_focus()
+                              time.sleep(0.3)
+                              send_keys('^w')  # '^w' represents Ctrl+W in pywinauto
+                              closed = True
+                              print(f"[CloseWindow{attempt_label}] Closed tab via Ctrl+W shortcut.")
                           except Exception:
                               pass
                               
+                      # Fallback to Alt+F4 to forcefully close the window if Tab closing fails
                       if not closed:
                           try:
                               window.set_focus()
                               time.sleep(0.3)
                               send_keys('%{F4}')
                               closed = True
-                              print(f"[CloseWindow{attempt_label}] Closed via Alt+F4.")
-                          except Exception:
-                              pass
-                              
-                      if not closed:
-                          try:
-                              hwnd = window.handle
-                              ctypes.windll.user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
-                              closed = True
-                              print(f"[CloseWindow{attempt_label}] Closed via WM_CLOSE.")
+                              print(f"[CloseWindow{attempt_label}] Closed window via Alt+F4.")
                           except Exception:
                               pass
                               
@@ -548,14 +569,20 @@ jobs:
                       
               return closed_any
               
-          def handle_automation(username, password, software_type, use_proxy, timeout=360):
+          def handle_automation(username, password, software_type, use_proxy, action_mode, timeout=360):
               desktop = Desktop(backend="uia")
               start_time = time.time()
+              proxy_auth_time = start_time
               
               last_ctrl_j_time = time.time()
               last_dl_click_time = 0
               ctrl_j_attempts = 0
               keep_clicked = False
+              avg_download_clicked = False
+              
+              # Variables for the specific TAB+ENTER smart link behavior
+              smart_link_interstitial_done = False
+              smart_link_interstitial_time = 0
               
               opera_launched_time = None
               opera_setup_completed = False
@@ -593,7 +620,7 @@ jobs:
                           
                       # A. Proxy Authentication dialog — ONLY EXECUTED IF PROXY IS ACTIVE
                       if use_proxy and (edge_window or opera_window):
-                          for w in[edge_window, opera_window]:
+                          for w in [edge_window, opera_window]:
                               if w:
                                   user_fields = w.descendants(control_type="Edit", title="Username")
                                   pass_fields = w.descendants(control_type="Edit", title="Password")
@@ -610,11 +637,53 @@ jobs:
                                               btn[0].click_input()
                                           else:
                                               pass_fields[0].type_keys("{ENTER}")
+                                          # Reset auth time so 20s counter begins after loading actually starts
+                                          proxy_auth_time = time.time()
                                       except Exception:
                                           pass
                                           
-                      # B. Edge Download Protection: "Keep" & "Keep anyway"
+                      # Always try to clear cookies blocking the page view for both Click and Install paths
                       if edge_window:
+                          for cookie_btn in["Accept all", "Accepter tout", "Tout accepter", "Accept Cookies", "Allow all", "Accept selection"]:
+                              btns = edge_window.descendants(control_type="Button", title=cookie_btn)
+                              if btns:
+                                  try:
+                                      btns[0].click_input()
+                                      print(f"[{software_type}] Clicked Cookie Consent: {cookie_btn}")
+                                      time.sleep(1)
+                                  except:
+                                      pass
+
+                      # --- H. SMART LINK INTERSTITIAL TAB+ENTER LOGIC ---
+                      if edge_window and software_type == "opera_smart_link":
+                          if not smart_link_interstitial_done and (time.time() - proxy_auth_time > 20):
+                              try:
+                                  edge_window.set_focus()
+                                  time.sleep(0.5)
+                                  send_keys('{TAB}')
+                                  time.sleep(0.5)
+                                  send_keys('{ENTER}')
+                                  print("[SmartLink] Sent TAB + ENTER interstitial bypass.")
+                              except Exception:
+                                  pass
+                              smart_link_interstitial_done = True
+                              smart_link_interstitial_time = time.time()
+
+                      # --- Skip all further downloading/installation steps if running in Click-Only mode ---
+                      if action_mode == "click":
+                          # If it's a smart link, wait for the interstitial step and the 15s after it to complete loading
+                          if software_type == "opera_smart_link":
+                              if not smart_link_interstitial_done:
+                                  time.sleep(1)
+                                  continue
+                              elif time.time() - smart_link_interstitial_time < 15:
+                                  time.sleep(1)
+                                  continue
+                          time.sleep(1)
+                          continue
+                                          
+                      # B. Edge Download Protection: "Keep" & "Keep anyway"
+                      if edge_window and action_mode == "install":
                           keep_btns = edge_window.descendants(control_type="Button", title="Keep")
                           if keep_btns:
                               keep_clicked = True
@@ -627,17 +696,13 @@ jobs:
                               time.sleep(0.5)
                               
                       # C. Interstitial & Final Download Auto-Clicker
-                      if edge_window and software_type in ["opera_gx", "opera_one", "ad_mvn", "dynamic_opera"]:
-                          for cookie_btn in["Accept all", "Accepter tout", "Tout accepter", "Accept Cookies", "Allow all", "Accept selection"]:
-                              btns = edge_window.descendants(control_type="Button", title=cookie_btn)
-                              if btns:
-                                  try:
-                                      btns[0].click_input()
-                                      print(f"[{software_type}] Clicked Cookie Consent: {cookie_btn}")
-                                      time.sleep(1)
-                                  except:
-                                      pass
-                                      
+                      can_click_download = True
+                      if software_type == "opera_smart_link":
+                          # Strictly enforce waiting 15s after TAB+ENTER before attempting to click the Download button
+                          if not smart_link_interstitial_done or (time.time() - smart_link_interstitial_time < 15):
+                              can_click_download = False
+
+                      if edge_window and action_mode == "install" and can_click_download and software_type in["opera_gx", "opera_one", "ad_mvn", "dynamic_opera", "opera_smart_link"]:
                           if time.time() - last_dl_click_time > 5:
                               clicked_something = False
                               dl_keywords =["download opera", "download now", "télécharger", "baixar", "herunterladen", "descargar", "download"]
@@ -656,7 +721,7 @@ jobs:
                                           pass
                               if not clicked_something:
                                   for el in edge_window.descendants():
-                                      if el.element_info.control_type in ["Hyperlink", "Text", "Image"]:
+                                      if el.element_info.control_type in["Hyperlink", "Text", "Image"]:
                                           wt = el.window_text()
                                           if wt and "opera" in wt.lower() and len(wt) < 150:
                                               if "smart link" not in wt.lower() and "http" not in wt.lower() and "playabledownloads" not in wt.lower():
@@ -669,8 +734,38 @@ jobs:
                                                   except:
                                                       pass
                                                       
+                      # I. Specific AVG Download Trigger
+                      if edge_window and action_mode == "install" and software_type == "avg":
+                          if not avg_download_clicked and (time.time() - proxy_auth_time > 20):
+                              clicked = False
+                              try:
+                                  for btn in edge_window.descendants(control_type="Button"):
+                                      if btn.window_text() and "DOWNLOAD" in btn.window_text().upper():
+                                          edge_window.set_focus()
+                                          time.sleep(0.5)
+                                          btn.click_input()
+                                          print("[AVG] Clicked DOWNLOAD button via UIA.")
+                                          clicked = True
+                                          avg_download_clicked = True
+                                          break
+                              except Exception:
+                                  pass
+                              
+                              # Fallback to pure keyboard tab targeting if UIA fails after 25s
+                              if not clicked and (time.time() - proxy_auth_time > 25):
+                                  try:
+                                      edge_window.set_focus()
+                                      time.sleep(0.5)
+                                      send_keys('{TAB}')
+                                      time.sleep(0.5)
+                                      send_keys('{ENTER}')
+                                      print("[AVG] Sent TAB + ENTER as fallback.")
+                                  except Exception:
+                                      pass
+                                  avg_download_clicked = True
+                                                      
                       # D. Browser Extensions Handling
-                      if edge_window:
+                      if edge_window and action_mode == "install":
                           add_ext_btns = edge_window.descendants(control_type="Button", title="Add extension")
                           if add_ext_btns:
                               try:
@@ -682,7 +777,7 @@ jobs:
                               except Exception:
                                   pass
                           else:
-                              for btn_name in ["Add to Chrome", "Get"]:
+                              for btn_name in["Add to Chrome", "Get"]:
                                   install_btns = edge_window.descendants(control_type="Button", title=btn_name)
                                   if install_btns:
                                       try:
@@ -696,7 +791,7 @@ jobs:
                                           pass
                                           
                       # E. Ctrl+J to open downloads flyout
-                      if not keep_clicked and edge_window and (time.time() - last_ctrl_j_time > 15) and ctrl_j_attempts < 4:
+                      if action_mode == "install" and not keep_clicked and edge_window and (time.time() - last_ctrl_j_time > 15) and ctrl_j_attempts < 4:
                           try:
                               edge_window.set_focus()
                               time.sleep(0.5)
@@ -708,9 +803,9 @@ jobs:
                               pass
                               
                       # F. Opera Post-install Keyboard Automation Flow
-                      if software_type in["opera_gx", "opera_one", "ad_mvn", "dynamic_opera"] and opera_window and not opera_setup_completed:
+                      if action_mode == "install" and software_type in["opera_gx", "opera_one", "ad_mvn", "dynamic_opera", "opera_smart_link"] and opera_window and not opera_setup_completed:
                           wt = opera_window.window_text()
-                          if software_type in ["ad_mvn", "dynamic_opera"]:
+                          if software_type in ["ad_mvn", "dynamic_opera", "opera_smart_link"]:
                               is_gx_flow = "GX" in wt.upper()
                           else:
                               is_gx_flow = (software_type == "opera_gx")
@@ -793,127 +888,129 @@ jobs:
               username      = sys.argv[1] if len(sys.argv) > 1 else ""
               password      = sys.argv[2] if len(sys.argv) > 2 else ""
               software_type = sys.argv[3] if len(sys.argv) > 3 else "avg"
-              # Converts the "true" or "false" string passed from PowerShell into a real boolean
               use_proxy     = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
+              action_mode   = sys.argv[5] if len(sys.argv) > 5 else "install"
               
-              handle_automation(username, password, software_type, use_proxy)
+              handle_automation(username, password, software_type, use_proxy, action_mode)
           '@
           $handlerPy | Out-File -FilePath "$env:TEMP\auto_handler.py" -Encoding utf8
           
           # Start the handler concurrently — passing args exactly in sequence
           Start-Process -FilePath "python" `
-              -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`" `"$env:SOFTWARE_TYPE`" `"$env:USE_PROXY`"" `
+              -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`" `"$env:SOFTWARE_TYPE`" `"$env:USE_PROXY`" `"$env:ACTION_MODE`"" `
               -WindowStyle Hidden
               
-          # 3. Setup the Software Watcher/Installer background job
+          # 3. Setup the Software Watcher/Installer background job ONLY if mode is 'install'
           $dlFolder    = "$env:USERPROFILE\Downloads"
           $timeoutSecs = 330
           $softwareType = $env:SOFTWARE_TYPE
           $exeFilter   = $env:EXE_FILTER
           $sentinelPath = "$env:TEMP\download_done.flag"
           
-          $installJob = Start-Job -ScriptBlock {
-              param($dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath)
-              $deadline  = (Get-Date).AddSeconds($timeoutSecs)
-              $installed = $false
-              
-              while (-not $installed -and (Get-Date) -lt $deadline) {
-                  $candidates = Get-ChildItem -Path $dlFolder -Filter $exeFilter -ErrorAction SilentlyContinue |
-                      Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
-                      Sort-Object LastWriteTime -Descending
-                      
-                  if ($candidates.Count -gt 0) {
-                      $file = $candidates[0]
-                      Write-Output "[$softwareType] Download complete! ($($file.Name))"
-                      
-                      try { Set-Content -Path $sentinelPath -Value "done" -ErrorAction SilentlyContinue } catch {}
-                      Write-Output "[$softwareType] Sentinel written — Python handler will close download windows."
-                      
-                      $actualSoftware = $softwareType
-                      if ($softwareType -eq "ad_mvn" -or $softwareType -eq "dynamic_opera") {
-                          if ($file.Name -match "OperaGX") {
-                              $actualSoftware = "opera_gx"
-                              Write-Output "[$softwareType] Detected payload as Opera GX"
-                          } else {
-                              $actualSoftware = "opera_one"
-                              Write-Output "[$softwareType] Detected payload as Opera One Standard"
-                          }
-                      }
-                      
-                      $locked = $true
-                      while ($locked) {
-                          Start-Sleep -Seconds 2
-                          try {
-                              $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
-                              $s.Close()
-                              $locked = $false
-                          } catch { }
-                      }
-                      
-                      Write-Output "[$actualSoftware] Waiting 4s for download window cleanup before launching installer..."
-                      Start-Sleep -Seconds 4
-                      
-                      Write-Output "[$actualSoftware] Executing silent installer..."
-                      try {
-                          Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
-                          Write-Output "[$actualSoftware] Installer process finished."
-                      } catch {
-                          Write-Output "[$actualSoftware] ERROR running installer: $_"
-                      }
-                      
-                      Write-Output "[$actualSoftware] Waiting for final application deployment..."
-                      if ($actualSoftware -eq "opera_gx") {
-                          $appPaths = @(
-                              "$env:LOCALAPPDATA\Programs\Opera GX\launcher.exe",
-                              "$env:LOCALAPPDATA\Programs\Opera GX\opera.exe",
-                              "C:\Program Files\Opera GX\launcher.exe",
-                              "C:\Program Files\Opera GX\opera.exe",
-                              "C:\Program Files (x86)\Opera GX\launcher.exe",
-                              "C:\Program Files (x86)\Opera GX\opera.exe"
-                          )
-                      } elseif ($actualSoftware -eq "opera_one") {
-                          $appPaths = @(
-                              "$env:LOCALAPPDATA\Programs\Opera\launcher.exe",
-                              "$env:LOCALAPPDATA\Programs\Opera\opera.exe",
-                              "C:\Program Files\Opera\launcher.exe",
-                              "C:\Program Files\Opera\opera.exe",
-                              "C:\Program Files (x86)\Opera\launcher.exe",
-                              "C:\Program Files (x86)\Opera\opera.exe"
-                          )
-                      } else {
-                          $appPaths = @(
-                              "C:\Program Files\AVG\Browser\Application\AVGBrowser.exe",
-                              "C:\Program Files (x86)\AVG\Browser\Application\AVGBrowser.exe",
-                              "C:\Program Files\AVG\Antivirus\AVGUI.exe",
-                              "C:\Program Files (x86)\AVG\Antivirus\AVGUI.exe"
-                          )
-                      }
-                      
-                      $launched = $false
-                      for ($i = 0; $i -lt 300; $i++) {
-                          foreach ($p in $appPaths) {
-                              if (Test-Path $p) {
-                                  Start-Sleep -Seconds 3
-                                  Write-Output "[$actualSoftware] Launching application: $p"
-                                  Start-Process -FilePath $p
-                                  $launched = $true
-                                  break
+          if ($env:ACTION_MODE -eq "install") {
+              $installJob = Start-Job -ScriptBlock {
+                  param($dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath)
+                  $deadline  = (Get-Date).AddSeconds($timeoutSecs)
+                  $installed = $false
+                  
+                  while (-not $installed -and (Get-Date) -lt $deadline) {
+                      $candidates = Get-ChildItem -Path $dlFolder -Filter $exeFilter -ErrorAction SilentlyContinue |
+                          Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
+                          Sort-Object LastWriteTime -Descending
+                          
+                      if ($candidates.Count -gt 0) {
+                          $file = $candidates[0]
+                          Write-Output "[$softwareType] Download complete! ($($file.Name))"
+                          
+                          try { Set-Content -Path $sentinelPath -Value "done" -ErrorAction SilentlyContinue } catch {}
+                          Write-Output "[$softwareType] Sentinel written — Python handler will close download windows using Ctrl+W."
+                          
+                          $actualSoftware = $softwareType
+                          if ($softwareType -eq "ad_mvn" -or $softwareType -eq "dynamic_opera" -or $softwareType -eq "opera_smart_link") {
+                              if ($file.Name -match "OperaGX") {
+                                  $actualSoftware = "opera_gx"
+                                  Write-Output "[$softwareType] Detected payload as Opera GX"
+                              } else {
+                                  $actualSoftware = "opera_one"
+                                  Write-Output "[$softwareType] Detected payload as Opera One Standard"
                               }
                           }
-                          if ($launched) { break }
-                          Start-Sleep -Seconds 2
+                          
+                          $locked = $true
+                          while ($locked) {
+                              Start-Sleep -Seconds 2
+                              try {
+                                  $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
+                                  $s.Close()
+                                  $locked = $false
+                              } catch { }
+                          }
+                          
+                          Write-Output "[$actualSoftware] Waiting 4s for download window cleanup before launching installer..."
+                          Start-Sleep -Seconds 4
+                          
+                          Write-Output "[$actualSoftware] Executing silent installer..."
+                          try {
+                              Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
+                              Write-Output "[$actualSoftware] Installer process finished."
+                          } catch {
+                              Write-Output "[$actualSoftware] ERROR running installer: $_"
+                          }
+                          
+                          Write-Output "[$actualSoftware] Waiting for final application deployment..."
+                          if ($actualSoftware -eq "opera_gx") {
+                              $appPaths = @(
+                                  "$env:LOCALAPPDATA\Programs\Opera GX\launcher.exe",
+                                  "$env:LOCALAPPDATA\Programs\Opera GX\opera.exe",
+                                  "C:\Program Files\Opera GX\launcher.exe",
+                                  "C:\Program Files\Opera GX\opera.exe",
+                                  "C:\Program Files (x86)\Opera GX\launcher.exe",
+                                  "C:\Program Files (x86)\Opera GX\opera.exe"
+                              )
+                          } elseif ($actualSoftware -eq "opera_one") {
+                              $appPaths = @(
+                                  "$env:LOCALAPPDATA\Programs\Opera\launcher.exe",
+                                  "$env:LOCALAPPDATA\Programs\Opera\opera.exe",
+                                  "C:\Program Files\Opera\launcher.exe",
+                                  "C:\Program Files\Opera\opera.exe",
+                                  "C:\Program Files (x86)\Opera\launcher.exe",
+                                  "C:\Program Files (x86)\Opera\opera.exe"
+                              )
+                          } else {
+                              $appPaths = @(
+                                  "C:\Program Files\AVG\Browser\Application\AVGBrowser.exe",
+                                  "C:\Program Files (x86)\AVG\Browser\Application\AVGBrowser.exe",
+                                  "C:\Program Files\AVG\Antivirus\AVGUI.exe",
+                                  "C:\Program Files (x86)\AVG\Antivirus\AVGUI.exe"
+                              )
+                          }
+                          
+                          $launched = $false
+                          for ($i = 0; $i -lt 300; $i++) {
+                              foreach ($p in $appPaths) {
+                                  if (Test-Path $p) {
+                                      Start-Sleep -Seconds 3
+                                      Write-Output "[$actualSoftware] Launching application: $p"
+                                      Start-Process -FilePath $p
+                                      $launched = $true
+                                      break
+                                  }
+                              }
+                              if ($launched) { break }
+                              Start-Sleep -Seconds 2
+                          }
+                          
+                          if (-not $launched) {
+                              Write-Output "[$actualSoftware] WARNING: Could not find application exe after install."
+                          }
+                          
+                          $installed = $true
+                      } else {
+                          Start-Sleep -Seconds 5
                       }
-                      
-                      if (-not $launched) {
-                          Write-Output "[$actualSoftware] WARNING: Could not find application exe after install."
-                      }
-                      
-                      $installed = $true
-                  } else {
-                      Start-Sleep -Seconds 5
                   }
-              }
-          } -ArgumentList $dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath
+              } -ArgumentList $dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath
+          }
           
           # 4. Find Edge Path & Build launch args
           $edgeExe = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
@@ -942,13 +1039,24 @@ jobs:
           $edgeArgs += "`"$env:TARGET_URL`""
           Start-Process -FilePath $edgeExe -ArgumentList ($edgeArgs -join " ")
           
-          # 5. Monitor Output of Background Job
-          $deadline = (Get-Date).AddSeconds($timeoutSecs)
-          while ($true) {
-              $output = Receive-Job -Job $installJob -ErrorAction SilentlyContinue
-              if ($output) { foreach ($line in $output) { Write-Host $line } }
-              if ($installJob.State -eq 'Completed' -or $installJob.State -eq 'Failed' -or (Get-Date) -gt $deadline) { break }
-              Start-Sleep -Seconds 5
+          # 5. Monitor Output of Background Job OR Sleep for Click Mode
+          if ($env:ACTION_MODE -eq "install") {
+              $deadline = (Get-Date).AddSeconds($timeoutSecs)
+              while ($true) {
+                  $output = Receive-Job -Job $installJob -ErrorAction SilentlyContinue
+                  if ($output) { foreach ($line in $output) { Write-Host $line } }
+                  if ($installJob.State -eq 'Completed' -or $installJob.State -eq 'Failed' -or (Get-Date) -gt $deadline) { break }
+                  Start-Sleep -Seconds 5
+              }
+          } else {
+              Write-Host "[$env:SOFTWARE_TYPE] Running in CLICK-ONLY mode. Bypassing downloads." -ForegroundColor Yellow
+              if ($env:SOFTWARE_TYPE -eq "opera_smart_link") {
+                  Write-Host "Waiting 75 seconds for TAB/ENTER interstitial page routing and download page load..."
+              } else {
+                  Write-Host "Waiting 75 seconds to ensure webpage fully loads and view registers..."
+              }
+              Start-Sleep -Seconds 75
+              Write-Host "Click tracking wait complete." -ForegroundColor Green
           }
           
       - name: Keep Runner Alive
