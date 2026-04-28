@@ -29,7 +29,7 @@ on:
           - '5'
         default: '5'
       num_clicks:
-        description: 'Number of Clicks (remaining devices will install)'
+        description: 'Number of Clicks'
         required: true
         type: choice
         options:
@@ -39,7 +39,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '2'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'AVG - TechxTrader'
+        default: 'Ad-MVN - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -75,17 +75,18 @@ on:
         type: boolean
         default: false
       scrapeops_api_key:
-        description: 'ScrapeOps API Key (or paste manual proxies, one per line: http://user:pass@host:port or socks5://host:port)'
+        description: |
+          ScrapeOps / Proxies  
         required: false
         type: string
-        default: '148.251.5.30:10000@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10001@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10002@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10003@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10004@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10005@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10006@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10007@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10008@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10009@a3bfa845c3182fb757b8:46b2320298396d24 148.251.5.30:10010@a3bfa845c3182fb757b8:46b2320298396d24'
+        default: ''
       use_without_proxy:
         description: 'Run without proxy'
         required: true
         type: boolean
         default: false
       proxy_country:
-        description: 'Proxy Country Geotargeting (ScrapeOps only)'
+        description: 'Proxy Country'
         required: true
         type: choice
         options:
@@ -106,12 +107,12 @@ on:
           - 'Poland'
         default: 'USA'
       mobile_proxies:
-        description: 'Use Mobile Proxies (ScrapeOps only)'
+        description: 'Use Mobile Proxies'
         required: true
         type: boolean
         default: false
       sticky_sessions:
-        description: 'Enable Unique Sticky Sessions (ScrapeOps only)'
+        description: 'Use Unique Sticky Sessions'
         required: true
         type: boolean
         default: true
@@ -145,13 +146,11 @@ jobs:
           MOBILE: ${{ inputs.mobile_proxies }}
           STICKY: ${{ inputs.sticky_sessions }}
         run: |
-          import os, json, uuid, random, re, sys, subprocess
-          import time
+          import os, json, uuid, random, re, sys, subprocess, time
           from urllib.parse import urlparse
 
-          # Ensure required packages are installed
+          # Ensure required packages are available
           subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "pysocks", "--quiet"])
-
           import requests
 
           print("========== INITIALIZING MATRIX GENERATION ==========")
@@ -160,16 +159,15 @@ jobs:
           num_devices = int(os.environ.get("NUM_DEVICES", "1"))
           os_version = os.environ.get("OS_VERSION", "windows-2025")
 
-          # Smart API Key & Checkbox validation
-          api_key = os.environ.get("API_KEY", "").strip()
+          api_key_raw = os.environ.get("API_KEY", "").strip()
           without_proxy = os.environ.get("WITHOUT_PROXY", "false").lower() == "true"
 
           if without_proxy:
               print("[Proxy] 'Run without proxy' checked. Disabling proxy.")
-              api_key = ""
-          elif not api_key or api_key.lower() in ["none", "null", "false", "blank", "empty", "''", '""']:
+              api_key_raw = ""
+          elif not api_key_raw or api_key_raw.lower() in ["none", "null", "false", "blank", "empty", "''", '""']:
               print("[Proxy] API key empty or invalid. Disabling proxy.")
-              api_key = ""
+              api_key_raw = ""
 
           country_input = os.environ.get("COUNTRY", "USA")
           mobile = os.environ.get("MOBILE", "false").lower() == "true"
@@ -192,7 +190,7 @@ jobs:
           manual_url_input = os.environ.get("MANUAL_URL", "").strip()
           manual_url = manual_url_input if run_manual else ""
 
-          # Map Country to ScrapeOps codes (for API key mode)
+          # Country mapping for ScrapeOps
           country_map = {
               "USA": "us", "UK": "uk", "Canada": "ca",
               "Australia": "au", "Germany": "de", "France": "fr",
@@ -258,63 +256,74 @@ jobs:
               print(f"[Target] Engine Type: {software_type} | Filter: {exe_filter}")
 
           # ============= PROXY DETECTION & MANAGEMENT =============
-          # We will always output these variables for matrix:
-          #   use_proxy (bool), proxy_server (full URL for manual, empty otherwise),
-          #   proxy_user, proxy_pass (for ScrapeOps auth dialog), country_code (for device name)
           use_proxy = False
-          proxy_type = "none"  # none, scrapeops, manual
-          manual_proxies_list = []  # list of dicts: { 'url': '...', 'country': 'XX' }
+          proxy_type = "none"
+          manual_proxies_list = []
 
-          if api_key:  # api_key is not empty
-              # Determine if it looks like ScrapeOps API key or manual proxy list
-              lines = [l.strip() for l in api_key.splitlines() if l.strip()]
-              # If more than one line and first line looks like a proxy URL (contains ://)
-              if len(lines) > 1 and any(scheme in lines[0] for scheme in ["http://", "https://", "socks5://", "socks4://"]):
+          if api_key_raw:
+              # Robust detection: manual if contains @, ://, or whitespace; else ScrapeOps key
+              if any(c in api_key_raw for c in ["@", "://", "\n", "\r", " "]):
                   proxy_type = "manual"
-                  print("[Proxy] Detected MANUAL proxy list input.")
+                  print("[Proxy] Detected MANUAL proxy list (contains @, ://, or whitespace).")
               else:
                   proxy_type = "scrapeops"
                   print("[Proxy] Detected ScrapeOps API key.")
 
-          if proxy_type == "scrapeops" and api_key:
+          if proxy_type == "scrapeops" and api_key_raw:
               use_proxy = True
               print(f"[Proxy] Using ScrapeOps with country={cc}, mobile={mobile}, sticky={sticky}")
-              # Country from dropdown, no need to check IP
               device_country = cc.upper()
           elif proxy_type == "manual":
-              # Parse and test proxies
               print("[Proxy] Starting manual proxy validation...")
-              raw_proxies = lines
+              # Split by any whitespace (spaces, newlines, tabs)
+              raw_proxies = [p for p in re.split(r'\s+', api_key_raw.strip()) if p]
+              print(f"[Proxy] Found {len(raw_proxies)} potential proxy entries.")
 
-              def test_proxy_http(proxy_url, test_url="http://httpbin.org/ip", timeout=8):
-                  """Test proxy as HTTP/HTTPS proxy, returns True if request succeeds."""
+              def parse_proxy_entry(entry):
+                  """Convert a raw entry (ip:port@user:pass, http://..., etc.) into full HTTP URL."""
+                  entry = entry.strip()
+                  if "://" not in entry:
+                      # No scheme – default to HTTP. But first figure out format.
+                      # It could be ip:port@user:pass (host first) or user:pass@ip:port.
+                      if "@" in entry:
+                          left, right = entry.rsplit("@", 1)
+                          if re.match(r'^\d+\.\d+\.\d+\.\d+:\d+$', left):
+                              # host:port@user:pass
+                              host_port, user_pass = left, right
+                          else:
+                              # user:pass@host:port (standard)
+                              user_pass, host_port = left, right
+                          return f"http://{user_pass}@{host_port}"
+                      else:
+                          # No auth, just host:port
+                          return f"http://{entry}"
+                  else:
+                      # Already has a scheme. Might still need to rearrange if it's e.g. socks5://ip:port
+                      return entry
+
+              def test_proxy_http(proxy_url, timeout=8):
                   try:
                       proxies = {"http": proxy_url, "https": proxy_url}
-                      r = requests.get(test_url, proxies=proxies, timeout=timeout)
+                      r = requests.get("http://httpbin.org/ip", proxies=proxies, timeout=timeout)
                       if r.status_code == 200:
                           return True
                   except Exception:
                       pass
                   return False
 
-              def test_proxy_socks5(proxy_url, test_url="http://httpbin.org/ip", timeout=8):
-                  """Test proxy as SOCKS5 proxy (requires pysocks)."""
+              def test_proxy_socks5(proxy_url, timeout=8):
                   try:
-                      # Parse and reconstruct as socks5 schema
+                      # Convert to socks5 schema
                       parsed = urlparse(proxy_url)
                       if parsed.scheme in ("socks5", "socks5h"):
                           socks_url = proxy_url
                       else:
-                          # Build socks5 URL from components
                           loc = parsed.hostname
                           port = parsed.port or 1080
-                          if parsed.username and parsed.password:
-                              auth = f"{parsed.username}:{parsed.password}@"
-                          else:
-                              auth = ""
+                          auth = f"{parsed.username}:{parsed.password}@" if parsed.username else ""
                           socks_url = f"socks5://{auth}{loc}:{port}"
                       proxies = {"http": socks_url, "https": socks_url}
-                      r = requests.get(test_url, proxies=proxies, timeout=timeout)
+                      r = requests.get("http://httpbin.org/ip", proxies=proxies, timeout=timeout)
                       if r.status_code == 200:
                           return True
                   except Exception:
@@ -322,86 +331,53 @@ jobs:
                   return False
 
               def get_country_via_proxy(proxy_url):
-                  """Get country code by accessing IP geolocation API through proxy."""
+                  api = "http://ip-api.com/json/?fields=countryCode"
+                  # Try HTTP first
                   try:
-                      # Use proxy in HTTP format for the IP check (or detect working scheme)
-                      # We'll try HTTP first, then socks5
-                      api = "http://ip-api.com/json/?fields=countryCode"
-                      # Try as HTTP
                       proxies = {"http": proxy_url}
                       r = requests.get(api, proxies=proxies, timeout=8)
                       if r.status_code == 200:
-                          data = r.json()
-                          return data.get("countryCode", "").upper()
+                          return r.json().get("countryCode", "").upper()
                   except Exception:
                       pass
+                  # Try as SOCKS5
                   try:
-                      # Try as SOCKS5
                       parsed = urlparse(proxy_url)
                       if parsed.scheme in ("socks5", "socks5h"):
                           socks_url = proxy_url
                       else:
                           loc = parsed.hostname
                           port = parsed.port or 1080
-                          if parsed.username and parsed.password:
-                              auth = f"{parsed.username}:{parsed.password}@"
-                          else:
-                              auth = ""
+                          auth = f"{parsed.username}:{parsed.password}@" if parsed.username else ""
                           socks_url = f"socks5://{auth}{loc}:{port}"
                       proxies = {"http": socks_url}
                       r = requests.get(api, proxies=proxies, timeout=8)
                       if r.status_code == 200:
-                          data = r.json()
-                          return data.get("countryCode", "").upper()
+                          return r.json().get("countryCode", "").upper()
                   except Exception:
                       pass
                   return ""
 
               active_proxies = []
               for i, raw in enumerate(raw_proxies, 1):
-                  print(f"[Proxy] Testing line {i}: {raw}")
-                  # Ensure it has a scheme, if not, prepend http://
-                  if "://" not in raw:
-                      test_http = "http://" + raw
-                      test_socks = "socks5://" + raw  # may fail but we parse
-                  else:
-                      test_http = raw
-                      test_socks = raw  # will be converted correctly later
-
-                  http_ok = test_proxy_http(test_http)
-                  socks_ok = test_proxy_socks5(test_socks)
+                  print(f"[Proxy] Testing entry {i}: {raw}")
+                  full_http = parse_proxy_entry(raw)
+                  http_ok = test_proxy_http(full_http)
+                  socks_ok = test_proxy_socks5(full_http)
                   active = http_ok or socks_ok
                   status = "ACTIVE" if active else "DEAD"
                   print(f"   HTTP: {'OK' if http_ok else 'FAIL'} | SOCKS5: {'OK' if socks_ok else 'FAIL'} -> {status}")
 
                   if active:
-                      # Determine country
-                      country = get_country_via_proxy(test_http if http_ok else test_socks)
-                      print(f"   Country detected: {country or '??'}")
-                      # Decide which URL format to use in Edge (prefer HTTP if both work)
-                      if http_ok:
-                          final_url = test_http
-                      else:
-                          # Use socks5 URL
-                          if socks_ok:
-                              # Construct proper socks5 URL
-                              parsed = urlparse(test_socks if "socks5" in test_socks else "socks5://" + raw.split("://",1)[1])
-                              loc = parsed.hostname
-                              port = parsed.port or 1080
-                              if parsed.username and parsed.password:
-                                  auth = f"{parsed.username}:{parsed.password}@"
-                              else:
-                                  auth = ""
-                              final_url = f"socks5://{auth}{loc}:{port}"
-                          else:
-                              final_url = test_http  # fallback
+                      country = get_country_via_proxy(full_http if http_ok else full_http)  # will try HTTP then SOCKS
+                      print(f"   Country: {country or '??'}")
+                      final_url = full_http if http_ok else f"socks5://{urlparse(full_http).username}:{urlparse(full_http).password}@{urlparse(full_http).hostname}:{urlparse(full_http).port or 1080}" if socks_ok else full_http
                       active_proxies.append({
                           "url": final_url,
-                          "country": country or cc,  # fallback to dropdown country
+                          "country": country or cc,  # fallback to dropdown if detection fails
                           "http_ok": http_ok,
                           "socks_ok": socks_ok
                       })
-                      print(f"   Using proxy URL: {final_url}")
 
               if active_proxies:
                   use_proxy = True
@@ -432,7 +408,6 @@ jobs:
 
           includes = []
           if use_proxy and proxy_type == "scrapeops":
-              # ScrapeOps logic (existing)
               for i in range(1, num_devices + 1):
                   action_mode = action_list[i - 1]
                   device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_mode.capitalize()}-{cc.upper()}"
@@ -441,36 +416,32 @@ jobs:
                   if sticky:
                       session_id = str(uuid.uuid4())[:8]
                       proxy_user += f".sticky_session={session_id}"
-                  proxy_pass = api_key
+                  proxy_pass = api_key_raw
                   includes.append({
                       "device": device_name,
                       "email": email,
                       "os": os_version,
                       "use_proxy": str(use_proxy).lower(),
-                      "proxy_server": "",  # not used for scrapeops
+                      "proxy_server": "",
                       "proxy_user": proxy_user,
                       "proxy_pass": proxy_pass,
                       "target_url": target_url,
                       "software_type": software_type,
                       "exe_filter": exe_filter,
                       "action_mode": action_mode,
-                      "country_code": cc.upper()  # from dropdown
+                      "country_code": cc.upper()
                   })
           elif use_proxy and proxy_type == "manual":
-              # Manual proxies: distribute different proxy to each device
-              proxy_pool = manual_proxies_list  # list of dicts
+              proxy_pool = manual_proxies_list
               if len(proxy_pool) < num_devices:
                   print("[Warning] Fewer active proxies than devices. Some devices will share proxies.")
-                  # cycle if needed
                   proxy_cycle = [proxy_pool[i % len(proxy_pool)] for i in range(num_devices)]
               else:
-                  # assign unique, shuffle order for randomness
                   random.shuffle(proxy_pool)
                   proxy_cycle = proxy_pool[:num_devices]
               for i in range(1, num_devices + 1):
                   proxy = proxy_cycle[i-1]
                   action_mode = action_list[i - 1]
-                  # use proxy's country code
                   device_country = proxy["country"]
                   device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_mode.capitalize()}-{device_country}"
                   includes.append({
@@ -478,8 +449,8 @@ jobs:
                       "email": email,
                       "os": os_version,
                       "use_proxy": str(use_proxy).lower(),
-                      "proxy_server": proxy["url"],  # full proxy URL for Edge --proxy-server
-                      "proxy_user": "",  # no auth dialog needed
+                      "proxy_server": proxy["url"],
+                      "proxy_user": "",
                       "proxy_pass": "",
                       "target_url": target_url,
                       "software_type": software_type,
@@ -488,7 +459,6 @@ jobs:
                       "country_code": device_country
                   })
           else:
-              # No proxy
               for i in range(1, num_devices + 1):
                   action_mode = action_list[i - 1]
                   device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_mode.capitalize()}-NOPROXY"
@@ -554,8 +524,10 @@ jobs:
                               val_str = "true" if str(new_val).lower() == "true" else "false"
                               lines[i] = f"{indent}default: {val_str}"
                           else:
-                              if new_val is None or str(new_val).strip().lower() in ["none", "null", "blank", "empty", "''", '""']: safe_val = ""
-                              else: safe_val = str(new_val).replace("'", "\\'")
+                              if new_val is None or str(new_val).strip().lower() in ["none", "null", "blank", "empty", "''", '""']:
+                                  safe_val = ""
+                              else:
+                                  safe_val = str(new_val).replace("'", "\\'")
                               lines[i] = f"{indent}default: '{safe_val}'"
                           break
               return "\n".join(lines)
@@ -576,7 +548,17 @@ jobs:
               manual_url_to_save = os.environ.get("MANUAL_URL") if run_manual else ""
               content = update_yaml_default(content, "manual_software_url", manual_url_to_save)
               content = update_yaml_default(content, "run_manual_link", run_manual, is_bool=True)
-              content = update_yaml_default(content, "scrapeops_api_key", os.environ.get("API_KEY"))
+
+              # Smart save for API key: only save ScrapeOps key, clear manual proxies
+              api_key_raw = os.environ.get("API_KEY", "").strip()
+              if api_key_raw and any(c in api_key_raw for c in ["@", "://", " ", "\n", "\r"]):
+                  # It's a manual proxy list – do NOT save it
+                  api_key_to_save = ""
+                  print("[Workflow State] Manual proxy detected – not saving to defaults.")
+              else:
+                  api_key_to_save = api_key_raw
+              content = update_yaml_default(content, "scrapeops_api_key", api_key_to_save)
+
               content = update_yaml_default(content, "use_without_proxy", os.environ.get("WITHOUT_PROXY"), is_bool=True)
               content = update_yaml_default(content, "proxy_country", os.environ.get("COUNTRY"))
               content = update_yaml_default(content, "mobile_proxies", os.environ.get("MOBILE"), is_bool=True)
@@ -683,7 +665,11 @@ jobs:
           Write-Host " Category  : $env:SOFTWARE_TYPE" -ForegroundColor Cyan
           Write-Host " Action    : $($env:ACTION_MODE.ToUpper()) PATHWAY ASSIGNED" -ForegroundColor Magenta
           if ($useProxy) {
-              Write-Host " Mode      : Proxy-enabled ($env:PROXY_SERVER)" -ForegroundColor Cyan
+              if ($env:PROXY_SERVER) {
+                  Write-Host " Mode      : Manual Proxy ($env:PROXY_SERVER)" -ForegroundColor Cyan
+              } else {
+                  Write-Host " Mode      : ScrapeOps Proxy (auth: $env:PROXY_USER)" -ForegroundColor Cyan
+              }
           } else {
               Write-Host " Mode      : Direct (Proxy Completely Bypassed)" -ForegroundColor Yellow
           }
@@ -693,7 +679,7 @@ jobs:
           python -m pip install pywinauto pyautogui pygetwindow keyboard --quiet
 
           # ---------------------------------------------------------------
-          # Python UI background handler (identical to original)
+          # Python UI background handler (identical to original, fully preserved)
           # ---------------------------------------------------------------
           $handlerPy = @'
           import time, sys, subprocess, random, os, tempfile, ctypes
@@ -1337,7 +1323,6 @@ jobs:
               $edgeExe = "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
           }
 
-          # Base Edge flags
           $edgeArgs = @(
               "--no-first-run",
               "--no-default-browser-check",
@@ -1348,10 +1333,10 @@ jobs:
 
           if ($useProxy) {
               if ($env:PROXY_SERVER) {
-                  # Manual proxy: full URL already contains auth
+                  # Manual proxy: use the full URL (already contains auth)
                   $edgeArgs += "--proxy-server=`"$env:PROXY_SERVER`""
               } else {
-                  # ScrapeOps: use hardcoded server (auth separately through dialog)
+                  # ScrapeOps: auth handled by Python dialog, so just point to server
                   $proxyServer = "residential-proxy.scrapeops.io:8181"
                   $edgeArgs += "--proxy-server=`"http://$proxyServer`""
               }
@@ -1359,7 +1344,6 @@ jobs:
           $edgeArgs += "`"$env:TARGET_URL`""
 
           Write-Host "[System] Launching Edge browser context..." -ForegroundColor Cyan
-          Write-Host "[System] Command: msedge.exe $(($edgeArgs | ForEach-Object { $_ -replace '"','\"' }) -join ' ')" -ForegroundColor DarkGray
           Start-Process -FilePath $edgeExe -ArgumentList ($edgeArgs -join " ")
 
           # ---------------------------------------------------------------
