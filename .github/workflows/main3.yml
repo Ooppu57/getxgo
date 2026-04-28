@@ -16,7 +16,7 @@ on:
         description: 'Getscreen.me Account Email'
         required: true
         type: string
-        default: 'techx@justzeus.com'
+        default: 'techx@highmail.site'
       num_devices:
         description: 'Number of Devices to Spawn'
         required: true
@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '5'
+        default: '1'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -51,7 +51,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Ad-MVN - Techx'
+        default: 'OperaGX - Fatradez'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -66,7 +66,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: 'fd6d8b71-953d-4c71-9060-cb7bd4b7261e'
+        default: '972eda98-cc49-4a3b-bafe-fcf02fe22493'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -92,7 +92,7 @@ on:
           - 'Italy'
           - 'Netherlands'
           - 'Poland'
-        default: 'USA'
+        default: 'Poland'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
