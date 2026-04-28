@@ -75,7 +75,7 @@ on:
         type: boolean
         default: false
       scrapeops_api_key:
-        description: 'ScrapeOps API Key OR Manual Proxies (space-separated). Supports: geolocation://user:pass@host:port:Country - Num, http://user:pass@host:port, user:pass@host:port, host:port:user:pass'
+        description: 'ScrapeOps API Key / Manual Proxies'
         required: false
         type: string
         default: '98c57d69-e8c7-47a7-a55a-f043682b0d47'
@@ -85,7 +85,7 @@ on:
         type: boolean
         default: false
       proxy_country:
-        description: 'Proxy Country Geotargeting (IGNORED when manual proxies are provided)'
+        description: 'Proxy Country Geotargeting'
         required: true
         type: choice
         options:
@@ -106,12 +106,12 @@ on:
           - 'Poland'
         default: 'Australia'
       mobile_proxies:
-        description: 'Use Mobile Proxies (IGNORED when manual proxies are provided)'
+        description: 'Use Mobile Proxies'
         required: true
         type: boolean
         default: false
       sticky_sessions:
-        description: 'Enable Unique Sticky Sessions (IGNORED when manual proxies are provided)'
+        description: 'Enable Unique Sticky Sessions'
         required: true
         type: boolean
         default: true
