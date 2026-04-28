@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Jimmy'
+        default: 'Opera - Fatradez'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -104,7 +104,7 @@ on:
           - 'Italy'
           - 'Netherlands'
           - 'Poland'
-        default: 'USA'
+        default: 'Poland'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
