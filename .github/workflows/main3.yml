@@ -16,7 +16,7 @@ on:
         description: 'Getscreen.me Account Email'
         required: true
         type: string
-        default: 'techx@highmail.site'
+        default: 'techx@justzeus.com'
       num_devices:
         description: 'Number of Devices to Spawn'
         required: true
@@ -39,7 +39,7 @@ on:
           - '60%'
           - '80%'
           - '100%'
-        default: '20%'
+        default: '100%'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'AVG - B4Books'
+        default: 'Ad-MVN - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -78,7 +78,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '972eda98-cc49-4a3b-bafe-fcf02fe22493'
+        default: 'fd6d8b71-953d-4c71-9060-cb7bd4b7261e'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -614,7 +614,7 @@ jobs:
                           
                       # A. Proxy Authentication dialog
                       if use_proxy and (edge_window or opera_window):
-                          for w in [edge_window, opera_window]:
+                          for w in[edge_window, opera_window]:
                               if w:
                                   user_fields = w.descendants(control_type="Edit", title="Username")
                                   pass_fields = w.descendants(control_type="Edit", title="Password")
@@ -734,48 +734,23 @@ jobs:
                       if edge_window and action_mode == "install" and software_type == "avg":
                           elapsed = time.time() - proxy_auth_time
                           if not avg_download_clicked and (elapsed > 20):
-                              log_msg("AVG", "20s elapsed. Preparing to trigger AVG download.")
-                              
+                              log_msg("AVG", "20s elapsed. Triggering AVG download via TAB + ENTER.")
                               try:
                                   edge_window.set_focus()
-                                  edge_window.maximize() # Maximize to ensure coords align cleanly
                                   time.sleep(0.5)
-                              except Exception as e:
-                                  log_msg("AVG", f"Window focus/maximize error: {e}")
+                                  send_keys('{TAB}')
+                                  log_msg("AVG", "Sent TAB.")
                                   
-                              # 1. Force a click in the center of the screen to dismiss any tooltips/flyouts
-                              try:
-                                  sw, sh = pyautogui.size()
-                                  cx, cy = sw // 2, sh // 2
-                                  pyautogui.click(cx, cy)
-                                  log_msg("AVG", f"Clicked screen center ({cx}, {cy}) via PyAutoGUI to clear focus/hit button directly.")
-                                  time.sleep(0.5)
+                                  # Wait 1 to 2 seconds as requested
+                                  time.sleep(1.5)
+                                  
+                                  send_keys('{ENTER}')
+                                  log_msg("AVG", "Sent ENTER. Pausing 10 seconds for download to start...")
+                                  
+                                  # Wait 10 seconds before allowing Ctrl+J
+                                  time.sleep(10)
                               except Exception as e:
-                                  log_msg("AVG", f"Center click failed: {e}")
-
-                              # 2. UIA Backup target search
-                              clicked = False
-                              try:
-                                  for el in edge_window.descendants():
-                                      wt = el.window_text()
-                                      if wt and "DOWNLOAD" in wt.upper():
-                                          log_msg("AVG", f"Targeting '{wt}' element via UIA.")
-                                          el.click_input()
-                                          clicked = True
-                                          log_msg("AVG", "DOWNLOAD clicked successfully via UIA.")
-                                          break
-                              except Exception as e:
-                                  log_msg("AVG", f"UIA click failed: {e}")
-                              
-                              # 3. Final Fallback Sequence
-                              if not clicked:
-                                  try:
-                                      log_msg("AVG", "Triggering TAB + ENTER fallback sequence.")
-                                      send_keys('{TAB}')
-                                      time.sleep(0.5)
-                                      send_keys('{ENTER}')
-                                      log_msg("AVG", "Fallback keys injected.")
-                                  except Exception: pass
+                                  log_msg("AVG", f"Keyboard fallback error: {e}")
 
                               avg_download_clicked = True
                                                       
