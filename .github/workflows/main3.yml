@@ -39,7 +39,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '3'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - B4Books'
+        default: 'Ad-MVN - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -198,7 +198,7 @@ jobs:
           }
           cc = country_map.get(country_input, "us")
 
-          # Software Mappings (unchanged)
+          # Software Mappings
           avg_urls = {
               "AVG - TechxTrader": "https://u.to/a-trdr/GoeNIg",
               "AVG - B4Books":     "https://u.to/a-b4b/O4eNIg",
@@ -259,8 +259,6 @@ jobs:
           manual_proxies_list = []   # list of validated { url, country }
 
           if api_key:   # api_key is not empty
-              # ----- Detect if the input is a manual proxy list -----
-              # Look for any URL scheme; also handle collapsed multiline text.
               has_scheme = "://" in api_key
               if has_scheme:
                   proxy_type = "manual"
@@ -279,8 +277,7 @@ jobs:
           elif proxy_type == "manual":
               print("[Proxy] Starting manual proxy parsing & validation...")
 
-              # Split input into individual proxy strings.
-              # Find all occurrences of scheme:// and slice from one to the next.
+              # Split input into individual proxy strings using the scheme as a separator
               scheme_re = r'(https?|socks5|socks4|geolocation)://'
               matches = list(re.finditer(scheme_re, api_key))
               if not matches:
@@ -310,7 +307,6 @@ jobs:
                       "rome": "IT", "amsterdam": "NL", "warsaw": "PL"
                   }
                   def extract_country_from_extra(extra_str):
-                      """Try to get a country code from the trailing text of a geolocation proxy."""
                       extra_str = extra_str.strip().lower()
                       # Remove trailing " - number" if present
                       extra_str = re.sub(r'\s*-\s*\d+$', '', extra_str)
@@ -333,7 +329,6 @@ jobs:
 
                   def test_proxy_socks5(proxy_url, timeout=8):
                       try:
-                          # Ensure it has socks5 schema
                           parsed = urlparse(proxy_url)
                           if parsed.scheme not in ("socks5", "socks5h"):
                               loc = parsed.hostname
@@ -372,70 +367,85 @@ jobs:
                       except: pass
                       return ""
 
+                  # Robust parsing of any proxy format
+                  def parse_raw_proxy(raw):
+                      """
+                      Parses a raw proxy string of the form:
+                      scheme://[user:pass@]host:port[:extra_info]
+                      Returns dict with: scheme, username, password, host, port, extra
+                      """
+                      # Extract scheme
+                      if "://" not in raw:
+                          return None
+                      scheme, rest = raw.split("://", 1)
+                      
+                      # Separate userinfo (if any)
+                      if "@" in rest:
+                          userinfo, hostpart = rest.split("@", 1)
+                          if ":" in userinfo:
+                              username, password = userinfo.split(":", 1)
+                          else:
+                              username = userinfo
+                              password = ""
+                      else:
+                          username = password = ""
+                          hostpart = rest
+                      
+                      # Now hostpart could be "host:port:extra..." or "host:extra" without port
+                      # Use regex to extract host, port (numeric), and extra
+                      # Pattern: host (may contain dots/hyphens) followed by colon and numbers (port), optionally another colon and rest
+                      m = re.match(r'^([^:]+):(\d+)(?::(.+))?$', hostpart)
+                      if m:
+                          host = m.group(1)
+                          port = int(m.group(2))
+                          extra = m.group(3) or ""
+                      else:
+                          # Maybe only host:extra (no port) — treat port as None
+                          parts = hostpart.split(":", 1)
+                          host = parts[0]
+                          port = None  # will be set to default later
+                          extra = parts[1] if len(parts) > 1 else ""
+                      
+                      # Set default port if missing
+                      if port is None:
+                          if scheme == "http" or scheme == "https":
+                              port = 80 if scheme == "http" else 443
+                          elif scheme in ("socks5", "socks4"):
+                              port = 1080
+                          else:
+                              port = 8080  # generic default
+
+                      return {
+                          "scheme": scheme,
+                          "username": username,
+                          "password": password,
+                          "host": host,
+                          "port": port,
+                          "extra": extra
+                      }
+
                   active_proxies = []
                   for idx, raw in enumerate(raw_proxies, 1):
                       print(f"[Proxy] Testing entry {idx}: {raw}")
-                      # Parse raw URL
-                      # It might be: scheme://user:pass@host:port[:extra]
-                      # or simple scheme://host:port
-                      # We'll parse using urlparse but handle extra parts manually.
-                      parsed = urlparse(raw)
-                      scheme = parsed.scheme
-                      host = parsed.hostname
-                      port = parsed.port
-                      username = parsed.username
-                      password = parsed.password
+                      parsed_info = parse_raw_proxy(raw)
+                      if not parsed_info:
+                          print("   FAIL: invalid proxy format, skipping.")
+                          continue
 
-                      # For geolocation, there may be extra text after port (e.g., ":United States - 11")
-                      # We need to detect that extra part by looking for a colon after the port.
-                      # urlparse only sees hostname:port up to the actual port; the rest is in path or not parsed.
-                      # So we'll extract extra by scanning the raw string.
-                      extra = ""
-                      if scheme == "geolocation":
-                          # The raw format: geolocation://user:pass@host:port:Country - Number
-                          # After "@" we have host:port:extra
-                          after_at = raw.split("@", 1)[1] if "@" in raw else raw.split("://", 1)[1]
-                          # Split after_at by ":", take first two parts as host, port; the rest is extra
-                          parts = after_at.split(":", 2)  # split into at most 3 parts
-                          if len(parts) >= 3:
-                              host = parts[0]
-                              port = int(parts[1])
-                              extra = parts[2]
-                          else:
-                              host = parts[0]
-                              port = int(parts[1]) if len(parts)>1 else 8080
-                              extra = ""
-                          # Build clean proxy URL (without extra)
+                      scheme = parsed_info["scheme"]
+                      username = parsed_info["username"]
+                      password = parsed_info["password"]
+                      host = parsed_info["host"]
+                      port = parsed_info["port"]
+                      extra = parsed_info["extra"]
+
+                      # Build a clean proxy URL for testing (always use HTTP for testing, SOCKS later if needed)
+                      if username and password:
                           clean_proxy = f"http://{username}:{password}@{host}:{port}"
                       else:
-                          # Normal proxy, no extra
-                          if not host:
-                              # Attempt to parse manually
-                              if "://" in raw:
-                                  raw_no_scheme = raw.split("://", 1)[1]
-                                  if "@" in raw_no_scheme:
-                                      userpass, hostport = raw_no_scheme.split("@", 1)
-                                      host_port_parts = hostport.split(":")
-                                      host = host_port_parts[0]
-                                      port = int(host_port_parts[1]) if len(host_port_parts)>1 else None
-                                      username, password = userpass.split(":", 1)
-                                  else:
-                                      host_port_parts = raw_no_scheme.split(":")
-                                      host = host_port_parts[0]
-                                      port = int(host_port_parts[1]) if len(host_port_parts)>1 else None
-                              else:
-                                  # Just host:port
-                                  host_port = raw.split(":")
-                                  host = host_port[0]
-                                  port = int(host_port[1]) if len(host_port)>1 else None
-                          if not port:
-                              port = 8080  # default
-                          if username and password:
-                              clean_proxy = f"{scheme}://{username}:{password}@{host}:{port}"
-                          else:
-                              clean_proxy = f"{scheme}://{host}:{port}"
+                          clean_proxy = f"http://{host}:{port}"
 
-                      # Test HTTP and SOCKS5
+                      # Test with HTTP and SOCKS5
                       http_ok = test_proxy_http(clean_proxy)
                       socks_ok = test_proxy_socks5(clean_proxy)
                       status = "ACTIVE" if (http_ok or socks_ok) else "DEAD"
@@ -444,29 +454,34 @@ jobs:
                       if http_ok or socks_ok:
                           # Determine country
                           country = ""
-                          if scheme == "geolocation" and extra:
-                              # Extract from extra text
+                          if extra:
+                              # Try to parse country from extra (if geolocation format)
                               country = extract_country_from_extra(extra)
-                              print(f"   Country from proxy string: {country or '??'}")
+                              if country:
+                                  print(f"   Country from proxy string: {country}")
                           if not country:
-                              # Use IP geolocation through the working proxy
+                              # IP geolocation through working proxy
                               country = get_country_via_proxy(clean_proxy)
-                              print(f"   Country via IP API: {country or '??'}")
+                              if country:
+                                  print(f"   Country via IP API: {country}")
                           if not country:
                               # Fallback to dropdown country
                               country = cc.upper()
                               print(f"   Country fallback (dropdown): {country}")
 
-                          # Decide final proxy URL to pass to Edge (prefer HTTP if it worked)
+                          # Build final proxy URL to pass to Edge
                           if http_ok:
-                              final_url = clean_proxy
-                          else:
-                              # Build a proper SOCKS5 URL
-                              parsed_clean = urlparse(clean_proxy)
-                              if parsed_clean.username:
-                                  final_url = f"socks5://{parsed_clean.username}:{parsed_clean.password}@{parsed_clean.hostname}:{parsed_clean.port}"
+                              # Use HTTP format (most compatible)
+                              if username and password:
+                                  final_url = f"http://{username}:{password}@{host}:{port}"
                               else:
-                                  final_url = f"socks5://{parsed_clean.hostname}:{parsed_clean.port}"
+                                  final_url = f"http://{host}:{port}"
+                          else:
+                              # SOCKS5 format
+                              if username and password:
+                                  final_url = f"socks5://{username}:{password}@{host}:{port}"
+                              else:
+                                  final_url = f"socks5://{host}:{port}"
 
                           active_proxies.append({
                               "url": final_url,
@@ -519,7 +534,7 @@ jobs:
                       "email": email,
                       "os": os_version,
                       "use_proxy": "true",
-                      "proxy_server": "",   # ScrapeOps uses a fixed server
+                      "proxy_server": "",   # ScrapeOps uses a hardcoded server in the runner
                       "proxy_user": proxy_user,
                       "proxy_pass": proxy_pass,
                       "target_url": target_url,
@@ -550,7 +565,7 @@ jobs:
                       "os": os_version,
                       "use_proxy": "true",
                       "proxy_server": proxy["url"],
-                      "proxy_user": "",      # manual proxies embed auth in URL
+                      "proxy_user": "",
                       "proxy_pass": "",
                       "target_url": target_url,
                       "software_type": software_type,
@@ -683,7 +698,7 @@ jobs:
           git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs [skip ci]" && git push)
 
   # ============================
-  # Remote session jobs (unchanged, using matrix outputs)
+  # Remote session jobs (unchanged)
   # ============================
   remote_session:
     name: Session ${{ matrix.device }}
@@ -783,7 +798,7 @@ jobs:
           python -m pip install pywinauto pyautogui pygetwindow keyboard --quiet
 
           # ---------------------------------------------------------------
-          # Python UI background handler (identical to original)
+          # Python UI background handler (exact original, unchanged)
           # ---------------------------------------------------------------
           $handlerPy = @'
           import time, sys, subprocess, random, os, tempfile, ctypes
