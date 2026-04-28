@@ -16,7 +16,7 @@ on:
         description: 'Getscreen.me Account Email'
         required: true
         type: string
-        default: 'techx@justzeus.com'
+        default: 'techx@highmail.site'
       num_devices:
         description: 'Number of Devices to Spawn'
         required: true
@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'AVG - TechxTrader'
+        default: 'Opera - James'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -75,7 +75,7 @@ on:
         type: boolean
         default: false
       scrapeops_api_key:
-        description: 'ScrapeOps API Key OR Manual Proxies'
+        description: 'ScrapeOps API Key OR Manual Proxies (space-separated). Supports: geolocation://user:pass@host:port:Country - Num, http://user:pass@host:port, user:pass@host:port, host:port:user:pass'
         required: false
         type: string
         default: '98c57d69-e8c7-47a7-a55a-f043682b0d47'
@@ -85,7 +85,7 @@ on:
         type: boolean
         default: false
       proxy_country:
-        description: 'Proxy Country Geotargeting'
+        description: 'Proxy Country Geotargeting (IGNORED when manual proxies are provided)'
         required: true
         type: choice
         options:
@@ -104,14 +104,14 @@ on:
           - 'Italy'
           - 'Netherlands'
           - 'Poland'
-        default: 'USA'
+        default: 'Australia'
       mobile_proxies:
-        description: 'Use Mobile Proxies'
+        description: 'Use Mobile Proxies (IGNORED when manual proxies are provided)'
         required: true
         type: boolean
         default: false
       sticky_sessions:
-        description: 'Enable Unique Sticky Sessions'
+        description: 'Enable Unique Sticky Sessions (IGNORED when manual proxies are provided)'
         required: true
         type: boolean
         default: true
@@ -145,116 +145,214 @@ jobs:
           MOBILE: ${{ inputs.mobile_proxies }}
           STICKY: ${{ inputs.sticky_sessions }}
         run: |
-          import os, json, uuid, random, re, urllib.request, urllib.parse, concurrent.futures
+          import os, json, uuid, random, re, sys, subprocess, time
 
           print("========== INITIALIZING MATRIX GENERATION ==========")
+
+          # Ensure requests is available for proxy validation
+          try:
+              import requests
+          except ImportError:
+              subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "--quiet"])
+              import requests
 
           email = os.environ.get("EMAIL", "").strip()
           num_devices = int(os.environ.get("NUM_DEVICES", "1"))
           os_version = os.environ.get("OS_VERSION", "windows-2025")
 
-          # Smart API Key & Manual Proxy Checkbox validation
-          api_key_input = os.environ.get("API_KEY", "").strip()
+          # ==================== PROXY DETECTION & PARSING ====================
+          proxy_input = os.environ.get("API_KEY", "").strip()
           without_proxy = os.environ.get("WITHOUT_PROXY", "false").lower() == "true"
 
-          is_uuid = bool(re.match(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$', api_key_input))
-          is_manual_proxies = not is_uuid and len(api_key_input) > 0 and ("://" in api_key_input or "@" in api_key_input or api_key_input.count(":") > 1)
-
-          use_proxy = False
-          active_proxies =[]
+          is_manual_proxy = False
+          manual_proxy_strings = []
+          scrapeops_key = ""
 
           if without_proxy:
               print("[Proxy] 'Run without proxy' checked. Disabling proxy.")
-              api_key_input = ""
-          elif not api_key_input or api_key_input.lower() in ["none", "null", "false", "blank", "empty", "''", '""']:
-              print("[Proxy] API key empty or invalid. Disabling proxy.")
-              api_key_input = ""
-          elif is_manual_proxies:
-              use_proxy = True
-              print("[Proxy] Manual Proxies format detected! Parsing multiple entries...")
-              parsed =[]
-              
-              # Extract Pattern 1: scheme://user:pass@host:port (Ignores trailing string noise)
-              for m in re.finditer(r'(?:[a-zA-Z0-9]+)://([^:\s]+):([^@\s]+)@([^:\s]+):(\d+)', api_key_input):
-                  parsed.append({'user': m.group(1), 'pass': m.group(2), 'host': m.group(3), 'port': m.group(4)})
-              
-              if not parsed:
-                  # Extract Pattern 2: host:port:user:pass
-                  for m in re.finditer(r'([^:\s]+):(\d+):([^:\s]+):([^\s]+)', api_key_input):
-                      parsed.append({'host': m.group(1), 'port': m.group(2), 'user': m.group(3), 'pass': m.group(4)})
-
-              # Remove duplicates and map
-              unique_parsed =[]
-              seen = set()
-              for p in parsed:
-                  k = f"{p['host']}:{p['port']}"
-                  if k not in seen:
-                      seen.add(k)
-                      unique_parsed.append(p)
-                      
-              print(f"[Proxy] Extracted {len(unique_parsed)} unique formatting proxies. Checking Active Status & IP Geolocation...")
-
-              def check_proxy(p):
-                  safe_user = urllib.parse.quote(p['user'])
-                  safe_pass = urllib.parse.quote(p['pass'])
-                  proxy_url = f"http://{safe_user}:{safe_pass}@{p['host']}:{p['port']}"
-                  proxy_handler = urllib.request.ProxyHandler({'http': proxy_url, 'https': proxy_url})
-                  opener = urllib.request.build_opener(proxy_handler)
-                  
-                  # Primary Check: ip-api.com
-                  try:
-                      req = urllib.request.Request("http://ip-api.com/json/", headers={'User-Agent': 'Mozilla/5.0'})
-                      response = opener.open(req, timeout=12)
-                      data = json.loads(response.read().decode('utf-8'))
-                      if data.get("status") == "success":
-                          p['country_code'] = data.get("countryCode", "US")
-                          p['ip'] = data.get("query", "Unknown-IP")
-                          print(f"[Proxy-Check] ACTIVE! Host: {p['host']}:{p['port']} -> IP: {p['ip']} | Country: {p['country_code']}")
-                          return p
-                  except Exception:
-                      pass
-                      
-                  # Fallback Check: ipinfo.io
-                  try:
-                      req = urllib.request.Request("https://ipinfo.io/json", headers={'User-Agent': 'Mozilla/5.0'})
-                      response = opener.open(req, timeout=12)
-                      data = json.loads(response.read().decode('utf-8'))
-                      if "ip" in data:
-                          p['country_code'] = data.get("country", "US")
-                          p['ip'] = data.get("ip", "Unknown-IP")
-                          print(f"[Proxy-Check] ACTIVE (Fallback)! Host: {p['host']}:{p['port']} -> IP: {p['ip']} | Country: {p['country_code']}")
-                          return p
-                  except Exception:
-                      pass
-                      
-                  print(f"[Proxy-Check] FAILED/INACTIVE: Host: {p['host']}:{p['port']} is not responding.")
-                  return None
-
-              # Check proxies concurrently
-              with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-                  results = executor.map(check_proxy, unique_parsed)
-                  for res in results:
-                      if res:
-                          active_proxies.append(res)
-              
-              print(f"[Proxy] Integrity Check Complete: {len(active_proxies)} proxies are fully ACTIVE and mapped.")
-              if len(active_proxies) == 0:
-                  print("[Proxy] FATAL: 0 active manual proxies found! Connections will default to local machine IPs.")
-                  use_proxy = False
+              proxy_input = ""
+          elif not proxy_input or proxy_input.lower() in ["none", "null", "false", "blank", "empty", "''", '""']:
+              print("[Proxy] Proxy input empty or invalid. Disabling proxy.")
+              proxy_input = ""
           else:
+              # Split by whitespace/comma/semicolon — GitHub Actions collapses newlines into spaces
+              raw_items = re.split(r'[\s,;]+', proxy_input)
+              proxy_candidates = []
+              for item in raw_items:
+                  item = item.strip()
+                  if not item:
+                      continue
+                  # Heuristic: contains :// or @ or looks like host:port with auth
+                  if ('://' in item) or ('@' in item) or (item.count(':') >= 2 and len(item) > 10):
+                      proxy_candidates.append(item)
+              
+              if len(proxy_candidates) >= 1:
+                  is_manual_proxy = True
+                  manual_proxy_strings = proxy_candidates
+                  print(f"[Proxy] Detected MANUAL PROXY mode with {len(manual_proxy_strings)} entries.")
+              else:
+                  scrapeops_key = proxy_input
+                  print("[Proxy] Detected SCRAPEOPS API KEY mode.")
+
+          # ==================== PROXY PARSER ====================
+          def parse_proxy(proxy_str):
+              original = proxy_str.strip()
+              if not original:
+                  return None
+              
+              protocol = 'http'
+              rest = original
+              
+              if '://' in rest:
+                  protocol, rest = rest.split('://', 1)
+                  if protocol.lower() == 'geolocation':
+                      protocol = 'http'
+              
+              # FloppyData format: user:pass@host:port:Country - Number
+              floppy_match = re.match(r'^([^:]+):([^@]+)@([^:]+):(\d+):(.+)$', rest)
+              if floppy_match:
+                  user, pwd, host, port, country_extra = floppy_match.groups()
+                  country = country_extra.split(' - ')[0].strip()
+                  return {
+                      'original': original,
+                      'protocol': protocol,
+                      'username': user,
+                      'password': pwd,
+                      'host': host,
+                      'port': int(port),
+                      'server': f"{host}:{port}",
+                      'country_name': country,
+                      'country_code': None,
+                      'url': f"http://{user}:{pwd}@{host}:{port}"
+                  }
+              
+              # Standard: user:pass@host:port
+              std_match = re.match(r'^([^:]+):([^@]+)@([^:]+):(\d+)$', rest)
+              if std_match:
+                  user, pwd, host, port = std_match.groups()
+                  return {
+                      'original': original,
+                      'protocol': protocol,
+                      'username': user,
+                      'password': pwd,
+                      'host': host,
+                      'port': int(port),
+                      'server': f"{host}:{port}",
+                      'country_name': None,
+                      'country_code': None,
+                      'url': f"{protocol}://{user}:{pwd}@{host}:{port}"
+                  }
+              
+              # Alternative: host:port:user:pass
+              alt_match = re.match(r'^([^:]+):(\d+):([^:]+):(.+)$', rest)
+              if alt_match:
+                  host, port, user, pwd = alt_match.groups()
+                  return {
+                      'original': original,
+                      'protocol': protocol,
+                      'username': user,
+                      'password': pwd,
+                      'host': host,
+                      'port': int(port),
+                      'server': f"{host}:{port}",
+                      'country_name': None,
+                      'country_code': None,
+                      'url': f"{protocol}://{user}:{pwd}@{host}:{port}"
+                  }
+              
+              # Simple: host:port (no auth)
+              simple_match = re.match(r'^([^:]+):(\d+)$', rest)
+              if simple_match:
+                  host, port = simple_match.groups()
+                  return {
+                      'original': original,
+                      'protocol': protocol,
+                      'username': '',
+                      'password': '',
+                      'host': host,
+                      'port': int(port),
+                      'server': f"{host}:{port}",
+                      'country_name': None,
+                      'country_code': None,
+                      'url': f"{protocol}://{host}:{port}"
+                  }
+              
+              return None
+
+          # ==================== PROXY VALIDATOR ====================
+          def validate_proxy(pinfo):
+              try:
+                  proxies = {'http': pinfo['url'], 'https': pinfo['url']}
+                  resp = requests.get('http://ip-api.com/json/', proxies=proxies, timeout=15)
+                  data = resp.json()
+                  if data.get('status') == 'success':
+                      cc = data.get('countryCode', 'US').lower()
+                      country = pinfo.get('country_name') or data.get('country', 'Unknown')
+                      return {
+                          'working': True,
+                          'country_name': country,
+                          'country_code': cc,
+                          'ip': data.get('query', ''),
+                          **{k: v for k, v in pinfo.items() if k not in ['working', 'country_name', 'country_code', 'ip']}
+                      }
+              except Exception as e:
+                  print(f"[ProxyCheck] FAILED {pinfo.get('server','?')}: {e}")
+              return {'working': False, **pinfo}
+
+          country_name_to_code = {
+              'united states': 'us', 'united kingdom': 'uk', 'canada': 'ca',
+              'australia': 'au', 'germany': 'de', 'france': 'fr',
+              'brazil': 'br', 'mexico': 'mx', 'spain': 'es',
+              'vietnam': 'vn', 'switzerland': 'ch', 'indonesia': 'id',
+              'italy': 'it', 'netherlands': 'nl', 'poland': 'pl',
+              'usa': 'us', 'uk': 'uk', 'ca': 'ca', 'au': 'au', 'de': 'de',
+              'fr': 'fr', 'br': 'br', 'mx': 'mx', 'es': 'es', 'vn': 'vn',
+              'ch': 'ch', 'id': 'id', 'it': 'it', 'nl': 'nl', 'pl': 'pl'
+          }
+
+          # ==================== BUILD ACTIVE PROXY POOL ====================
+          active_proxies = []
+          use_proxy = False
+
+          if is_manual_proxy and not without_proxy:
+              parsed = []
+              for ps in manual_proxy_strings:
+                  p = parse_proxy(ps)
+                  if p:
+                      parsed.append(p)
+                  else:
+                      print(f"[ProxyParse] Could not parse: {ps[:60]}...")
+              
+              print(f"[Proxy] Validating {len(parsed)} parsed proxies (this may take a moment)...")
+              for idx, p in enumerate(parsed):
+                  result = validate_proxy(p)
+                  if result['working']:
+                      if result.get('country_name'):
+                          cname = result['country_name'].lower()
+                          result['country_code'] = country_name_to_code.get(cname, result.get('country_code', 'us'))
+                      active_proxies.append(result)
+                      print(f"[Proxy] ACTIVE  -> {result['server']} | {result['country_name']} ({result['country_code']}) | IP: {result['ip']}")
+                  else:
+                      print(f"[Proxy] DEAD    -> {result.get('server','?')}")
+                  if idx < len(parsed) - 1:
+                      time.sleep(1)
+              
+              if len(active_proxies) < num_devices:
+                  print(f"[Proxy] ERROR: Only {len(active_proxies)} active proxies for {num_devices} devices.")
+                  exit(1)
+              
               use_proxy = True
-              print("[Proxy] ScrapeOps Standard API key detected.")
+              print(f"[Proxy] Manual proxy pool ready: {len(active_proxies)} active for {num_devices} devices.")
+          
+          elif scrapeops_key and not without_proxy:
+              use_proxy = True
+              print("[Proxy] ScrapeOps proxy pool ready.")
 
-          country_input = os.environ.get("COUNTRY", "USA")
-          mobile = os.environ.get("MOBILE", "false").lower() == "true"
-          sticky = os.environ.get("STICKY", "false").lower() == "true"
-          software_choice = os.environ.get("SOFTWARE_CHOICE", "AVG - B4Books")
-
-          # --- Number of Clicks logic ---
+          # ==================== CLICKS & ACTIONS ====================
           num_clicks_raw = int(os.environ.get("NUM_CLICKS", "0"))
           num_clicks = min(num_clicks_raw, num_devices)
           num_installs = num_devices - num_clicks
-          action_list =["install"] * num_installs + ["click"] * num_clicks
+          action_list = ["install"] * num_installs + ["click"] * num_clicks
           random.shuffle(action_list)
 
           print(f"[Action Matrix] Total Devices : {num_devices}")
@@ -262,6 +360,7 @@ jobs:
           print(f"[Action Matrix] Click Paths   : {num_clicks}")
           print(f"[Action Matrix] Randomized Queue: {action_list}")
 
+          # ==================== SOFTWARE MAPPINGS ====================
           run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
           manual_url_input = os.environ.get("MANUAL_URL", "").strip()
           manual_url = manual_url_input if run_manual else ""
@@ -273,9 +372,7 @@ jobs:
               "Vietnam": "vn", "Switzerland": "ch", "Indonesia": "id",
               "Italy": "it", "Netherlands": "nl", "Poland": "pl"
           }
-          cc = country_map.get(country_input, "us")
 
-          # Software Mappings
           avg_urls = {
               "AVG - TechxTrader": "https://u.to/a-trdr/GoeNIg",
               "AVG - B4Books":     "https://u.to/a-b4b/O4eNIg",
@@ -304,7 +401,8 @@ jobs:
           }
           all_urls = {**avg_urls, **opera_urls, **opera_one_urls, **ad_mvn_urls}
 
-          dynamic_links =["Opera - Techx", "Opera - Fatradez", "Opera - James", "Opera - Oliver", "Opera - Mahal"]
+          dynamic_links = ["Opera - Techx", "Opera - Fatradez", "Opera - James", "Opera - Oliver", "Opera - Mahal"]
+          software_choice = os.environ.get("SOFTWARE_CHOICE", "AVG - B4Books")
 
           if manual_url:
               target_url = manual_url
@@ -331,7 +429,7 @@ jobs:
               print(f"[Target] Software: {software_choice} -> URL: {target_url}")
               print(f"[Target] Engine Type: {software_type} | Filter: {exe_filter}")
 
-          # --- Detailed Device Name Builder ---
+          # ==================== DEVICE BUILDER ====================
           def short_os(os_ver):
               if os_ver == "windows-2025": return "W25"
               elif os_ver == "windows-2022": return "W22"
@@ -350,56 +448,79 @@ jobs:
           short_os_tag = short_os(os_version)
           short_sw_tag = "MANUAL" if manual_url else short_software(software_choice)
 
-          includes =[]
+          includes = []
           if email:
               for i in range(1, num_devices + 1):
                   action_mode = action_list[i - 1]
                   action_cap = action_mode.capitalize()
 
-                  if use_proxy:
-                      if is_manual_proxies:
-                          # Rotate unique verified manual proxies per device
-                          p = active_proxies[(i - 1) % len(active_proxies)]
-                          proxy_user = p['user']
-                          proxy_pass = p['pass']
-                          proxy_server = f"{p['host']}:{p['port']}"
-                          cc_device = p['country_code'].upper()
-                      else:
-                          # ScrapeOps proxy string building
-                          proxy_user = f"scrapeops.country={cc}"
-                          if mobile: proxy_user += ".mobile=true"
-                          if sticky:
-                              session_id = str(uuid.uuid4())[:8]
-                              proxy_user += f".sticky_session={session_id}"
-                          proxy_pass = api_key_input
-                          proxy_server = "residential-proxy.scrapeops.io:8181"
-                          cc_device = cc.upper()
-                  else:
-                      proxy_user = ""
-                      proxy_pass = ""
-                      proxy_server = ""
-                      cc_device = cc.upper()
+                  if is_manual_proxy and active_proxies:
+                      proxy = active_proxies[i - 1]
+                      cc = proxy['country_code'].upper()
+                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{cc}"
                       
-                  device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{cc_device}"
-
-                  includes.append({
-                      "device": device_name,
-                      "email": email,
-                      "os": os_version,
-                      "use_proxy": str(use_proxy).lower(),
-                      "proxy_user": proxy_user,
-                      "proxy_pass": proxy_pass,
-                      "proxy_server": proxy_server,
-                      "target_url": target_url,
-                      "software_type": software_type,
-                      "exe_filter": exe_filter,
-                      "action_mode": action_mode
-                  })
+                      includes.append({
+                          "device": device_name,
+                          "email": email,
+                          "os": os_version,
+                          "use_proxy": "true",
+                          "proxy_server": proxy['server'],
+                          "proxy_user": proxy['username'],
+                          "proxy_pass": proxy['password'],
+                          "proxy_type": "manual",
+                          "target_url": target_url,
+                          "software_type": software_type,
+                          "exe_filter": exe_filter,
+                          "action_mode": action_mode
+                      })
+                      print(f"[Device Added] {device_name} | Proxy: {proxy['server']} ({cc}) | Auth: {'YES' if proxy['username'] else 'NO'}")
                   
-                  if is_manual_proxies and use_proxy:
-                      print(f"[Device Added] {device_name} | Assigned Proxy IP: {p['ip']} ({cc_device})")
+                  elif use_proxy and scrapeops_key:
+                      country_input = os.environ.get("COUNTRY", "USA")
+                      mobile = os.environ.get("MOBILE", "false").lower() == "true"
+                      sticky = os.environ.get("STICKY", "false").lower() == "true"
+                      cc = country_map.get(country_input, "us")
+                      country_cap = cc.upper()
+                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{country_cap}"
+                      
+                      proxy_user = f"scrapeops.country={cc}"
+                      if mobile: proxy_user += ".mobile=true"
+                      if sticky:
+                          session_id = str(uuid.uuid4())[:8]
+                          proxy_user += f".sticky_session={session_id}"
+                      
+                      includes.append({
+                          "device": device_name,
+                          "email": email,
+                          "os": os_version,
+                          "use_proxy": "true",
+                          "proxy_server": "residential-proxy.scrapeops.io:8181",
+                          "proxy_user": proxy_user,
+                          "proxy_pass": scrapeops_key,
+                          "proxy_type": "scrapeops",
+                          "target_url": target_url,
+                          "software_type": software_type,
+                          "exe_filter": exe_filter,
+                          "action_mode": action_mode
+                      })
+                      print(f"[Device Added] {device_name} | Proxy: ScrapeOps ({cc})")
                   else:
-                      print(f"[Device Added] {device_name} | Assigned Proxy: {'YES' if use_proxy else 'NO'}")
+                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-DIRECT"
+                      includes.append({
+                          "device": device_name,
+                          "email": email,
+                          "os": os_version,
+                          "use_proxy": "false",
+                          "proxy_server": "",
+                          "proxy_user": "",
+                          "proxy_pass": "",
+                          "proxy_type": "none",
+                          "target_url": target_url,
+                          "software_type": software_type,
+                          "exe_filter": exe_filter,
+                          "action_mode": action_mode
+                      })
+                      print(f"[Device Added] {device_name} | Proxy: NONE")
 
           if not includes:
               print("Error: Valid configuration could not be generated. Exiting.")
@@ -407,6 +528,7 @@ jobs:
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"matrix={json.dumps({'include': includes})}\n")
+              f.write(f"is_manual_proxy={str(is_manual_proxy).lower()}\n")
           print("========== MATRIX GENERATION COMPLETE ==========")
 
       - name: Update Workflow Defaults (Remember Inputs)
@@ -448,11 +570,19 @@ jobs:
                               val_str = "true" if str(new_val).lower() == "true" else "false"
                               lines[i] = f"{indent}default: {val_str}"
                           else:
-                              if new_val is None or str(new_val).strip().lower() in["none", "null", "blank", "empty", "''", '""']: safe_val = ""
+                              if new_val is None or str(new_val).strip().lower() in ["none", "null", "blank", "empty", "''", '""']: safe_val = ""
                               else: safe_val = str(new_val).replace("'", "\\'")
                               lines[i] = f"{indent}default: '{safe_val}'"
                           break
               return "\n".join(lines)
+
+          api_key_input = os.environ.get("API_KEY", "").strip()
+          is_manual_proxy = False
+          if api_key_input:
+              raw_items = re.split(r'[\s,;]+', api_key_input)
+              proxy_candidates = [item for item in raw_items if ('://' in item) or ('@' in item) or (item.count(':') >= 2 and len(item) > 10)]
+              if len(proxy_candidates) >= 1:
+                  is_manual_proxy = True
 
           file_path = ".github/workflows/main3.yml"
           if os.path.exists(file_path):
@@ -471,15 +601,12 @@ jobs:
               content = update_yaml_default(content, "manual_software_url", manual_url_to_save)
               content = update_yaml_default(content, "run_manual_link", run_manual, is_bool=True)
               
-              api_key_env = os.environ.get("API_KEY", "")
-              is_uuid = bool(re.match(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$', api_key_env))
-              is_manual_proxies = not is_uuid and len(api_key_env) > 0 and ("://" in api_key_env or "@" in api_key_env or api_key_env.count(":") > 1)
-              
-              if not is_manual_proxies:
-                  content = update_yaml_default(content, "scrapeops_api_key", api_key_env)
+              if not is_manual_proxy and api_key_input:
+                  content = update_yaml_default(content, "scrapeops_api_key", api_key_input)
+                  print("[Workflow State] Saved ScrapeOps API key to defaults.")
               else:
-                  print("[Workflow State] Manual proxies list detected. Omitting proxy state save to protect scrapeops default.")
-
+                  print("[Workflow State] Manual proxies detected — NOT saving proxy list to defaults.")
+              
               content = update_yaml_default(content, "use_without_proxy", os.environ.get("WITHOUT_PROXY"), is_bool=True)
               content = update_yaml_default(content, "proxy_country", os.environ.get("COUNTRY"))
               content = update_yaml_default(content, "mobile_proxies", os.environ.get("MOBILE"), is_bool=True)
@@ -570,9 +697,10 @@ jobs:
         shell: pwsh
         env:
           USE_PROXY: ${{ matrix.use_proxy }}
+          PROXY_SERVER: ${{ matrix.proxy_server }}
           PROXY_USER: ${{ matrix.proxy_user }}
           PROXY_PASS: ${{ matrix.proxy_pass }}
-          PROXY_SERVER: ${{ matrix.proxy_server }}
+          PROXY_TYPE: ${{ matrix.proxy_type }}
           TARGET_URL: ${{ matrix.target_url }}
           SOFTWARE_TYPE: ${{ matrix.software_type }}
           EXE_FILTER: ${{ matrix.exe_filter }}
@@ -586,7 +714,11 @@ jobs:
           Write-Host " Category  : $env:SOFTWARE_TYPE" -ForegroundColor Cyan
           Write-Host " Action    : $($env:ACTION_MODE.ToUpper()) PATHWAY ASSIGNED" -ForegroundColor Magenta
           if ($useProxy) {
-              Write-Host " Mode      : Proxy-enabled ($($env:PROXY_SERVER))" -ForegroundColor Cyan
+              if ($env:PROXY_TYPE -eq "manual") {
+                  Write-Host " Mode      : Manual Proxy ($env:PROXY_SERVER)" -ForegroundColor Cyan
+              } else {
+                  Write-Host " Mode      : ScrapeOps Proxy" -ForegroundColor Cyan
+              }
           } else {
               Write-Host " Mode      : Direct (Proxy Completely Bypassed)" -ForegroundColor Yellow
           }
@@ -609,7 +741,7 @@ jobs:
               t = time.strftime('%H:%M:%S')
               print(f"[{t}][{tag}] {msg}", flush=True)
 
-          DOWNLOAD_DONE_TITLES =[
+          DOWNLOAD_DONE_TITLES = [
               "Thanks for downloading Opera", "Thanks for downloadin",
               "Download | Thanks", "sudetyj", "clickWorker",
               "GET READY TO PLAY", "ready to install",
@@ -785,6 +917,7 @@ jobs:
 
               sentinel_path = os.path.join(tempfile.gettempdir(), "download_done.flag")
               download_windows_closed = False
+
               installer_executed_sentinel = os.path.join(tempfile.gettempdir(), "installer_executed.flag")
 
               while time.time() - start_time < timeout:
@@ -801,7 +934,6 @@ jobs:
                               if "Microsoft Edge" not in wt and "Edge" not in wt and "Chrome Web Store" not in wt:
                                   opera_window = window
 
-                      # Sentinel check (EXE detected by background task)
                       if not download_windows_closed and os.path.exists(sentinel_path):
                           log_msg("Sentinel", "Flag detected (EXE found). Initiating download window cleanup sequence...")
                           for attempt in range(1, 6):
@@ -813,7 +945,6 @@ jobs:
                           download_windows_closed = True
                           edge_window = None
 
-                      # Opera One Post Install Execution Call
                       if (software_type == "opera_one"
                               and action_mode == "install"
                               and not opera_one_post_install_done):
@@ -833,7 +964,6 @@ jobs:
                               opera_one_post_install_done = True
                               opera_setup_completed = True
 
-                      # Authentication Proxy Edge Box
                       if use_proxy and (edge_window or opera_window):
                           for w in [edge_window, opera_window]:
                               if w:
@@ -865,9 +995,8 @@ jobs:
                                           log_msg("Proxy", f"Auth injection failed: {e}")
                                           pass
 
-                      # Cookie Handling (Always execute)
                       if edge_window:
-                          for cookie_btn in["Accept all", "Accepter tout", "Tout accepter", "Accept Cookies", "Allow all", "Accept selection"]:
+                          for cookie_btn in ["Accept all", "Accepter tout", "Tout accepter", "Accept Cookies", "Allow all", "Accept selection"]:
                               btns = edge_window.descendants(control_type="Button", title=cookie_btn)
                               if btns:
                                   try:
@@ -927,10 +1056,10 @@ jobs:
                           if not smart_link_interstitial_done or (time.time() - smart_link_interstitial_time < 15):
                               can_click_download = False
 
-                      if edge_window and action_mode == "install" and can_click_download and software_type in["opera_gx", "opera_one", "ad_mvn", "dynamic_opera", "opera_smart_link"]:
+                      if edge_window and action_mode == "install" and can_click_download and software_type in ["opera_gx", "opera_one", "ad_mvn", "dynamic_opera", "opera_smart_link"]:
                           if time.time() - last_dl_click_time > 5:
                               clicked_something = False
-                              dl_keywords =["download opera", "download now", "télécharger", "baixar", "herunterladen", "descargar", "download"]
+                              dl_keywords = ["download opera", "download now", "télécharger", "baixar", "herunterladen", "descargar", "download"]
                               for btn in edge_window.descendants(control_type="Button"):
                                   btntxt = btn.window_text()
                                   if btntxt and any(k in btntxt.lower() for k in dl_keywords):
@@ -971,20 +1100,26 @@ jobs:
                                   log_msg("AVG", "Setting focus to Edge window...")
                                   edge_window.set_focus()
                                   time.sleep(0.5)
+
                                   log_msg("AVG", "Sending '{TAB}' keystroke...")
                                   send_keys('{TAB}')
+
                                   delay = random.uniform(1.0, 2.0)
                                   log_msg("AVG", f"'TAB' sent. Delaying for {delay:.2f} seconds...")
                                   time.sleep(delay)
+
                                   log_msg("AVG", "Sending '{ENTER}' keystroke...")
                                   send_keys('{ENTER}')
                                   log_msg("AVG", "'ENTER' sent. Starting 10-second wait phase for download initialization...")
+
                                   for w in range(1, 11):
                                       log_msg("AVG", f"Download init wait: {w}/10 seconds...")
                                       time.sleep(1)
+
                                   log_msg("AVG", "10-second initialization wait completed. Proceeding.")
                               except Exception as e:
                                   log_msg("AVG", f"Keyboard sequence error: {e}")
+
                               avg_download_clicked = True
 
                       if edge_window and action_mode == "install":
@@ -1018,7 +1153,7 @@ jobs:
 
                       can_ctrl_j = True
                       if software_type == "avg" and not avg_download_clicked:
-                          can_ctrl_j = False 
+                          can_ctrl_j = False
 
                       if action_mode == "install" and not keep_clicked and edge_window and can_ctrl_j and (time.time() - last_ctrl_j_time > 15) and ctrl_j_attempts < 4:
                           try:
@@ -1034,11 +1169,11 @@ jobs:
                               log_msg("Utility", f"Ctrl+J failed: {e}")
 
                       if (action_mode == "install"
-                              and software_type in["opera_gx", "ad_mvn", "dynamic_opera", "opera_smart_link"]
+                              and software_type in ["opera_gx", "ad_mvn", "dynamic_opera", "opera_smart_link"]
                               and opera_window
                               and not opera_setup_completed):
                           wt = opera_window.window_text()
-                          if software_type in["ad_mvn", "dynamic_opera", "opera_smart_link"]:
+                          if software_type in ["ad_mvn", "dynamic_opera", "opera_smart_link"]:
                               is_gx_flow = "GX" in wt.upper()
                           else:
                               is_gx_flow = (software_type == "opera_gx")
@@ -1114,11 +1249,11 @@ jobs:
                   time.sleep(1)
 
           if __name__ == "__main__":
-              username      = os.environ.get("PROXY_USER", "")
-              password      = os.environ.get("PROXY_PASS", "")
-              software_type = os.environ.get("SOFTWARE_TYPE", "avg")
-              use_proxy     = os.environ.get("USE_PROXY", "false").lower() == "true"
-              action_mode   = os.environ.get("ACTION_MODE", "install")
+              username      = sys.argv[1] if len(sys.argv) > 1 else ""
+              password      = sys.argv[2] if len(sys.argv) > 2 else ""
+              software_type = sys.argv[3] if len(sys.argv) > 3 else "avg"
+              use_proxy     = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
+              action_mode   = sys.argv[5] if len(sys.argv) > 5 else "install"
 
               handle_automation(username, password, software_type, use_proxy, action_mode)
           '@
@@ -1126,12 +1261,9 @@ jobs:
 
           Write-Host "[UI-Engine] Spinning up background Python process..." -ForegroundColor DarkGray
           Start-Process -FilePath "python" `
-              -ArgumentList "-u `"$env:TEMP\auto_handler.py`"" `
+              -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`" `"$env:SOFTWARE_TYPE`" `"$env:USE_PROXY`" `"$env:ACTION_MODE`"" `
               -WindowStyle Hidden
 
-          # ---------------------------------------------------------------
-          # Software Watcher / Installer background job (INSTALL path only)
-          # ---------------------------------------------------------------
           $dlFolder    = "$env:USERPROFILE\Downloads"
           $timeoutSecs = 330
           $softwareType = $env:SOFTWARE_TYPE
@@ -1177,7 +1309,7 @@ jobs:
                           while ($locked) {
                               Start-Sleep -Seconds 2
                               try {
-                                  $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
+                                  $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
                                   $s.Close()
                                   $locked = $false
                                   Write-Output "[$($actualSoftware.ToUpper())-INSTALL] File unlocked and ready."
@@ -1252,9 +1384,6 @@ jobs:
               } -ArgumentList $dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath, $installerExecutedSentinel
           }
 
-          # ---------------------------------------------------------------
-          # Find Edge Path & Build launch args
-          # ---------------------------------------------------------------
           $edgeExe = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
           if (-Not (Test-Path $edgeExe)) {
               $edgeExe = "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
@@ -1269,7 +1398,13 @@ jobs:
           )
 
           if ($useProxy) {
-              $proxyServer = $env:PROXY_SERVER
+              if ($env:PROXY_TYPE -eq "manual") {
+                  $proxyServer = $env:PROXY_SERVER
+                  Write-Host "[System] Using manual proxy (auth-less injection): $proxyServer" -ForegroundColor Cyan
+              } else {
+                  $proxyServer = "residential-proxy.scrapeops.io:8181"
+                  Write-Host "[System] Using ScrapeOps proxy: $proxyServer" -ForegroundColor Cyan
+              }
               $edgeArgs += "--proxy-server=`"http://$proxyServer`""
           }
           $edgeArgs += "`"$env:TARGET_URL`""
