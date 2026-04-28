@@ -16,7 +16,7 @@ on:
         description: 'Getscreen.me Account Email'
         required: true
         type: string
-        default: 'techx@highmail.site'
+        default: 'techx@justzeus.com'
       num_devices:
         description: 'Number of Devices to Spawn'
         required: true
@@ -39,7 +39,7 @@ on:
           - '60%'
           - '80%'
           - '100%'
-        default: '20%'
+        default: '100%'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Esmeel'
+        default: 'Ad-MVN - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -78,7 +78,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '972eda98-cc49-4a3b-bafe-fcf02fe22493'
+        default: 'fd6d8b71-953d-4c71-9060-cb7bd4b7261e'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -174,7 +174,7 @@ jobs:
           install_pct = int(install_pct_str.replace('%', ''))
           num_installs = int(round(num_devices * (install_pct / 100.0)))
           num_clicks = num_devices - num_installs
-          action_list = ["install"] * num_installs + ["click"] * num_clicks
+          action_list =["install"] * num_installs + ["click"] * num_clicks
           random.shuffle(action_list) # Mixes installs and clicks across the devices
           
           print(f"[Action Matrix] Total Devices: {num_devices}")
@@ -540,23 +540,39 @@ jobs:
                       log_msg("TabClose", f"Targeting window '{wt}' (Attempt {attempt_label})")
                       closed = False
                       
+                      # Center click + 1-2s delay + Ctrl+W shortcut to close the Edge tab
                       if not closed:
                           try:
+                              log_msg("TabClose", "Setting focus to window before executing close sequence...")
                               window.set_focus()
                               time.sleep(0.3)
+                              
+                              sw, sh = pyautogui.size()
+                              cx, cy = sw // 2, sh // 2
+                              log_msg("TabClose", f"Executing PyAutoGUI center screen click at ({cx}, {cy}) to ensure page context...")
+                              pyautogui.click(cx, cy)
+                              
+                              delay = random.uniform(1.0, 2.0)
+                              log_msg("TabClose", f"Center click executed. Waiting {delay:.2f} seconds before sending Ctrl+W...")
+                              time.sleep(delay)
+                              
+                              log_msg("TabClose", "Sending '^w' (Ctrl+W) keyboard shortcut...")
                               send_keys('^w')
                               closed = True
-                              log_msg("TabClose", "Successfully closed tab via Ctrl+W.")
-                          except Exception: pass
+                              log_msg("TabClose", "Successfully executed Ctrl+W tab close sequence.")
+                          except Exception as e:
+                              log_msg("TabClose", f"Ctrl+W sequence failed: {e}")
                               
                       if not closed:
                           try:
+                              log_msg("TabClose", "Executing fallback window close via Alt+F4...")
                               window.set_focus()
                               time.sleep(0.3)
                               send_keys('%{F4}')
                               closed = True
                               log_msg("TabClose", "Successfully closed window via Alt+F4 fallback.")
-                          except Exception: pass
+                          except Exception as e:
+                              log_msg("TabClose", f"Alt+F4 sequence failed: {e}")
                               
                       if closed:
                           closed_any = True
@@ -582,6 +598,13 @@ jobs:
               
               opera_launched_time = None
               opera_setup_completed = False
+              opera_one_30s_logged = False
+              
+              # Reload chance generation for click path optimization
+              reload_executed = False
+              reload_target = random.uniform(20, 60)
+              chance_to_reload = random.uniform(0.1, 1.0) # 10% to 100% chance to execute
+              will_reload = random.random() <= chance_to_reload
               
               sentinel_path = os.path.join(tempfile.gettempdir(), "download_done.flag")
               download_windows_closed = False
@@ -620,16 +643,24 @@ jobs:
                                   pass_fields = w.descendants(control_type="Edit", title="Password")
                                   if user_fields and pass_fields:
                                       try:
-                                          log_msg("Proxy", "Authentication dialog detected. Injecting credentials...")
+                                          log_msg("Proxy", "Authentication dialog detected.")
                                           w.set_focus()
                                           time.sleep(0.5)
+                                          log_msg("Proxy", "Clicking Username field...")
                                           user_fields[0].click_input()
+                                          log_msg("Proxy", "Typing Username...")
                                           user_fields[0].type_keys(username, with_spaces=True, pause=0.02)
+                                          log_msg("Proxy", "Clicking Password field...")
                                           pass_fields[0].click_input()
+                                          log_msg("Proxy", "Typing Password...")
                                           pass_fields[0].type_keys(password, with_spaces=True, pause=0.02)
                                           btn = w.descendants(control_type="Button", title="Sign in")
-                                          if btn: btn[0].click_input()
-                                          else: pass_fields[0].type_keys("{ENTER}")
+                                          if btn:
+                                              log_msg("Proxy", "Clicking 'Sign in' button...")
+                                              btn[0].click_input()
+                                          else:
+                                              log_msg("Proxy", "Pressing '{ENTER}' to submit credentials...")
+                                              pass_fields[0].type_keys("{ENTER}")
                                           proxy_auth_time = time.time()
                                           log_msg("Proxy", "Credentials injected. Resetting load timers.")
                                       except Exception as e: 
@@ -642,8 +673,9 @@ jobs:
                               btns = edge_window.descendants(control_type="Button", title=cookie_btn)
                               if btns:
                                   try:
+                                      log_msg("Cookies", f"Found consent button: '{cookie_btn}'. Clicking...")
                                       btns[0].click_input()
-                                      log_msg("Cookies", f"Clicked consent button: '{cookie_btn}'")
+                                      log_msg("Cookies", "Consent button clicked.")
                                       time.sleep(1)
                                   except: pass
 
@@ -653,19 +685,20 @@ jobs:
                           if not smart_link_interstitial_done:
                               if elapsed > 20:
                                   try:
-                                      log_msg("SmartLink", "20s elapsed. Executing TAB + ENTER interstitial bypass...")
+                                      log_msg("SmartLink", f"{elapsed:.1f}s elapsed. Executing TAB + ENTER interstitial bypass...")
+                                      log_msg("SmartLink", "Focusing window...")
                                       edge_window.set_focus()
                                       time.sleep(0.5)
+                                      log_msg("SmartLink", "Pressing '{TAB}'...")
                                       send_keys('{TAB}')
                                       time.sleep(0.5)
+                                      log_msg("SmartLink", "Pressing '{ENTER}'...")
                                       send_keys('{ENTER}')
                                       log_msg("SmartLink", "TAB + ENTER injected. Waiting 15s for download page to load.")
                                   except Exception as e:
                                       log_msg("SmartLink", f"Bypass failed: {e}")
                                   smart_link_interstitial_done = True
                                   smart_link_interstitial_time = time.time()
-                              elif int(elapsed) % 5 == 0 and int(elapsed) > 0:
-                                  pass # Throttled logging
 
                       # --- Skip logic for Click-Only mode ---
                       if action_mode == "click":
@@ -676,6 +709,23 @@ jobs:
                               elif time.time() - smart_link_interstitial_time < 15:
                                   time.sleep(1)
                                   continue
+                                  
+                          # Random Reload execution block specifically for Click mode during its 75-second wait phase
+                          click_elapsed = time.time() - (smart_link_interstitial_time if software_type == "opera_smart_link" else proxy_auth_time)
+                          if will_reload and not reload_executed and click_elapsed >= reload_target and click_elapsed <= 75:
+                              if edge_window:
+                                  try:
+                                      log_msg("Reload", f"Random reload triggered! (Chance resolved at {chance_to_reload*100:.1f}%). Target threshold: {reload_target:.1f}s. Elapsed: {click_elapsed:.1f}s.")
+                                      log_msg("Reload", "Setting focus to Edge window to execute page reload...")
+                                      edge_window.set_focus()
+                                      time.sleep(0.5)
+                                      log_msg("Reload", "Pressing '{F5}' key to refresh page...")
+                                      send_keys('{F5}')
+                                      reload_executed = True
+                                      log_msg("Reload", "Page reload sequence initiated successfully.")
+                                  except Exception as e:
+                                      log_msg("Reload", f"Failed to execute page reload sequence: {e}")
+
                           time.sleep(1)
                           continue
                                           
@@ -708,14 +758,17 @@ jobs:
                                   btntxt = btn.window_text()
                                   if btntxt and any(k in btntxt.lower() for k in dl_keywords):
                                       try:
-                                          log_msg("Download", f"Clicking Final Download Button: '{btntxt}'")
+                                          log_msg("Download", f"Targeting Final Download Button: '{btntxt}'...")
                                           edge_window.set_focus()
                                           time.sleep(0.5)
+                                          log_msg("Download", "Clicking button...")
                                           btn.click_input()
                                           last_dl_click_time = time.time()
                                           clicked_something = True
+                                          log_msg("Download", "Button clicked successfully.")
                                           break
-                                      except: pass
+                                      except Exception as e:
+                                          log_msg("Download", f"Failed to click button: {e}")
                               if not clicked_something:
                                   for el in edge_window.descendants():
                                       if el.element_info.control_type in["Hyperlink", "Text", "Image"]:
@@ -723,34 +776,44 @@ jobs:
                                           if wt and "opera" in wt.lower() and len(wt) < 150:
                                               if "smart link" not in wt.lower() and "http" not in wt.lower() and "playabledownloads" not in wt.lower():
                                                   try:
-                                                      log_msg("Download", f"Clicking Interstitial Link: '{wt}'")
+                                                      log_msg("Download", f"Targeting Interstitial Link: '{wt}'...")
                                                       edge_window.set_focus()
+                                                      log_msg("Download", "Clicking link...")
                                                       el.click_input()
                                                       last_dl_click_time = time.time()
+                                                      log_msg("Download", "Link clicked successfully.")
                                                       break
-                                                  except: pass
+                                                  except Exception as e:
+                                                      log_msg("Download", f"Failed to click link: {e}")
                                                       
                       # I. Specific AVG Download Trigger
                       if edge_window and action_mode == "install" and software_type == "avg":
                           elapsed = time.time() - proxy_auth_time
                           if not avg_download_clicked and (elapsed > 20):
-                              log_msg("AVG", "20s elapsed. Triggering AVG download via TAB + ENTER.")
+                              log_msg("AVG", f"{elapsed:.1f}s elapsed (Threshold: 20s). Initiating AVG TAB+ENTER download trigger.")
                               try:
+                                  log_msg("AVG", "Setting focus to Edge window...")
                                   edge_window.set_focus()
                                   time.sleep(0.5)
+                                  
+                                  log_msg("AVG", "Sending '{TAB}' keystroke...")
                                   send_keys('{TAB}')
-                                  log_msg("AVG", "Sent TAB.")
                                   
-                                  # Wait 1 to 2 seconds as requested
-                                  time.sleep(1.5)
+                                  delay = random.uniform(1.0, 2.0)
+                                  log_msg("AVG", f"'{TAB}' sent. Delaying for {delay:.2f} seconds...")
+                                  time.sleep(delay)
                                   
+                                  log_msg("AVG", "Sending '{ENTER}' keystroke...")
                                   send_keys('{ENTER}')
-                                  log_msg("AVG", "Sent ENTER. Pausing 10 seconds for download to start...")
+                                  log_msg("AVG", "'{ENTER}' sent. Starting 10-second wait phase for download initialization...")
                                   
-                                  # Wait 10 seconds before allowing Ctrl+J
-                                  time.sleep(10)
+                                  for w in range(1, 11):
+                                      log_msg("AVG", f"Download init wait: {w}/10 seconds...")
+                                      time.sleep(1)
+                                      
+                                  log_msg("AVG", "10-second initialization wait completed. Proceeding.")
                               except Exception as e:
-                                  log_msg("AVG", f"Keyboard fallback error: {e}")
+                                  log_msg("AVG", f"Keyboard sequence error: {e}")
 
                               avg_download_clicked = True
                                                       
@@ -759,24 +822,30 @@ jobs:
                           add_ext_btns = edge_window.descendants(control_type="Button", title="Add extension")
                           if add_ext_btns:
                               try:
+                                  log_msg("Extension", "Found 'Add extension' confirmation dialog. Setting focus...")
                                   edge_window.set_focus()
                                   time.sleep(0.5)
+                                  log_msg("Extension", "Clicking 'Add extension'...")
                                   add_ext_btns[0].click_input()
-                                  log_msg("Extension", "Clicked 'Add extension' confirmation dialog.")
+                                  log_msg("Extension", "Clicked successfully. Waiting 2s...")
                                   time.sleep(2)
-                              except Exception: pass
+                              except Exception as e: 
+                                  log_msg("Extension", f"Failed to click 'Add extension': {e}")
                           else:
                               for btn_name in["Add to Chrome", "Get"]:
                                   install_btns = edge_window.descendants(control_type="Button", title=btn_name)
                                   if install_btns:
                                       try:
+                                          log_msg("Extension", f"Found '{btn_name}' on web store. Setting focus...")
                                           edge_window.set_focus()
                                           time.sleep(0.5)
+                                          log_msg("Extension", f"Clicking '{btn_name}'...")
                                           install_btns[0].click_input()
-                                          log_msg("Extension", f"Clicked '{btn_name}' on web store.")
+                                          log_msg("Extension", "Clicked successfully. Waiting 2s...")
                                           time.sleep(2)
                                           break
-                                      except Exception: pass
+                                      except Exception as e:
+                                          log_msg("Extension", f"Failed to click '{btn_name}': {e}")
                                           
                       # E. Ctrl+J to open downloads flyout
                       can_ctrl_j = True
@@ -785,13 +854,16 @@ jobs:
                           
                       if action_mode == "install" and not keep_clicked and edge_window and can_ctrl_j and (time.time() - last_ctrl_j_time > 15) and ctrl_j_attempts < 4:
                           try:
+                              log_msg("Utility", "Setting window focus to open downloads flyout...")
                               edge_window.set_focus()
                               time.sleep(0.5)
+                              log_msg("Utility", f"Sending '^j' (Ctrl+J)... (Attempt {ctrl_j_attempts + 1}/4)")
                               send_keys('^j')
                               last_ctrl_j_time = time.time()
                               ctrl_j_attempts += 1
-                              log_msg("Utility", f"Pressed Ctrl+J to open downloads flyout (Attempt {ctrl_j_attempts}/4)")
-                          except Exception: pass
+                              log_msg("Utility", "Ctrl+J sent.")
+                          except Exception as e:
+                              log_msg("Utility", f"Ctrl+J failed: {e}")
                               
                       # F. Opera Post-install Keyboard Automation Flow
                       if action_mode == "install" and software_type in["opera_gx", "opera_one", "ad_mvn", "dynamic_opera", "opera_smart_link"] and opera_window and not opera_setup_completed:
@@ -803,53 +875,109 @@ jobs:
                               
                           if not opera_launched_time:
                               opera_launched_time = time.time()
-                              wait_msg = "15s" if is_gx_flow else "90s"
-                              log_msg("PostInstall", f"Launched browser detected: '{wt}'. Flow={is_gx_flow}. Waiting {wait_msg} for full render...")
+                              log_msg("PostInstall", f"Launched browser detected: '{wt}'. Flow={'GX' if is_gx_flow else 'One'}.")
+                              if is_gx_flow:
+                                  log_msg("PostInstall", "[Opera GX] Waiting 15s for full render...")
+                              else:
+                                  log_msg("PostInstall", "[Opera One] Waiting 30s initially after launch...")
+                                  
                               try:
+                                  log_msg("PostInstall", "Maximizing browser window...")
                                   opera_window.set_focus()
                                   opera_window.maximize()
                               except Exception: pass
                                   
-                          wait_time = 15 if is_gx_flow else 90
-                          if time.time() - opera_launched_time > wait_time:
+                          elapsed_opera = time.time() - opera_launched_time
+                          
+                          # Specific 30+10s split timer log for Opera One flow
+                          if not is_gx_flow and elapsed_opera > 30 and not opera_one_30s_logged:
+                              log_msg("PostInstall", "[Opera One] 30 seconds have passed since launch. Waiting an additional 10 seconds before proceeding...")
+                              opera_one_30s_logged = True
+                              
+                          wait_time = 15 if is_gx_flow else 40
+                          
+                          if elapsed_opera > wait_time:
                               try: opera_window.set_focus()
                               except Exception: pass
                               time.sleep(1)
+                              
                               if is_gx_flow:
                                   log_msg("PostInstall", "[Opera GX] Initiating TAB/ENTER sequence...")
                                   try:
-                                      for _ in range(4): send_keys('{TAB}'); time.sleep(0.5)
+                                      for t in range(4):
+                                          log_msg("PostInstall", f"[Opera GX] Sending '{{TAB}}' ({t+1}/4)...")
+                                          send_keys('{TAB}')
+                                          time.sleep(0.5)
                                       log_msg("PostInstall", "[Opera GX] Pushed 4 TABs.")
+                                      
                                       for i in range(8):
+                                          log_msg("PostInstall", f"[Opera GX] Sending '{{ENTER}}' ({i+1}/8)...")
                                           send_keys('{ENTER}')
                                           delay = random.uniform(1.0, 2.0)
+                                          log_msg("PostInstall", f"[Opera GX] Waiting {delay:.2f} seconds...")
                                           time.sleep(delay)
-                                      log_msg("PostInstall", "[Opera GX] Pushed 8 ENTERs with random delays.")
+                                          
                                       random_tabs = random.randint(4, 10)
-                                      for _ in range(random_tabs): send_keys('{TAB}'); time.sleep(0.3)
-                                      log_msg("PostInstall", f"[Opera GX] Pushed {random_tabs} TABs.")
+                                      for t in range(random_tabs):
+                                          log_msg("PostInstall", f"[Opera GX] Sending random '{{TAB}}' ({t+1}/{random_tabs})...")
+                                          send_keys('{TAB}')
+                                          time.sleep(0.3)
+                                          
+                                      log_msg("PostInstall", "[Opera GX] Sending final '{ENTER}'...")
                                       send_keys('{ENTER}')
-                                      log_msg("PostInstall", "[Opera GX] Final ENTER executed.")
                                       opera_setup_completed = True
                                       log_msg("PostInstall", "[Opera GX] Setup automation completed successfully.")
                                   except Exception as e: log_msg("PostInstall", f"[Opera GX] Error: {e}")
                               else:
-                                  log_msg("PostInstall", "[Opera One] Initiating post-install sequence...")
+                                  log_msg("PostInstall", "[Opera One] 40 seconds total wait completed. Initiating setup sequence...")
                                   try:
                                       sw, sh = pyautogui.size()
                                       cx, cy = sw // 2, sh // 2
-                                      log_msg("PostInstall", f"[Opera One] Clicking center screen coords: ({cx}, {cy})")
-                                      for i in range(3):
-                                          pyautogui.click(cx, cy)
-                                          time.sleep(random.uniform(1.0, 2.0))
-                                      log_msg("PostInstall", "[Opera One] Swiping through setup via RIGHT arrows.")
-                                      for i in range(10):
-                                          send_keys('{RIGHT}')
-                                          time.sleep(random.uniform(1.0, 2.0))
+                                      log_msg("PostInstall", f"[Opera One] Clicking center of screen using UI mouse at ({cx}, {cy})...")
+                                      pyautogui.click(cx, cy)
+                                      
+                                      delay = random.uniform(1.0, 2.0)
+                                      log_msg("PostInstall", f"[Opera One] Center click executed. Waiting {delay:.2f} seconds...")
+                                      time.sleep(delay)
+                                      
+                                      log_msg("PostInstall", "[Opera One] Swiping through setup via LEFT arrow keys.")
+                                      for i in range(8):
+                                          log_msg("PostInstall", f"[Opera One] Pressing '{{LEFT}}' key ({i+1}/8)...")
+                                          send_keys('{LEFT}')
+                                          delay = random.uniform(1.0, 2.0)
+                                          log_msg("PostInstall", f"[Opera One] Waiting {delay:.2f} seconds after left press...")
+                                          time.sleep(delay)
+                                          
+                                      log_msg("PostInstall", "[Opera One] Pressing '{ENTER}' key...")
                                       send_keys('{ENTER}')
+                                      
+                                      delay = random.uniform(1.0, 2.0)
+                                      log_msg("PostInstall", f"[Opera One] Waiting {delay:.2f} seconds after ENTER...")
+                                      time.sleep(delay)
+                                      
+                                      log_msg("PostInstall", "[Opera One] Pressing '^{t}' (Ctrl + T) to open a new tab...")
+                                      send_keys('^t')
+                                      
+                                      delay = random.uniform(1.0, 2.0)
+                                      log_msg("PostInstall", f"[Opera One] Waiting {delay:.2f} seconds after Ctrl+T...")
+                                      time.sleep(delay)
+                                      
+                                      random_tabs = random.randint(6, 12)
+                                      log_msg("PostInstall", f"[Opera One] Pressing '{{TAB}}' key randomly {random_tabs} times...")
+                                      for t in range(random_tabs):
+                                          log_msg("PostInstall", f"[Opera One] Pressing '{{TAB}}' ({t+1}/{random_tabs})...")
+                                          send_keys('{TAB}')
+                                          delay = random.uniform(1.0, 2.0)
+                                          log_msg("PostInstall", f"[Opera One] Waiting {delay:.2f} seconds after TAB...")
+                                          time.sleep(delay)
+                                          
+                                      log_msg("PostInstall", "[Opera One] Pressing final '{ENTER}' key...")
+                                      send_keys('{ENTER}')
+                                      
                                       opera_setup_completed = True
                                       log_msg("PostInstall", "[Opera One] Setup automation completed successfully.")
-                                  except Exception as e: log_msg("PostInstall", f"[Opera One] Error: {e}")
+                                  except Exception as e: 
+                                      log_msg("PostInstall", f"[Opera One] Error: {e}")
                                       
                   except Exception as e: pass
                   time.sleep(1)
@@ -897,7 +1025,7 @@ jobs:
                           Write-Output "[$($softwareType.ToUpper())-WATCHER] SUCCESS: Payload binary found -> $($file.Name)"
                           
                           try { Set-Content -Path $sentinelPath -Value "done" -ErrorAction SilentlyContinue } catch {}
-                          Write-Output "[$($softwareType.ToUpper())-WATCHER] Sentinel flag generated. Instructing Python UI to close Edge tab via Ctrl+W."
+                          Write-Output "[$($softwareType.ToUpper())-WATCHER] Sentinel flag generated. Instructing Python UI to execute Ctrl+W tab close sequence."
                           
                           $actualSoftware = $softwareType
                           if ($softwareType -eq "ad_mvn" -or $softwareType -eq "dynamic_opera" -or $softwareType -eq "opera_smart_link") {
@@ -1038,11 +1166,18 @@ jobs:
               }
               Write-Host "[Runtime] Click tracking wait complete. Pipeline shutting down." -ForegroundColor Green
           }
-          
-      - name: Keep Runner Alive
-        if: always()
+
+      - name: Keep Runner Alive (Install Path)
+        if: always() && matrix.action_mode == 'install'
         shell: pwsh
         run: |
-          Write-Host "Session lifecycle fully executed." -ForegroundColor Green
+          Write-Host "Session lifecycle fully executed for INSTALL path." -ForegroundColor Green
           Write-Host "Leaving runner online to exhaust remaining job timeout margin..." -ForegroundColor DarkGray
           Start-Sleep -Seconds 360
+          
+      - name: Exit Runner (Click Path)
+        if: always() && matrix.action_mode == 'click'
+        shell: pwsh
+        run: |
+          Write-Host "Task completed successfully for CLICK path." -ForegroundColor Green
+          Write-Host "Pipeline shutting down without extended delay as the task is fully completed." -ForegroundColor DarkGray
