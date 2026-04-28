@@ -39,7 +39,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '0'
+        default: '4'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera - James'
+        default: 'Opera-One - Jimmy'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
