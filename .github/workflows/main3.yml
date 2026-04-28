@@ -30,7 +30,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '1'
+        default: '5'
       num_clicks:
         description: 'Number of Clicks'
         required: true
@@ -66,7 +66,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - B4Books'
+        default: 'Ad-MVN - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -77,41 +77,11 @@ on:
         required: true
         type: boolean
         default: false
-      # -----------------------------------------------------------------------
-      # MULTI-FUNCTIONAL PROXY / API KEY INPUT
-      # -----------------------------------------------------------------------
-      # Accepts ONE of three input styles — auto-detected at runtime:
-      #
-      #   1. SCRAPEOPS API KEY  →  single token, no spaces, no "://"
-      #      Example:  fd6d8b71-953d-4c71-9060-cb7bd4b7261e
-      #
-      #   2. SINGLE MANUAL PROXY  →  one proxy string in any supported format
-      #      Supported formats:
-      #        host:port
-      #        host:port:user:pass
-      #        user:pass@host:port
-      #        http://host:port
-      #        http://user:pass@host:port
-      #        https://host:port
-      #        https://user:pass@host:port
-      #        socks5://host:port
-      #        socks5://user:pass@host:port
-      #        geolocation://user:pass@host:port:Country Name - Number
-      #
-      #   3. MULTIPLE MANUAL PROXIES  →  paste several proxies separated by
-      #      spaces, commas, semicolons, or pipe characters (|).
-      #      GitHub Actions collapses multi-line textarea input into one line
-      #      so any of those separators work as line delimiters.
-      #      Example:
-      #        geolocation://u:p@1.2.3.4:10080:United States - 1 socks5://u:p@5.6.7.8:1080
-      #
-      # NOTE: If use_without_proxy is checked this field is ignored entirely.
-      # -----------------------------------------------------------------------
       scrapeops_api_key:
         description: 'ScrapeOps API / Manual Proxies'
         required: false
         type: string
-        default: 'aa45bf56-82fa-4af5-9c92-33d8910d9607'
+        default: 'fd6d8b71-953d-4c71-9060-cb7bd4b7261e'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -189,10 +159,6 @@ jobs:
           # ================================================================
           # SECTION 1 — SMART PROXY SPLITTER (scheme-boundary detection)
           # ================================================================
-          # GitHub Actions collapses newlines to spaces. Proxies like
-          # geolocation://user:pass@host:port:United States - 11 contain spaces.
-          # We MUST NOT split on whitespace. Instead we split by scheme prefixes.
-
           def split_proxy_line(raw):
               raw = raw.strip()
               if not raw:
@@ -284,7 +250,6 @@ jobs:
                   result["scheme"] = "http" if scheme == "geolocation" else scheme
                   rest = scheme_match.group(2)
 
-                  # Extract trailing geo metadata: ":Country Name - Number" at end
                   geo_match = re.search(r':([^:]*?)\s*-\s*(\d+)\s*$', rest)
                   if geo_match:
                       country_raw = geo_match.group(1).strip()
@@ -308,25 +273,21 @@ jobs:
                       if not result["geo_country"]:
                           result["geo_country"] = "us"
               else:
-                  # No scheme — try legacy host:port or host:port:user:pass
                   rest = token
                   result["scheme"] = "http"
 
-              # user:pass@host:port
               at_match = re.match(r'^([^@:]+):([^@]*)@([^:]+):(\d{2,5})$', rest)
               if at_match:
                   result.update(user=at_match.group(1), password=at_match.group(2),
                                 host=at_match.group(3), port=int(at_match.group(4)))
                   return _finalise_proxy(result)
 
-              # host:port:user:pass
               colon_4 = re.match(r'^([^:]+):(\d{2,5}):([^:]*):(.*)$', rest)
               if colon_4:
                   result.update(host=colon_4.group(1), port=int(colon_4.group(2)),
                                 user=colon_4.group(3), password=colon_4.group(4))
                   return _finalise_proxy(result)
 
-              # host:port
               colon_2 = re.match(r'^([^:]+):(\d{2,5})$', rest)
               if colon_2:
                   result.update(host=colon_2.group(1), port=int(colon_2.group(2)))
@@ -336,7 +297,7 @@ jobs:
               return None
 
           # ================================================================
-          # SECTION 4 — PROXY CHECKER (active/working test)
+          # SECTION 4 — PROXY CHECKER
           # ================================================================
 
           CHECK_URL     = "https://httpbin.org/ip"
@@ -429,7 +390,7 @@ jobs:
               return active
 
           # ================================================================
-          # SECTION 5 — MAIN INPUT READING & CLASSIFICATION
+          # SECTION 5 — MAIN INPUT READING
           # ================================================================
 
           email       = os.environ.get("EMAIL", "").strip()
@@ -590,9 +551,6 @@ jobs:
           # SECTION 9 — BUILD MATRIX INCLUDES
           # ================================================================
 
-          # GitHub Actions masks (blanks-out) job outputs that contain secret-like
-          # strings. To prevent the matrix from being emptied we reverse any field
-          # that may hold credentials or tokens. Runners de-obfuscate at runtime.
           def obf(s):
               return s[::-1] if isinstance(s, str) else s
 
@@ -601,7 +559,6 @@ jobs:
           if email:
               proxy_assignments = []
               if proxy_mode == MANUAL_MODE:
-                  # Shuffle so devices get different proxies from the pool
                   random.shuffle(active_proxies)
                   for i in range(num_devices):
                       if i < len(active_proxies):
@@ -875,16 +832,42 @@ jobs:
           python -m pip install pywinauto pyautogui pygetwindow keyboard --quiet
 
           # -----------------------------------------------------------------------
-          # Resolve Edge proxy argument
+          # Resolve Edge proxy argument & extract credentials for auth dialog
           # -----------------------------------------------------------------------
           $edgeProxyArg = ""
+          $proxyAuthUser = ""
+          $proxyAuthPass = ""
+          
           if ($useProxy) {
               if ($proxyType -eq "scrapeops") {
                   $edgeProxyArg = "--proxy-server=`"http://residential-proxy.scrapeops.io:8181`""
+                  $proxyAuthUser = $proxyUser
+                  $proxyAuthPass = $proxyPass
               } elseif ($proxyType -eq "socks5") {
+                  # Chromium/Edge has limited SOCKS5 auth support via --proxy-server
                   $edgeProxyArg = "--proxy-server=`"$proxyUser`""
+                  Write-Host "[Proxy] WARNING: SOCKS5 auth via Edge is unreliable. Consider HTTP proxies." -ForegroundColor Yellow
               } else {
-                  $edgeProxyArg = "--proxy-server=`"$proxyUser`""
+                  # HTTP/HTTPS manual proxy
+                  # Chromium strips/rejects embedded credentials in --proxy-server.
+                  # We strip them so Edge prompts for auth, then our UI handler fills the dialog.
+                  $manualProxy = $proxyUser
+                  if ($manualProxy -match '^(https?)://') {
+                      $scheme = $matches[1]
+                      $rest = $manualProxy.Substring(($scheme + "://").Length)
+                      if ($rest -match '^([^@:]+):([^@]+)@(.+)$') {
+                          $proxyAuthUser = $matches[1]
+                          $proxyAuthPass = $matches[2]
+                          $hostPort = $matches[3]
+                          $edgeProxyArg = "--proxy-server=`"$scheme://$hostPort`""
+                          Write-Host "[Proxy] Stripped credentials from proxy URL for Edge compatibility." -ForegroundColor DarkGray
+                      } else {
+                          # No auth embedded
+                          $edgeProxyArg = "--proxy-server=`"$manualProxy`""
+                      }
+                  } else {
+                      $edgeProxyArg = "--proxy-server=`"$manualProxy`""
+                  }
               }
           }
 
@@ -1073,7 +1056,10 @@ jobs:
               download_windows_closed = False
               installer_executed_sentinel = os.path.join(tempfile.gettempdir(), "installer_executed.flag")
 
-              needs_proxy_auth_dialog = use_proxy and proxy_type == "scrapeops"
+              # Trigger auth dialog handling for ScrapeOps AND manual HTTP/HTTPS proxies
+              needs_proxy_auth_dialog = use_proxy and proxy_user and (
+                  proxy_type == "scrapeops" or proxy_type in ("http", "https")
+              )
 
               while time.time() - start_time < timeout:
                   try:
@@ -1392,7 +1378,7 @@ jobs:
 
           Write-Host "[UI-Engine] Spinning up background Python process..." -ForegroundColor DarkGray
           Start-Process -FilePath "python" `
-              -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$proxyUser`" `"$proxyPass`" `"$env:PROXY_TYPE`" `"$env:SOFTWARE_TYPE`" `"$env:USE_PROXY`" `"$env:ACTION_MODE`"" `
+              -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$proxyAuthUser`" `"$proxyAuthPass`" `"$env:PROXY_TYPE`" `"$env:SOFTWARE_TYPE`" `"$env:USE_PROXY`" `"$env:ACTION_MODE`"" `
               -WindowStyle Hidden
 
           # -----------------------------------------------------------------------
