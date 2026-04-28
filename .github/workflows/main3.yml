@@ -39,7 +39,7 @@ on:
           - '60%'
           - '80%'
           - '100%'
-        default: '20%'
+        default: '100%'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Jimmy'
+        default: 'Ad-MVN - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -78,7 +78,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '972eda98-cc49-4a3b-bafe-fcf02fe22493'
+        default: 'fd6d8b71-953d-4c71-9060-cb7bd4b7261e'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -174,7 +174,7 @@ jobs:
           install_pct = int(install_pct_str.replace('%', ''))
           num_installs = int(round(num_devices * (install_pct / 100.0)))
           num_clicks = num_devices - num_installs
-          action_list =["install"] * num_installs + ["click"] * num_clicks
+          action_list = ["install"] * num_installs + ["click"] * num_clicks
           random.shuffle(action_list) # Mixes installs and clicks across the devices
           
           print(f"[Action Matrix] Total Devices: {num_devices}")
@@ -598,16 +598,15 @@ jobs:
               
               opera_launched_time = None
               opera_setup_completed = False
-              opera_one_30s_logged = False
-              
-              # Reload chance generation for click path optimization
-              reload_executed = False
-              reload_target = random.uniform(20, 60)
-              chance_to_reload = random.uniform(0.1, 1.0) # 10% to 100% chance to execute
-              will_reload = random.random() <= chance_to_reload
               
               sentinel_path = os.path.join(tempfile.gettempdir(), "download_done.flag")
               download_windows_closed = False
+              
+              # ---- Click‑mode random reload variables ----
+              click_reload_done = False
+              click_reload_trigger_time = random.uniform(20, 60)   # seconds after start
+              click_reload_probability = random.randint(10, 100)   # 10-100 %
+              click_reload_chance_rolled = False
               
               while time.time() - start_time < timeout:
                   try:
@@ -709,23 +708,7 @@ jobs:
                               elif time.time() - smart_link_interstitial_time < 15:
                                   time.sleep(1)
                                   continue
-                                  
-                          # Random Reload execution block specifically for Click mode during its 75-second wait phase
-                          click_elapsed = time.time() - (smart_link_interstitial_time if software_type == "opera_smart_link" else proxy_auth_time)
-                          if will_reload and not reload_executed and click_elapsed >= reload_target and click_elapsed <= 75:
-                              if edge_window:
-                                  try:
-                                      log_msg("Reload", f"Random reload triggered! (Chance resolved at {chance_to_reload*100:.1f}%). Target threshold: {reload_target:.1f}s. Elapsed: {click_elapsed:.1f}s.")
-                                      log_msg("Reload", "Setting focus to Edge window to execute page reload...")
-                                      edge_window.set_focus()
-                                      time.sleep(0.5)
-                                      log_msg("Reload", "Pressing '{F5}' key to refresh page...")
-                                      send_keys('{F5}')
-                                      reload_executed = True
-                                      log_msg("Reload", "Page reload sequence initiated successfully.")
-                                  except Exception as e:
-                                      log_msg("Reload", f"Failed to execute page reload sequence: {e}")
-
+                          # The actual reload is handled below after the main conditions
                           time.sleep(1)
                           continue
                                           
@@ -875,32 +858,30 @@ jobs:
                               
                           if not opera_launched_time:
                               opera_launched_time = time.time()
-                              log_msg("PostInstall", f"Launched browser detected: '{wt}'. Flow={'GX' if is_gx_flow else 'One'}.")
                               if is_gx_flow:
-                                  log_msg("PostInstall", "[Opera GX] Waiting 15s for full render...")
+                                  wait_msg = "15s"
+                              elif software_type == "opera_one":
+                                  wait_msg = "40s (30+10 for Opera One post-install)"
                               else:
-                                  log_msg("PostInstall", "[Opera One] Waiting 30s initially after launch...")
-                                  
+                                  wait_msg = "90s"
+                              log_msg("PostInstall", f"Launched browser detected: '{wt}'. Flow={is_gx_flow}. Waiting {wait_msg} for full render...")
                               try:
                                   log_msg("PostInstall", "Maximizing browser window...")
                                   opera_window.set_focus()
                                   opera_window.maximize()
                               except Exception: pass
                                   
-                          elapsed_opera = time.time() - opera_launched_time
-                          
-                          # Specific 30+10s split timer log for Opera One flow
-                          if not is_gx_flow and elapsed_opera > 30 and not opera_one_30s_logged:
-                              log_msg("PostInstall", "[Opera One] 30 seconds have passed since launch. Waiting an additional 10 seconds before proceeding...")
-                              opera_one_30s_logged = True
+                          if is_gx_flow:
+                              wait_time = 15
+                          elif software_type == "opera_one":
+                              wait_time = 40
+                          else:
+                              wait_time = 90
                               
-                          wait_time = 15 if is_gx_flow else 40
-                          
-                          if elapsed_opera > wait_time:
+                          if time.time() - opera_launched_time > wait_time:
                               try: opera_window.set_focus()
                               except Exception: pass
                               time.sleep(1)
-                              
                               if is_gx_flow:
                                   log_msg("PostInstall", "[Opera GX] Initiating TAB/ENTER sequence...")
                                   try:
@@ -928,57 +909,95 @@ jobs:
                                       opera_setup_completed = True
                                       log_msg("PostInstall", "[Opera GX] Setup automation completed successfully.")
                                   except Exception as e: log_msg("PostInstall", f"[Opera GX] Error: {e}")
-                              else:
-                                  log_msg("PostInstall", "[Opera One] 40 seconds total wait completed. Initiating setup sequence...")
+                              elif software_type == "opera_one":
+                                  # ---------- NEW OPERA ONE POST-INSTALL SEQUENCE ----------
+                                  log_msg("PostInstall", "[Opera One] Starting 30+10s wait completed. Running center‑click then left‑arrow + Enter + Ctrl+T + Tabs sequence.")
                                   try:
                                       sw, sh = pyautogui.size()
                                       cx, cy = sw // 2, sh // 2
-                                      log_msg("PostInstall", f"[Opera One] Clicking center of screen using UI mouse at ({cx}, {cy})...")
+                                      log_msg("PostInstall", f"[Opera One] Clicking center of screen at ({cx}, {cy})...")
                                       pyautogui.click(cx, cy)
-                                      
                                       delay = random.uniform(1.0, 2.0)
-                                      log_msg("PostInstall", f"[Opera One] Center click executed. Waiting {delay:.2f} seconds...")
+                                      log_msg("PostInstall", f"[Opera One] Center click done. Waiting {delay:.2f}s before starting arrow keys.")
                                       time.sleep(delay)
                                       
-                                      log_msg("PostInstall", "[Opera One] Swiping through setup via LEFT arrow keys.")
-                                      for i in range(8):
-                                          log_msg("PostInstall", f"[Opera One] Pressing '{{LEFT}}' key ({i+1}/8)...")
+                                      for i in range(1, 9):
+                                          log_msg("PostInstall", f"[Opera One] Pressing LEFT arrow ({i}/8)...")
                                           send_keys('{LEFT}')
-                                          delay = random.uniform(1.0, 2.0)
-                                          log_msg("PostInstall", f"[Opera One] Waiting {delay:.2f} seconds after left press...")
-                                          time.sleep(delay)
+                                          d = random.uniform(1.0, 2.0)
+                                          log_msg("PostInstall", f"[Opera One] Waiting {d:.2f}s after arrow.")
+                                          time.sleep(d)
                                           
-                                      log_msg("PostInstall", "[Opera One] Pressing '{ENTER}' key...")
+                                      log_msg("PostInstall", "[Opera One] Pressing ENTER...")
                                       send_keys('{ENTER}')
+                                      d1 = random.uniform(1.0, 2.0)
+                                      log_msg("PostInstall", f"[Opera One] Waiting {d1:.2f}s after ENTER.")
+                                      time.sleep(d1)
                                       
-                                      delay = random.uniform(1.0, 2.0)
-                                      log_msg("PostInstall", f"[Opera One] Waiting {delay:.2f} seconds after ENTER...")
-                                      time.sleep(delay)
-                                      
-                                      log_msg("PostInstall", "[Opera One] Pressing '^{t}' (Ctrl + T) to open a new tab...")
+                                      log_msg("PostInstall", "[Opera One] Pressing Ctrl+T (new tab)...")
                                       send_keys('^t')
+                                      d2 = random.uniform(1.0, 2.0)
+                                      log_msg("PostInstall", f"[Opera One] Ctrl+T sent. Waiting {d2:.2f}s.")
+                                      time.sleep(d2)
                                       
-                                      delay = random.uniform(1.0, 2.0)
-                                      log_msg("PostInstall", f"[Opera One] Waiting {delay:.2f} seconds after Ctrl+T...")
-                                      time.sleep(delay)
-                                      
-                                      random_tabs = random.randint(6, 12)
-                                      log_msg("PostInstall", f"[Opera One] Pressing '{{TAB}}' key randomly {random_tabs} times...")
-                                      for t in range(random_tabs):
-                                          log_msg("PostInstall", f"[Opera One] Pressing '{{TAB}}' ({t+1}/{random_tabs})...")
+                                      tab_count = random.randint(6, 12)
+                                      log_msg("PostInstall", f"[Opera One] Pressing TAB {tab_count} times with 1‑2s pauses.")
+                                      for t in range(1, tab_count+1):
                                           send_keys('{TAB}')
+                                          d_tab = random.uniform(1.0, 2.0)
+                                          log_msg("PostInstall", f"[Opera One] TAB {t}/{tab_count} sent. Next wait {d_tab:.2f}s.")
+                                          time.sleep(d_tab)
+                                          
+                                      log_msg("PostInstall", "[Opera One] Pressing final ENTER...")
+                                      send_keys('{ENTER}')
+                                      log_msg("PostInstall", "[Opera One] Post‑install automation completed successfully.")
+                                      opera_setup_completed = True
+                                  except Exception as e:
+                                      log_msg("PostInstall", f"[Opera One] Error during new sequence: {e}")
+                              else:
+                                  log_msg("PostInstall", "[Other Opera] Initiating post-install sequence...")
+                                  try:
+                                      sw, sh = pyautogui.size()
+                                      cx, cy = sw // 2, sh // 2
+                                      log_msg("PostInstall", f"[Other Opera] Executing PyAutoGUI clicks at center screen coords: ({cx}, {cy})")
+                                      for i in range(3):
+                                          log_msg("PostInstall", f"[Other Opera] Center click {i+1}/3...")
+                                          pyautogui.click(cx, cy)
                                           delay = random.uniform(1.0, 2.0)
-                                          log_msg("PostInstall", f"[Opera One] Waiting {delay:.2f} seconds after TAB...")
                                           time.sleep(delay)
                                           
-                                      log_msg("PostInstall", "[Opera One] Pressing final '{ENTER}' key...")
+                                      log_msg("PostInstall", "[Other Opera] Swiping through setup via RIGHT arrows.")
+                                      for i in range(10):
+                                          log_msg("PostInstall", f"[Other Opera] Sending '{{RIGHT}}' ({i+1}/10)...")
+                                          send_keys('{RIGHT}')
+                                          delay = random.uniform(1.0, 2.0)
+                                          time.sleep(delay)
+                                          
+                                      log_msg("PostInstall", "[Other Opera] Sending final '{ENTER}'...")
                                       send_keys('{ENTER}')
-                                      
                                       opera_setup_completed = True
-                                      log_msg("PostInstall", "[Opera One] Setup automation completed successfully.")
-                                  except Exception as e: 
-                                      log_msg("PostInstall", f"[Opera One] Error: {e}")
+                                      log_msg("PostInstall", "[Other Opera] Setup automation completed successfully.")
+                                  except Exception as e: log_msg("PostInstall", f"[Other Opera] Error: {e}")
                                       
+                      # J. Click Mode Random Page Reload (after all windows found)
+                      if action_mode == "click" and edge_window and not click_reload_done:
+                          elapsed_total = time.time() - start_time
+                          if elapsed_total > click_reload_trigger_time:
+                              if not click_reload_chance_rolled:
+                                  click_reload_chance_rolled = True
+                                  if random.randint(1, 100) <= click_reload_probability:
+                                      log_msg("ClickReload", f"Random reload triggered (chance {click_reload_probability}%). Reloading page.")
+                                      try:
+                                          edge_window.set_focus()
+                                          time.sleep(0.5)
+                                          send_keys('{F5}')
+                                          log_msg("ClickReload", "Sent F5 refresh.")
+                                      except Exception as e:
+                                          log_msg("ClickReload", f"Reload failed: {e}")
+                                  else:
+                                      log_msg("ClickReload", f"Random reload skipped (chance {click_reload_probability}%). No reload.")
+                              click_reload_done = True
+                              
                   except Exception as e: pass
                   time.sleep(1)
                   
@@ -988,14 +1007,17 @@ jobs:
               software_type = sys.argv[3] if len(sys.argv) > 3 else "avg"
               use_proxy     = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
               action_mode   = sys.argv[5] if len(sys.argv) > 5 else "install"
-              
-              handle_automation(username, password, software_type, use_proxy, action_mode)
+              timeout       = int(sys.argv[6]) if len(sys.argv) > 6 else 360
+              handle_automation(username, password, software_type, use_proxy, action_mode, timeout)
           '@
           $handlerPy | Out-File -FilePath "$env:TEMP\auto_handler.py" -Encoding utf8
           
+          # Compute handler timeout: 90s for click, standard 360s for install
+          $handlerTimeout = if ($env:ACTION_MODE -eq "click") { 90 } else { 360 }
+          
           Write-Host "[UI-Engine] Spinning up background Python process..." -ForegroundColor DarkGray
           Start-Process -FilePath "python" `
-              -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`" `"$env:SOFTWARE_TYPE`" `"$env:USE_PROXY`" `"$env:ACTION_MODE`"" `
+              -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`" `"$env:SOFTWARE_TYPE`" `"$env:USE_PROXY`" `"$env:ACTION_MODE`" `"$handlerTimeout`"" `
               -WindowStyle Hidden
               
           # 3. Setup the Software Watcher/Installer background job ONLY if mode is 'install'
@@ -1016,8 +1038,8 @@ jobs:
                   Write-Output "[$($softwareType.ToUpper())-WATCHER] Awaiting file matching: $exeFilter"
                   
                   while (-not $installed -and (Get-Date) -lt $deadline) {
-                      $candidates = Get-ChildItem -Path $dlFolder -Filter $exeFilter -ErrorAction SilentlyContinue |
-                          Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
+                      $candidates = Get-ChildItem -Path $dlFolder -Filter $exeFilter -ErrorAction SilentlyContinue `
+                          Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } `
                           Sort-Object LastWriteTime -Descending
                           
                       if ($candidates.Count -gt 0) {
@@ -1152,12 +1174,7 @@ jobs:
               Write-Host "[System] Install Job concluded." -ForegroundColor Green
           } else {
               Write-Host "[Runtime] Operating in CLICK-ONLY pathway. All binaries and installations are bypassed." -ForegroundColor Magenta
-              if ($env:SOFTWARE_TYPE -eq "opera_smart_link") {
-                  Write-Host "[Runtime] Allowing 75 seconds for TAB/ENTER interstitial page routing and download page load..." -ForegroundColor Yellow
-              } else {
-                  Write-Host "[Runtime] Allowing 75 seconds to ensure webpage fully loads and view registers..." -ForegroundColor Yellow
-              }
-              
+              Write-Host "[Runtime] Allowing 75 seconds to ensure webpage fully loads and view registers..." -ForegroundColor Yellow
               $waitTotal = 75
               $step = 15
               for ($w = 0; $w -lt $waitTotal; $w += $step) {
@@ -1166,18 +1183,15 @@ jobs:
               }
               Write-Host "[Runtime] Click tracking wait complete. Pipeline shutting down." -ForegroundColor Green
           }
-
-      - name: Keep Runner Alive (Install Path)
-        if: always() && matrix.action_mode == 'install'
-        shell: pwsh
-        run: |
-          Write-Host "Session lifecycle fully executed for INSTALL path." -ForegroundColor Green
-          Write-Host "Leaving runner online to exhaust remaining job timeout margin..." -ForegroundColor DarkGray
-          Start-Sleep -Seconds 360
           
-      - name: Exit Runner (Click Path)
-        if: always() && matrix.action_mode == 'click'
+      - name: Keep Runner Alive
+        if: always()
         shell: pwsh
         run: |
-          Write-Host "Task completed successfully for CLICK path." -ForegroundColor Green
-          Write-Host "Pipeline shutting down without extended delay as the task is fully completed." -ForegroundColor DarkGray
+          Write-Host "Session lifecycle fully executed." -ForegroundColor Green
+          if ($env:ACTION_MODE -eq "install") {
+              Write-Host "Leaving runner online to exhaust remaining job timeout margin..." -ForegroundColor DarkGray
+              Start-Sleep -Seconds 360
+          } else {
+              Write-Host "Click pathway completed. Runner will exit naturally." -ForegroundColor Green
+          }
