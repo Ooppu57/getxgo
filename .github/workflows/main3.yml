@@ -16,7 +16,7 @@ on:
         description: 'Getscreen.me Account Email'
         required: true
         type: string
-        default: 'techx@justzeus.com'
+        default: 'techx@highmail.site'
       num_devices:
         description: 'Number of Devices to Spawn'
         required: true
@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - B4Books'
+        default: 'Opera - James'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -161,12 +161,12 @@ jobs:
           is_manual_proxies = not is_uuid and len(api_key_input) > 0 and ("://" in api_key_input or "@" in api_key_input or api_key_input.count(":") > 1)
 
           use_proxy = False
-          active_proxies = []
+          active_proxies =[]
 
           if without_proxy:
               print("[Proxy] 'Run without proxy' checked. Disabling proxy.")
               api_key_input = ""
-          elif not api_key_input or api_key_input.lower() in["none", "null", "false", "blank", "empty", "''", '""']:
+          elif not api_key_input or api_key_input.lower() in ["none", "null", "false", "blank", "empty", "''", '""']:
               print("[Proxy] API key empty or invalid. Disabling proxy.")
               api_key_input = ""
           elif is_manual_proxies:
@@ -192,7 +192,7 @@ jobs:
                       seen.add(k)
                       unique_parsed.append(p)
                       
-              print(f"[Proxy] Extracted {len(unique_parsed)} unique valid proxies. Checking Active Status & IP Geolocation...")
+              print(f"[Proxy] Extracted {len(unique_parsed)} unique formatting proxies. Checking Active Status & IP Geolocation...")
 
               def check_proxy(p):
                   safe_user = urllib.parse.quote(p['user'])
@@ -200,26 +200,44 @@ jobs:
                   proxy_url = f"http://{safe_user}:{safe_pass}@{p['host']}:{p['port']}"
                   proxy_handler = urllib.request.ProxyHandler({'http': proxy_url, 'https': proxy_url})
                   opener = urllib.request.build_opener(proxy_handler)
+                  
+                  # Primary Check: ip-api.com
                   try:
-                      # Ping for external IP and country code resolution via the proxy
                       req = urllib.request.Request("http://ip-api.com/json/", headers={'User-Agent': 'Mozilla/5.0'})
-                      response = opener.open(req, timeout=10)
+                      response = opener.open(req, timeout=12)
                       data = json.loads(response.read().decode('utf-8'))
                       if data.get("status") == "success":
                           p['country_code'] = data.get("countryCode", "US")
-                          p['ip'] = data.get("query", "")
+                          p['ip'] = data.get("query", "Unknown-IP")
+                          print(f"[Proxy-Check] ACTIVE! Host: {p['host']}:{p['port']} -> IP: {p['ip']} | Country: {p['country_code']}")
                           return p
-                  except Exception as e:
+                  except Exception:
                       pass
+                      
+                  # Fallback Check: ipinfo.io
+                  try:
+                      req = urllib.request.Request("https://ipinfo.io/json", headers={'User-Agent': 'Mozilla/5.0'})
+                      response = opener.open(req, timeout=12)
+                      data = json.loads(response.read().decode('utf-8'))
+                      if "ip" in data:
+                          p['country_code'] = data.get("country", "US")
+                          p['ip'] = data.get("ip", "Unknown-IP")
+                          print(f"[Proxy-Check] ACTIVE (Fallback)! Host: {p['host']}:{p['port']} -> IP: {p['ip']} | Country: {p['country_code']}")
+                          return p
+                  except Exception:
+                      pass
+                      
+                  print(f"[Proxy-Check] FAILED/INACTIVE: Host: {p['host']}:{p['port']} is not responding.")
                   return None
 
+              # Check proxies concurrently
               with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
                   results = executor.map(check_proxy, unique_parsed)
                   for res in results:
                       if res:
                           active_proxies.append(res)
               
-              print(f"[Proxy] Check Complete: {len(active_proxies)} proxies are ACTIVE and responding.")
+              print(f"[Proxy] Integrity Check Complete: {len(active_proxies)} proxies are fully ACTIVE and mapped.")
               if len(active_proxies) == 0:
                   print("[Proxy] FATAL: 0 active manual proxies found! Connections will default to local machine IPs.")
                   use_proxy = False
@@ -236,7 +254,7 @@ jobs:
           num_clicks_raw = int(os.environ.get("NUM_CLICKS", "0"))
           num_clicks = min(num_clicks_raw, num_devices)
           num_installs = num_devices - num_clicks
-          action_list = ["install"] * num_installs + ["click"] * num_clicks
+          action_list =["install"] * num_installs + ["click"] * num_clicks
           random.shuffle(action_list)
 
           print(f"[Action Matrix] Total Devices : {num_devices}")
@@ -340,7 +358,7 @@ jobs:
 
                   if use_proxy:
                       if is_manual_proxies:
-                          # Rotate unique checked manual proxies per device
+                          # Rotate unique verified manual proxies per device
                           p = active_proxies[(i - 1) % len(active_proxies)]
                           proxy_user = p['user']
                           proxy_pass = p['pass']
@@ -377,7 +395,11 @@ jobs:
                       "exe_filter": exe_filter,
                       "action_mode": action_mode
                   })
-                  print(f"[Device Added] {device_name} | Proxy Assigned: {'YES' if use_proxy else 'NO'}")
+                  
+                  if is_manual_proxies and use_proxy:
+                      print(f"[Device Added] {device_name} | Assigned Proxy IP: {p['ip']} ({cc_device})")
+                  else:
+                      print(f"[Device Added] {device_name} | Assigned Proxy: {'YES' if use_proxy else 'NO'}")
 
           if not includes:
               print("Error: Valid configuration could not be generated. Exiting.")
@@ -474,7 +496,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .github/workflows/main3.yml
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs[skip ci]" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs [skip ci]" && git push)
 
   remote_session:
     name: Session ${{ matrix.device }}
@@ -1155,7 +1177,7 @@ jobs:
                           while ($locked) {
                               Start-Sleep -Seconds 2
                               try {
-                                  $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
+                                  $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
                                   $s.Close()
                                   $locked = $false
                                   Write-Output "[$($actualSoftware.ToUpper())-INSTALL] File unlocked and ready."
