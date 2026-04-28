@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera - James'
+        default: 'Opera - Oliver'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -110,7 +110,7 @@ on:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: true
+        default: false
       sticky_sessions:
         description: 'Use Unique Sticky Sessions'
         required: true
