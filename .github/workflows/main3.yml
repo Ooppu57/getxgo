@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Chloe'
+        default: 'Opera-One - Daisy'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -78,7 +78,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '972eda98-cc49-4a3b-bafe-fcf02fe22493'
+        default: '717d7be9-94be-4c8e-847d-51b775b7009e'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
