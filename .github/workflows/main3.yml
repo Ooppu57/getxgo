@@ -111,7 +111,7 @@ on:
         description: 'ScrapeOps API / Manual Proxies'
         required: false
         type: string
-        default: 'http://DTudsikixRulVVCW:cc4jmTxtnQ4qkObK@geo.floppydata.com:10080 http://cs2zgYe1UrqAOh98:JCln9ybaCZEI8hxn@geo.floppydata.com:10080 http://TH7WH3kLPTHJ9daR:MXvc0pdjJgJlwYkn@geo.floppydata.com:10080 http://VjV3KFMMHyMR5llu:8ER7ooJpfpbitkM9@geo.floppydata.com:10080 http://viBJVGgcegqz5YTv:QoqLmg8N49iR3N2O@geo.floppydata.com:10080'
+        default: 'c6c0df7f-47c8-47c3-bfc3-6adfda3c963b'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
