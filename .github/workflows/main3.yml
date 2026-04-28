@@ -16,7 +16,7 @@ on:
         description: 'Getscreen.me Account Email'
         required: true
         type: string
-        default: 'techx@highmail.site'
+        default: 'techx@justzeus.com'
       num_devices:
         description: 'Number of Devices to Spawn'
         required: true
@@ -28,18 +28,18 @@ on:
           - '4'
           - '5'
         default: '5'
-      install_percentage:
-        description: 'Install / Click Percentage'
+      num_clicks:
+        description: 'Number of Clicks'
         required: true
         type: choice
         options:
-          - '0%'
-          - '20%'
-          - '40%'
-          - '60%'
-          - '80%'
-          - '100%'
-        default: '20%'
+          - '0'
+          - '1'
+          - '2'
+          - '3'
+          - '4'
+          - '5'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera - Fatradez'
+        default: 'Ad-MVN - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -78,7 +78,7 @@ on:
         description: 'ScrapeOps API Key'
         required: false
         type: string
-        default: '717d7be9-94be-4c8e-847d-51b775b7009e'
+        default: 'fd6d8b71-953d-4c71-9060-cb7bd4b7261e'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -104,7 +104,7 @@ on:
           - 'Italy'
           - 'Netherlands'
           - 'Poland'
-        default: 'Poland'
+        default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
@@ -132,63 +132,61 @@ jobs:
         id: set-matrix
         shell: python
         env:
-          EMAIL: ${{ inputs.getscreen_email }}
-          NUM_DEVICES: ${{ inputs.num_devices }}
-          INSTALL_PCT: ${{ inputs.install_percentage }}
-          OS_VERSION: ${{ inputs.os_version }}
+          EMAIL:          ${{ inputs.getscreen_email }}
+          NUM_DEVICES:    ${{ inputs.num_devices }}
+          NUM_CLICKS:     ${{ inputs.num_clicks }}
+          OS_VERSION:     ${{ inputs.os_version }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
-          MANUAL_URL: ${{ inputs.manual_software_url }}
-          RUN_MANUAL: ${{ inputs.run_manual_link }}
-          API_KEY: ${{ inputs.scrapeops_api_key }}
-          WITHOUT_PROXY: ${{ inputs.use_without_proxy }}
-          COUNTRY: ${{ inputs.proxy_country }}
-          MOBILE: ${{ inputs.mobile_proxies }}
-          STICKY: ${{ inputs.sticky_sessions }}
+          MANUAL_URL:     ${{ inputs.manual_software_url }}
+          RUN_MANUAL:     ${{ inputs.run_manual_link }}
+          API_KEY:        ${{ inputs.scrapeops_api_key }}
+          WITHOUT_PROXY:  ${{ inputs.use_without_proxy }}
+          COUNTRY:        ${{ inputs.proxy_country }}
+          MOBILE:         ${{ inputs.mobile_proxies }}
+          STICKY:         ${{ inputs.sticky_sessions }}
         run: |
           import os, json, uuid, random
-          
+
           print("========== INITIALIZING MATRIX GENERATION ==========")
-          
-          email = os.environ.get("EMAIL", "").strip()
+
+          email       = os.environ.get("EMAIL", "").strip()
           num_devices = int(os.environ.get("NUM_DEVICES", "1"))
-          os_version = os.environ.get("OS_VERSION", "windows-2025")
-          
-          # Smart API Key & Checkbox validation
-          api_key = os.environ.get("API_KEY", "").strip()
+          num_clicks  = int(os.environ.get("NUM_CLICKS",  "0"))
+          os_version  = os.environ.get("OS_VERSION", "windows-2025")
+
+          # Clamp: clicks can never exceed total devices
+          num_clicks   = min(num_clicks, num_devices)
+          num_installs = num_devices - num_clicks
+
+          action_list = ["click"] * num_clicks + ["install"] * num_installs
+          random.shuffle(action_list)
+
+          print(f"[Action Matrix] Total Devices : {num_devices}")
+          print(f"[Action Matrix] Click  Devices : {num_clicks}")
+          print(f"[Action Matrix] Install Devices: {num_installs}")
+          print(f"[Action Matrix] Randomized Queue: {action_list}")
+
+          api_key       = os.environ.get("API_KEY", "").strip()
           without_proxy = os.environ.get("WITHOUT_PROXY", "false").lower() == "true"
-          
+
           if without_proxy:
               print("[Proxy] 'Run without proxy' checked. Disabling proxy.")
               api_key = ""
-          elif not api_key or api_key.lower() in["none", "null", "false", "blank", "empty", "''", '""']:
+          elif not api_key or api_key.lower() in ["none", "null", "false", "blank", "empty", "''", '""']:
               print("[Proxy] API key empty or invalid. Disabling proxy.")
               api_key = ""
-              
-          country_input = os.environ.get("COUNTRY", "USA")
-          mobile = os.environ.get("MOBILE", "false").lower() == "true"
-          sticky = os.environ.get("STICKY", "false").lower() == "true"
+
+          country_input   = os.environ.get("COUNTRY", "USA")
+          mobile          = os.environ.get("MOBILE",  "false").lower() == "true"
+          sticky          = os.environ.get("STICKY",  "false").lower() == "true"
           software_choice = os.environ.get("SOFTWARE_CHOICE", "AVG - B4Books")
-          
-          # Logic for Install vs Click Percentage Spread
-          install_pct_str = os.environ.get("INSTALL_PCT", "100%")
-          install_pct = int(install_pct_str.replace('%', ''))
-          num_installs = int(round(num_devices * (install_pct / 100.0)))
-          num_clicks = num_devices - num_installs
-          action_list = ["install"] * num_installs + ["click"] * num_clicks
-          random.shuffle(action_list) # Mixes installs and clicks across the devices
-          
-          print(f"[Action Matrix] Total Devices: {num_devices}")
-          print(f"[Action Matrix] Distribution: {install_pct}% Installs -> {num_installs} Install paths, {num_clicks} Click paths.")
-          print(f"[Action Matrix] Randomized Queue: {action_list}")
-          
-          # Logic for Manual Link vs Software List
-          run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
+
+          run_manual       = os.environ.get("RUN_MANUAL", "false").lower() == "true"
           manual_url_input = os.environ.get("MANUAL_URL", "").strip()
-          manual_url = manual_url_input if run_manual else ""
-          
+          manual_url       = manual_url_input if run_manual else ""
+
           use_proxy = bool(api_key)
-          
-          # Map Country to ScrapeOps codes
+
           country_map = {
               "USA": "us", "UK": "uk", "Canada": "ca",
               "Australia": "au", "Germany": "de", "France": "fr",
@@ -197,198 +195,172 @@ jobs:
               "Italy": "it", "Netherlands": "nl", "Poland": "pl"
           }
           cc = country_map.get(country_input, "us")
-          
-          # Software Mappings
+
           avg_urls = {
               "AVG - TechxTrader": "https://u.to/a-trdr/GoeNIg",
               "AVG - B4Books":     "https://u.to/a-b4b/O4eNIg",
               "AVG - F.Ahmad":     "https://u.to/a-fahmad/ooeNIg",
           }
           opera_urls = {
-              "OperaGX - B4Books":  "https://u.to/opx-b4b/2nh4Ig",
-              "Opera - Techx":      "https://u.to/techxsm/xVyFIg",
-              "Opera - Fatradez":   "https://u.to/fatradezsm/cF2FIg",
-              "Opera - James":      "https://u.to/jamesxsm/eV2FIg",
-              "Opera - Oliver":     "https://u.to/oliverxsm/f12FIg",
-              "Opera - Mahal":      "https://u.to/mahalxsm/iF2FIg",
+              "OperaGX - B4Books": "https://u.to/opx-b4b/2nh4Ig",
+              "Opera - Techx":     "https://u.to/techxsm/xVyFIg",
+              "Opera - Fatradez":  "https://u.to/fatradezsm/cF2FIg",
+              "Opera - James":     "https://u.to/jamesxsm/eV2FIg",
+              "Opera - Oliver":    "https://u.to/oliverxsm/f12FIg",
+              "Opera - Mahal":     "https://u.to/mahalxsm/iF2FIg",
           }
           opera_one_urls = {
-              "Opera-One - Esmeel":    "https://u.to/esmlxopo/cTOGIg",
-              "Opera-One - Harrari":   "https://u.to/hararixopo/zTOGIg",
-              "Opera-One - Chloe":     "https://u.to/chloexopo/_DOGIg",
-              "Opera-One - Daisy":     "https://u.to/daisyxopo/LjSGIg",
-              "Opera-One - Jimmy":     "https://u.to/jmy/mUZ4Ig",
+              "Opera-One - Esmeel":  "https://u.to/esmlxopo/cTOGIg",
+              "Opera-One - Harrari": "https://u.to/hararixopo/zTOGIg",
+              "Opera-One - Chloe":   "https://u.to/chloexopo/_DOGIg",
+              "Opera-One - Daisy":   "https://u.to/daisyxopo/LjSGIg",
+              "Opera-One - Jimmy":   "https://u.to/jmy/mUZ4Ig",
           }
           ad_mvn_urls = {
-              "Ad-MVN - Techx": "https://u.to/techxadmvnxsmrt/gvd7Ig",
-              "Ad-MVN - B4Books": "https://u.to/b4bxadmvnxsmrt/5-h7Ig",
+              "Ad-MVN - Techx":      "https://u.to/techxadmvnxsmrt/gvd7Ig",
+              "Ad-MVN - B4Books":    "https://u.to/b4bxadmvnxsmrt/5-h7Ig",
               "Ad-MVN - Orderflowz": "https://u.to/ordrflzadmvnxsmrt/-fZ7Ig",
-              "Ad-MVN - A2Z": "https://u.to/a2zadmvnxsmrt/Y-t7Ig",
+              "Ad-MVN - A2Z":        "https://u.to/a2zadmvnxsmrt/Y-t7Ig",
           }
           all_urls = {**avg_urls, **opera_urls, **opera_one_urls, **ad_mvn_urls}
-          
-          dynamic_links =["Opera - Techx", "Opera - Fatradez", "Opera - James", "Opera - Oliver", "Opera - Mahal"]
-          
+
+          dynamic_links = ["Opera - Techx", "Opera - Fatradez", "Opera - James", "Opera - Oliver", "Opera - Mahal"]
+
           if manual_url:
-              target_url = manual_url
+              target_url    = manual_url
               software_type = "dynamic_opera"
-              exe_filter = "*.exe"
-              print(f"[Target] Manual URL selected: {target_url}")
+              exe_filter    = "*.exe"
+              print(f"[Target] Manual URL: {target_url}")
           else:
-              target_url = all_urls.get(software_choice, avg_urls.get("AVG - B4Books", "https://u.to/a-b4b/O4eNIg"))
+              target_url = all_urls.get(software_choice, avg_urls["AVG - B4Books"])
               if software_choice in dynamic_links:
-                  software_type = "opera_smart_link"
-                  exe_filter = "*Opera*Setup*.exe"
+                  software_type = "opera_smart_link";  exe_filter = "*Opera*Setup*.exe"
               elif software_choice.startswith("Ad-MVN"):
-                  software_type = "dynamic_opera"
-                  exe_filter = "*Opera*Setup*.exe"
+                  software_type = "dynamic_opera";     exe_filter = "*Opera*Setup*.exe"
               elif software_choice.startswith("OperaGX"):
-                  software_type = "opera_gx"
-                  exe_filter = "OperaGXSetup*.exe"
+                  software_type = "opera_gx";          exe_filter = "OperaGXSetup*.exe"
               elif software_choice.startswith("Opera-One"):
-                  software_type = "opera_one"
-                  exe_filter = "OperaSetup*.exe"
+                  software_type = "opera_one";         exe_filter = "OperaSetup*.exe"
               else:
-                  software_type = "avg"
-                  exe_filter = "*avg*.exe"
-              print(f"[Target] Software: {software_choice} -> URL: {target_url}")
-              print(f"[Target] Engine Type: {software_type} | Filter: {exe_filter}")
-                  
-          # --- Detailed Device Name Builder ---
-          def short_os(os_ver):
-              if os_ver == "windows-2025": return "W25"
-              elif os_ver == "windows-2022": return "W22"
-              elif os_ver == "windows-11-arm": return "W11A"
-              else: return "W" + os_ver.replace("windows-", "").replace("-", "")
-                  
-          def short_software(choice):
-              prefix_map = { "OperaGX": "OPX", "Opera-One": "OPO", "Ad-MVN": "MVN", "AVG": "AVG", "Opera": "OP" }
-              for key, prefix in prefix_map.items():
-                  if choice.startswith(key):
-                      parts = choice.split(" - ", 1)
-                      list_name = parts[1].replace(" ", "") if len(parts) > 1 else ""
-                      return f"{prefix}-{list_name}"
-              return choice.replace(" ", "").replace("-", "")
-              
+                  software_type = "avg";               exe_filter = "*avg*.exe"
+              print(f"[Target] {software_choice} -> {target_url} | Type: {software_type} | Filter: {exe_filter}")
+
+          def short_os(v):
+              return {"windows-2025":"W25","windows-2022":"W22","windows-11-arm":"W11A"}.get(v, "W"+v.replace("windows-","").replace("-",""))
+
+          def short_sw(c):
+              for key, pfx in {"OperaGX":"OPX","Opera-One":"OPO","Ad-MVN":"MVN","AVG":"AVG","Opera":"OP"}.items():
+                  if c.startswith(key):
+                      parts = c.split(" - ", 1)
+                      return f"{pfx}-{parts[1].replace(' ','') if len(parts)>1 else ''}"
+              return c.replace(" ","").replace("-","")
+
           short_os_tag = short_os(os_version)
-          short_sw_tag = "MANUAL" if manual_url else short_software(software_choice)
-              
-          includes =[]
+          short_sw_tag = "MANUAL" if manual_url else short_sw(software_choice)
+
+          includes = []
           if email:
               for i in range(1, num_devices + 1):
-                  action_mode = action_list[i-1]
-                  action_cap = action_mode.capitalize()
-                  country_cap = cc.upper()
-                  
-                  # Final Formatting: 1-W25-AVG-TechxTrader-Install-US
-                  device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{country_cap}"
-                  
+                  action_mode = action_list[i - 1]
+                  device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_mode.capitalize()}-{cc.upper()}"
+
                   if use_proxy:
                       proxy_user = f"scrapeops.country={cc}"
                       if mobile: proxy_user += ".mobile=true"
-                      if sticky:
-                          session_id = str(uuid.uuid4())[:8]
-                          proxy_user += f".sticky_session={session_id}"
+                      if sticky: proxy_user += f".sticky_session={str(uuid.uuid4())[:8]}"
                       proxy_pass = api_key
                   else:
-                      proxy_user = ""
-                      proxy_pass = ""
-                      
+                      proxy_user = proxy_pass = ""
+
                   includes.append({
-                      "device": device_name,
-                      "email": email,
-                      "os": os_version,
-                      "use_proxy": str(use_proxy).lower(),
-                      "proxy_user": proxy_user,
-                      "proxy_pass": proxy_pass,
-                      "target_url": target_url,
+                      "device":        device_name,
+                      "email":         email,
+                      "os":            os_version,
+                      "use_proxy":     str(use_proxy).lower(),
+                      "proxy_user":    proxy_user,
+                      "proxy_pass":    proxy_pass,
+                      "target_url":    target_url,
                       "software_type": software_type,
-                      "exe_filter": exe_filter,
-                      "action_mode": action_mode
+                      "exe_filter":    exe_filter,
+                      "action_mode":   action_mode
                   })
-                  print(f"[Device Added] {device_name} | Proxy: {'YES' if use_proxy else 'NO'}")
-                  
+                  print(f"[Device] {device_name} | {action_mode.upper()} | Proxy: {'YES' if use_proxy else 'NO'}")
+
           if not includes:
-              print("Error: Valid configuration could not be generated. Exiting.")
-              exit(1)
-              
+              print("Error: no valid configuration. Exiting."); exit(1)
+
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"matrix={json.dumps({'include': includes})}\n")
           print("========== MATRIX GENERATION COMPLETE ==========")
-              
+
       - name: Update Workflow Defaults (Remember Inputs)
         shell: python
         env:
-          OS_VERSION: ${{ inputs.os_version }}
+          OS_VERSION:      ${{ inputs.os_version }}
           GETSCREEN_EMAIL: ${{ inputs.getscreen_email }}
-          NUM_DEVICES: ${{ inputs.num_devices }}
-          INSTALL_PCT: ${{ inputs.install_percentage }}
+          NUM_DEVICES:     ${{ inputs.num_devices }}
+          NUM_CLICKS:      ${{ inputs.num_clicks }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
-          MANUAL_URL: ${{ inputs.manual_software_url }}
-          RUN_MANUAL: ${{ inputs.run_manual_link }}
-          API_KEY: ${{ inputs.scrapeops_api_key }}
-          WITHOUT_PROXY: ${{ inputs.use_without_proxy }}
-          COUNTRY: ${{ inputs.proxy_country }}
-          MOBILE: ${{ inputs.mobile_proxies }}
-          STICKY: ${{ inputs.sticky_sessions }}
+          MANUAL_URL:      ${{ inputs.manual_software_url }}
+          RUN_MANUAL:      ${{ inputs.run_manual_link }}
+          API_KEY:         ${{ inputs.scrapeops_api_key }}
+          WITHOUT_PROXY:   ${{ inputs.use_without_proxy }}
+          COUNTRY:         ${{ inputs.proxy_country }}
+          MOBILE:          ${{ inputs.mobile_proxies }}
+          STICKY:          ${{ inputs.sticky_sessions }}
         run: |
           import re, os
-          
+
           def update_yaml_default(yaml_str, input_key, new_val, is_bool=False):
               lines = yaml_str.split("\n")
-              in_target_block = False
-              target_indent = -1
+              in_block = False; tgt_indent = -1
               for i, line in enumerate(lines):
-                  match = re.match(r"^([ \t]*)" + input_key + r":", line)
-                  if match:
-                      in_target_block = True
-                      target_indent = len(match.group(1))
-                      continue
-                  if in_target_block:
-                      current_indent = len(line) - len(line.lstrip(" \t"))
-                      if line.strip() and current_indent <= target_indent:
-                          in_target_block = False
-                          continue
+                  m = re.match(r"^([ \t]*)" + input_key + r":", line)
+                  if m:
+                      in_block = True; tgt_indent = len(m.group(1)); continue
+                  if in_block:
+                      cur = len(line) - len(line.lstrip(" \t"))
+                      if line.strip() and cur <= tgt_indent:
+                          in_block = False; continue
                       if line.lstrip(" \t").startswith("default:"):
-                          indent = line[:len(line) - len(line.lstrip(" \t"))]
+                          ind = line[:len(line)-len(line.lstrip(" \t"))]
                           if is_bool:
-                              val_str = "true" if str(new_val).lower() == "true" else "false"
-                              lines[i] = f"{indent}default: {val_str}"
+                              lines[i] = f"{ind}default: {'true' if str(new_val).lower()=='true' else 'false'}"
                           else:
-                              if new_val is None or str(new_val).strip().lower() in["none", "null", "blank", "empty", "''", '""']: safe_val = ""
-                              else: safe_val = str(new_val).replace("'", "\\'")
-                              lines[i] = f"{indent}default: '{safe_val}'"
+                              sv = "" if (new_val is None or str(new_val).strip().lower() in ["none","null","blank","empty","''",'""']) else str(new_val).replace("'","\\'")
+                              lines[i] = f"{ind}default: '{sv}'"
                           break
               return "\n".join(lines)
-              
-          file_path = ".github/workflows/main3.yml"
-          if os.path.exists(file_path):
-              print(f"[Workflow State] Attempting to update defaults in {file_path}")
-              with open(file_path, "r", encoding="utf-8") as f:
-                  content = f.read()
-                  
-              run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
-              content = update_yaml_default(content, "os_version", os.environ.get("OS_VERSION"))
-              content = update_yaml_default(content, "getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
-              content = update_yaml_default(content, "num_devices", os.environ.get("NUM_DEVICES"))
-              content = update_yaml_default(content, "install_percentage", os.environ.get("INSTALL_PCT"))
-              content = update_yaml_default(content, "software_choice", os.environ.get("SOFTWARE_CHOICE"))
-              
-              manual_url_to_save = os.environ.get("MANUAL_URL") if run_manual else ""
-              content = update_yaml_default(content, "manual_software_url", manual_url_to_save)
-              content = update_yaml_default(content, "run_manual_link", run_manual, is_bool=True)
-              content = update_yaml_default(content, "scrapeops_api_key", os.environ.get("API_KEY"))
-              content = update_yaml_default(content, "use_without_proxy", os.environ.get("WITHOUT_PROXY"), is_bool=True)
-              content = update_yaml_default(content, "proxy_country", os.environ.get("COUNTRY"))
-              content = update_yaml_default(content, "mobile_proxies", os.environ.get("MOBILE"), is_bool=True)
-              content = update_yaml_default(content, "sticky_sessions", os.environ.get("STICKY"), is_bool=True)
-              
-              with open(file_path, "w", encoding="utf-8") as f:
-                  f.write(content)
-              print(f"[Workflow State] Successfully saved new defaults.")
-          else:
-              print(f"[Workflow State] Warning: File {file_path} not found. Skipping auto-save.")
-              
+
+          fp = ".github/workflows/main3.yml"
+          if not os.path.exists(fp):
+              print(f"[State] {fp} not found. Skipping."); exit(0)
+
+          print(f"[State] Updating defaults in {fp}")
+          with open(fp, "r", encoding="utf-8") as f: content = f.read()
+
+          run_manual = os.environ.get("RUN_MANUAL","false").lower() == "true"
+          for key, env, bool_field in [
+              ("os_version",        "OS_VERSION",      False),
+              ("getscreen_email",   "GETSCREEN_EMAIL", False),
+              ("num_devices",       "NUM_DEVICES",     False),
+              ("num_clicks",        "NUM_CLICKS",      False),
+              ("software_choice",   "SOFTWARE_CHOICE", False),
+              ("scrapeops_api_key", "API_KEY",         False),
+              ("proxy_country",     "COUNTRY",         False),
+              ("run_manual_link",   "RUN_MANUAL",      True),
+              ("use_without_proxy", "WITHOUT_PROXY",   True),
+              ("mobile_proxies",    "MOBILE",          True),
+              ("sticky_sessions",   "STICKY",          True),
+          ]:
+              content = update_yaml_default(content, key, os.environ.get(env), is_bool=bool_field)
+
+          manual_url_to_save = os.environ.get("MANUAL_URL") if run_manual else ""
+          content = update_yaml_default(content, "manual_software_url", manual_url_to_save)
+
+          with open(fp, "w", encoding="utf-8") as f: f.write(content)
+          print("[State] Defaults saved.")
+
       - name: Commit and Push New Defaults
         run: |
           git config --global user.name "github-actions[bot]"
@@ -400,7 +372,6 @@ jobs:
     name: Session ${{ matrix.device }}
     needs: prepare_matrix
     runs-on: ${{ matrix.os }}
-    # Install path uses 6-minute timeout; click path manages its own exit and does NOT need the full runner timeout
     timeout-minutes: 6
 
     strategy:
@@ -412,7 +383,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "========== SYSTEM PREPARATION ==========" -ForegroundColor Cyan
-          Write-Host "[Defender] Disabling Windows Defender Realtime Monitoring..." -ForegroundColor Yellow
+          Write-Host "[Defender] Disabling Realtime Monitoring..." -ForegroundColor Yellow
           Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
           Write-Host "[Defender] Disabling PUA Protection..." -ForegroundColor Yellow
           Set-MpPreference -PUAProtection 0 -ErrorAction SilentlyContinue
@@ -420,844 +391,666 @@ jobs:
           Set-MpPreference -DisableBlockAtFirstSeen $true -ErrorAction SilentlyContinue
           Write-Host "[Defender] Disabling IOAV Protection..." -ForegroundColor Yellow
           Set-MpPreference -DisableIOAVProtection $true -ErrorAction SilentlyContinue
-          
-          Write-Host "[Registry] Enforcing Edge SmartScreen bypass policies..." -ForegroundColor Cyan
-          $edgePolicy = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
-          if (-not (Test-Path $edgePolicy)) { New-Item -Path $edgePolicy -Force | Out-Null; Write-Host "[Registry] Created $edgePolicy" }
-          Set-ItemProperty -Path $edgePolicy -Name "SmartScreenEnabled" -Value 0
-          Set-ItemProperty -Path $edgePolicy -Name "SmartScreenPuaEnabled" -Value 0
-          Set-ItemProperty -Path $edgePolicy -Name "DownloadRestrictions" -Value 0
-          Set-ItemProperty -Path $edgePolicy -Name "PreventSmartScreenPromptOverride" -Value 0
-          Set-ItemProperty -Path $edgePolicy -Name "PreventSmartScreenPromptOverrideForFiles" -Value 0
-          
-          $exemptPath = "$edgePolicy\ExemptDomainFileTypePairsFromFileTypeDownloadWarnings"
-          if (-not (Test-Path $exemptPath)) { New-Item -Path $exemptPath -Force | Out-Null }
-          Set-ItemProperty -Path $exemptPath -Name "1" -Value '{"domains":["*"],"file_extension":"exe"}'
-          Write-Host "[Registry] Edge EXEs whitelisted from all warnings." -ForegroundColor Green
-          
+
+          Write-Host "[Registry] Applying Edge SmartScreen bypass policies..." -ForegroundColor Cyan
+          $ep = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
+          if (-not (Test-Path $ep)) { New-Item -Path $ep -Force | Out-Null }
+          Set-ItemProperty -Path $ep -Name "SmartScreenEnabled"                       -Value 0
+          Set-ItemProperty -Path $ep -Name "SmartScreenPuaEnabled"                    -Value 0
+          Set-ItemProperty -Path $ep -Name "DownloadRestrictions"                     -Value 0
+          Set-ItemProperty -Path $ep -Name "PreventSmartScreenPromptOverride"         -Value 0
+          Set-ItemProperty -Path $ep -Name "PreventSmartScreenPromptOverrideForFiles" -Value 0
+          $ex = "$ep\ExemptDomainFileTypePairsFromFileTypeDownloadWarnings"
+          if (-not (Test-Path $ex)) { New-Item -Path $ex -Force | Out-Null }
+          Set-ItemProperty -Path $ex -Name "1" -Value '{"domains":["*"],"file_extension":"exe"}'
+          Write-Host "[Registry] Edge EXE warnings whitelisted." -ForegroundColor Green
+
       - name: Install and Start Getscreen.me (Windows)
         shell: pwsh
         run: |
           Write-Host "========== REMOTE ACCESS AGENT ==========" -ForegroundColor Cyan
-          Write-Host "[Getscreen] Starting MSI download from getscreen.me..."
-          $MaxRetries = 3
-          $RetryCount = 0
-          $Success = $false
+          $MaxRetries=3; $RetryCount=0; $Success=$false
           while (-not $Success -and $RetryCount -lt $MaxRetries) {
               try {
                   Invoke-WebRequest -Uri "https://getscreen.me/download/getscreen.msi" -OutFile "getscreen.msi" -ErrorAction Stop
-                  if ((Get-Item "getscreen.msi").length -gt 1MB) { 
-                      $Success = $true
-                      Write-Host "[Getscreen] Download successful." -ForegroundColor Green
-                  } else { 
-                      Write-Host "[Getscreen] Downloaded file too small. Retrying ($RetryCount/$MaxRetries)..." -ForegroundColor Yellow
-                      Start-Sleep -Seconds 5; $RetryCount++ 
-                  }
-              } catch { 
-                  Write-Host "[Getscreen] Connection error. Retrying ($RetryCount/$MaxRetries)..." -ForegroundColor Red
-                  Start-Sleep -Seconds 5; $RetryCount++ 
-              }
+                  if ((Get-Item "getscreen.msi").length -gt 1MB) { $Success=$true; Write-Host "[Getscreen] Download OK." -ForegroundColor Green }
+                  else { Write-Host "[Getscreen] File too small. Retry $RetryCount/$MaxRetries..." -ForegroundColor Yellow; Start-Sleep -Seconds 5; $RetryCount++ }
+              } catch { Write-Host "[Getscreen] Error. Retry $RetryCount/$MaxRetries..." -ForegroundColor Red; Start-Sleep -Seconds 5; $RetryCount++ }
           }
-          if (-not $Success) { Write-Host "[Getscreen] Failed to download agent. Exiting."; exit 1 }
-          
-          Write-Host "[Getscreen] Executing silent install for account: ${{ matrix.email }}"
-          $InstallArgs = "/i getscreen.msi /qn REGISTER=`"${{ matrix.email }}`" CONFIG=`"name='${{ matrix.device }}' autostart=true nonadmin=true control=true disable_confirmation=true`""
-          Start-Process msiexec.exe -Wait -ArgumentList $InstallArgs
-          Write-Host "[Getscreen] Agent configured and running in background." -ForegroundColor Green
-          
+          if (-not $Success) { Write-Host "[Getscreen] Failed. Exiting."; exit 1 }
+          Write-Host "[Getscreen] Installing for: ${{ matrix.email }}"
+          Start-Process msiexec.exe -Wait -ArgumentList "/i getscreen.msi /qn REGISTER=`"${{ matrix.email }}`" CONFIG=`"name='${{ matrix.device }}' autostart=true nonadmin=true control=true disable_confirmation=true`""
+          Write-Host "[Getscreen] Agent running." -ForegroundColor Green
+
       - name: Setup Auto-Downloader & Software Installation
         shell: pwsh
         env:
-          USE_PROXY: ${{ matrix.use_proxy }}
-          PROXY_USER: ${{ matrix.proxy_user }}
-          PROXY_PASS: ${{ matrix.proxy_pass }}
-          TARGET_URL: ${{ matrix.target_url }}
+          USE_PROXY:     ${{ matrix.use_proxy }}
+          PROXY_USER:    ${{ matrix.proxy_user }}
+          PROXY_PASS:    ${{ matrix.proxy_pass }}
+          TARGET_URL:    ${{ matrix.target_url }}
           SOFTWARE_TYPE: ${{ matrix.software_type }}
-          EXE_FILTER: ${{ matrix.exe_filter }}
-          ACTION_MODE: ${{ matrix.action_mode }}
+          EXE_FILTER:    ${{ matrix.exe_filter }}
+          ACTION_MODE:   ${{ matrix.action_mode }}
         run: |
           $useProxy = $env:USE_PROXY -eq "true"
-          
+
           Write-Host "============================================================" -ForegroundColor Cyan
-          Write-Host " Zero-Touch Downloader & Installer Active" -ForegroundColor Cyan
-          Write-Host " Target URL: $env:TARGET_URL" -ForegroundColor Gray
-          Write-Host " Category  : $env:SOFTWARE_TYPE" -ForegroundColor Cyan
-          Write-Host " Action    : $($env:ACTION_MODE.ToUpper()) PATHWAY ASSIGNED" -ForegroundColor Magenta
-          if ($useProxy) {
-              Write-Host " Mode      : Proxy-enabled ($env:PROXY_USER)" -ForegroundColor Cyan
-          } else {
-              Write-Host " Mode      : Direct (Proxy Completely Bypassed)" -ForegroundColor Yellow
-          }
+          Write-Host " Zero-Touch Downloader & Installer"                           -ForegroundColor Cyan
+          Write-Host " Target   : $env:TARGET_URL"                                 -ForegroundColor Gray
+          Write-Host " Category : $env:SOFTWARE_TYPE"                              -ForegroundColor Cyan
+          Write-Host " Action   : $($env:ACTION_MODE.ToUpper()) PATHWAY"           -ForegroundColor Magenta
+          if ($useProxy) { Write-Host " Proxy    : $env:PROXY_USER" -ForegroundColor Cyan }
+          else           { Write-Host " Proxy    : DISABLED (direct)" -ForegroundColor Yellow }
           Write-Host "============================================================" -ForegroundColor Cyan
-          
-          Write-Host "[Dependencies] Installing python UIA modules (pywinauto, pyautogui, etc)..." -ForegroundColor DarkGray
+
+          Write-Host "[Dependencies] Installing pywinauto, pyautogui..." -ForegroundColor DarkGray
           python -m pip install pywinauto pyautogui pygetwindow keyboard --quiet
-          
-          # ---------------------------------------------------------------
-          # Python UI background handler
-          # ---------------------------------------------------------------
+
+          # ============================================================
+          # Python UI automation script
+          # ============================================================
           $handlerPy = @'
-          import time, sys, subprocess, random, os, tempfile, ctypes
-          from pywinauto import Desktop
-          import pyautogui
-          from pywinauto.keyboard import send_keys
-          
-          def log_msg(tag, msg):
-              """Standardized timestamped logging for Python UI actions."""
-              t = time.strftime('%H:%M:%S')
-              print(f"[{t}][{tag}] {msg}", flush=True)
-              
-          DOWNLOAD_DONE_TITLES = [
-              "Thanks for downloading Opera", "Thanks for downloadin",
-              "Download | Thanks", "sudetyj", "clickWorker",
-              "GET READY TO PLAY", "ready to install",
-          ]
-          
-          def _is_download_done_window(text):
-              t = text.lower()
-              return any(frag.lower() in t for frag in DOWNLOAD_DONE_TITLES)
-              
-          def close_download_windows(desktop, attempt_label=""):
-              closed_any = False
-              try:
-                  all_windows = desktop.windows(visible_only=True)
-              except Exception: return False
-                  
-              for window in all_windows:
-                  try:
-                      wt = window.window_text()
-                      if not wt: continue
-                          
-                      is_match = _is_download_done_window(wt)
-                      if not is_match and ("Microsoft Edge" in wt or wt == "Edge"):
-                          try:
-                              for child in window.children():
-                                  child_wt = child.window_text()
-                                  if child_wt and _is_download_done_window(child_wt):
-                                      is_match = True
-                                      break
-                          except Exception: pass
-                              
-                      if not is_match: continue
-                          
-                      log_msg("TabClose", f"Targeting window '{wt}' (Attempt {attempt_label})")
-                      closed = False
-                      
-                      # Center click + 1-2s delay + Ctrl+W shortcut to close the Edge tab
-                      if not closed:
-                          try:
-                              log_msg("TabClose", "Setting focus to window before executing close sequence...")
-                              window.set_focus()
-                              time.sleep(0.3)
-                              
-                              sw, sh = pyautogui.size()
-                              cx, cy = sw // 2, sh // 2
-                              log_msg("TabClose", f"Executing PyAutoGUI center screen click at ({cx}, {cy}) to ensure page context...")
-                              pyautogui.click(cx, cy)
-                              
-                              delay = random.uniform(1.0, 2.0)
-                              log_msg("TabClose", f"Center click executed. Waiting {delay:.2f} seconds before sending Ctrl+W...")
-                              time.sleep(delay)
-                              
-                              log_msg("TabClose", "Sending '^w' (Ctrl+W) keyboard shortcut...")
-                              send_keys('^w')
-                              closed = True
-                              log_msg("TabClose", "Successfully executed Ctrl+W tab close sequence.")
-                          except Exception as e:
-                              log_msg("TabClose", f"Ctrl+W sequence failed: {e}")
-                              
-                      if not closed:
-                          try:
-                              log_msg("TabClose", "Executing fallback window close via Alt+F4...")
-                              window.set_focus()
-                              time.sleep(0.3)
-                              send_keys('%{F4}')
-                              closed = True
-                              log_msg("TabClose", "Successfully closed window via Alt+F4 fallback.")
-                          except Exception as e:
-                              log_msg("TabClose", f"Alt+F4 sequence failed: {e}")
-                              
-                      if closed:
-                          closed_any = True
-                          time.sleep(0.5)
-                  except Exception: pass
-              return closed_any
+import time, sys, random, os, tempfile
+from pywinauto import Desktop
+import pyautogui
+from pywinauto.keyboard import send_keys
 
-          # ------------------------------------------------------------------
-          # Opera One post-install keyboard automation (revised sequence)
-          # Steps (all with full logging):
-          #   1. Wait 30s after installer is executed
-          #   2. Wait additional 10s
-          #   3. Center-screen mouse click
-          #   4. Wait 1-2s
-          #   5. LEFT arrow key x8 (1-2s delay each press)
-          #   6. ENTER key
-          #   7. Ctrl+T
-          #   8. TAB randomly 6-12 times (1-2s delay each press)
-          #   9. ENTER key
-          # ------------------------------------------------------------------
-          def opera_one_post_install_sequence(opera_window):
-              log_msg("PostInstall-OP1", "=== Opera One Post-Install Sequence Starting ===")
+pyautogui.FAILSAFE = False
 
-              log_msg("PostInstall-OP1", "Phase 1: Waiting 30 seconds after installer execution...")
-              for s in range(1, 31):
-                  log_msg("PostInstall-OP1", f"  Installer wait: {s}/30 seconds elapsed...")
-                  time.sleep(1)
-              log_msg("PostInstall-OP1", "Phase 1 complete. 30-second installer wait finished.")
+def log_msg(tag, msg):
+    print(f"[{time.strftime('%H:%M:%S')}][{tag}] {msg}", flush=True)
 
-              log_msg("PostInstall-OP1", "Phase 2: Waiting additional 10 seconds for UI to fully render...")
-              for s in range(1, 11):
-                  log_msg("PostInstall-OP1", f"  Render wait: {s}/10 seconds elapsed...")
-                  time.sleep(1)
-              log_msg("PostInstall-OP1", "Phase 2 complete. Render wait finished.")
+DOWNLOAD_DONE_TITLES = [
+    "Thanks for downloading Opera", "Thanks for downloadin",
+    "Download | Thanks", "sudetyj", "clickWorker",
+    "GET READY TO PLAY", "ready to install",
+]
 
-              sw, sh = pyautogui.size()
-              cx, cy = sw // 2, sh // 2
-              log_msg("PostInstall-OP1", f"Phase 3: Executing center-screen mouse click at ({cx}, {cy})...")
-              try:
-                  pyautogui.click(cx, cy)
-                  log_msg("PostInstall-OP1", "Phase 3 complete. Center-screen click executed successfully.")
-              except Exception as e:
-                  log_msg("PostInstall-OP1", f"Phase 3 WARNING: Center click failed: {e}")
+def _is_download_done(text):
+    t = text.lower()
+    return any(f.lower() in t for f in DOWNLOAD_DONE_TITLES)
 
-              d = random.uniform(1.0, 2.0)
-              log_msg("PostInstall-OP1", f"Phase 4: Post-click delay of {d:.2f} seconds...")
-              time.sleep(d)
-              log_msg("PostInstall-OP1", "Phase 4 complete.")
+def close_download_windows(desktop, attempt_label=""):
+    closed_any = False
+    try:
+        wins = desktop.windows(visible_only=True)
+    except Exception:
+        return False
+    for w in wins:
+        try:
+            wt = w.window_text()
+            if not wt: continue
+            is_match = _is_download_done(wt)
+            if not is_match and ("Microsoft Edge" in wt or wt == "Edge"):
+                try:
+                    for ch in w.children():
+                        cwt = ch.window_text()
+                        if cwt and _is_download_done(cwt): is_match = True; break
+                except Exception: pass
+            if not is_match: continue
+            log_msg("TabClose", f"Target: '{wt}' (attempt {attempt_label})")
+            closed = False
+            try:
+                log_msg("TabClose", "Setting focus...")
+                w.set_focus(); time.sleep(0.3)
+                sw, sh = pyautogui.size(); cx, cy = sw//2, sh//2
+                log_msg("TabClose", f"Center click at ({cx},{cy})...")
+                pyautogui.click(cx, cy)
+                d = random.uniform(1.0, 2.0)
+                log_msg("TabClose", f"Waiting {d:.2f}s then Ctrl+W...")
+                time.sleep(d); send_keys('^w')
+                closed = True; log_msg("TabClose", "Ctrl+W sent.")
+            except Exception as e:
+                log_msg("TabClose", f"Ctrl+W failed: {e}")
+            if not closed:
+                try:
+                    log_msg("TabClose", "Fallback Alt+F4...")
+                    w.set_focus(); time.sleep(0.3); send_keys('%{F4}')
+                    closed = True; log_msg("TabClose", "Alt+F4 sent.")
+                except Exception as e:
+                    log_msg("TabClose", f"Alt+F4 failed: {e}")
+            if closed:
+                closed_any = True; time.sleep(0.5)
+        except Exception: pass
+    return closed_any
 
-              log_msg("PostInstall-OP1", "Phase 5: Pressing LEFT arrow key 8 times (1-2s delay each)...")
-              for i in range(1, 9):
-                  log_msg("PostInstall-OP1", f"  Sending LEFT arrow key ({i}/8)...")
-                  send_keys('{LEFT}')
-                  d = random.uniform(1.0, 2.0)
-                  log_msg("PostInstall-OP1", f"  LEFT key {i}/8 sent. Waiting {d:.2f} seconds...")
-                  time.sleep(d)
-              log_msg("PostInstall-OP1", "Phase 5 complete. All 8 LEFT arrow keys sent.")
+# -----------------------------------------------------------------------
+# Opera One robust post-install sequence
+#
+#  Phase 1  : Wait 30 s (installer settling)
+#  Phase 2  : Wait 10 s (UI render)
+#  Phase 3  : Double-click screen center
+#  Phase 4  : Wait 1-2 s
+#  Phase 5  : LEFT arrow x8 (1-2 s delay each)
+#  Phase 6  : ENTER
+#  Phase 7  : Wait 1-2 s → Ctrl+T → wait 1-2 s
+#  Phase 8  : TAB x6-12 (1-2 s delay each)
+#  Phase 9  : ENTER
+# -----------------------------------------------------------------------
+def opera_one_post_install_sequence():
+    T = "PostInstall-OP1"
+    log_msg(T, "═══════════════════════════════════════")
+    log_msg(T, "  Opera One Post-Install — START")
+    log_msg(T, "═══════════════════════════════════════")
 
-              log_msg("PostInstall-OP1", "Phase 6: Sending ENTER key...")
-              send_keys('{ENTER}')
-              log_msg("PostInstall-OP1", "Phase 6 complete. ENTER key sent.")
+    # Phase 1 – installer settling (30 s)
+    log_msg(T, "Phase 1 ▶ 30 s installer settling wait...")
+    for s in range(1, 31):
+        log_msg(T, f"  [P1] {s}/30 s elapsed...")
+        time.sleep(1)
+    log_msg(T, "Phase 1 ✓ Done.")
 
-              d = random.uniform(1.0, 2.0)
-              log_msg("PostInstall-OP1", f"  Post-ENTER delay of {d:.2f} seconds...")
-              time.sleep(d)
+    # Phase 2 – UI render (10 s)
+    log_msg(T, "Phase 2 ▶ 10 s UI render wait...")
+    for s in range(1, 11):
+        log_msg(T, f"  [P2] {s}/10 s elapsed...")
+        time.sleep(1)
+    log_msg(T, "Phase 2 ✓ Done.")
 
-              log_msg("PostInstall-OP1", "Phase 7: Sending Ctrl+T to open new tab...")
-              send_keys('^t')
-              log_msg("PostInstall-OP1", "Phase 7 complete. Ctrl+T sent.")
+    # Phase 3 – double-click center
+    sw, sh = pyautogui.size(); cx, cy = sw//2, sh//2
+    log_msg(T, f"Phase 3 ▶ Moving mouse to center ({cx},{cy})...")
+    try:
+        pyautogui.moveTo(cx, cy, duration=0.25)
+        log_msg(T, f"Phase 3 ▶ Double-clicking at ({cx},{cy})...")
+        pyautogui.doubleClick(cx, cy)
+        log_msg(T, "Phase 3 ✓ Double-click done.")
+    except Exception as e:
+        log_msg(T, f"Phase 3 ✗ Double-click error: {e}")
 
-              d = random.uniform(1.0, 2.0)
-              log_msg("PostInstall-OP1", f"  Post-Ctrl+T delay of {d:.2f} seconds...")
-              time.sleep(d)
+    # Phase 4 – post-click wait
+    d = random.uniform(1.0, 2.0)
+    log_msg(T, f"Phase 4 ▶ Post-click wait {d:.2f} s...")
+    time.sleep(d)
+    log_msg(T, "Phase 4 ✓ Done.")
 
-              tab_count = random.randint(6, 12)
-              log_msg("PostInstall-OP1", f"Phase 8: Pressing TAB key {tab_count} times (randomly selected, 1-2s delay each)...")
-              for i in range(1, tab_count + 1):
-                  log_msg("PostInstall-OP1", f"  Sending TAB key ({i}/{tab_count})...")
-                  send_keys('{TAB}')
-                  d = random.uniform(1.0, 2.0)
-                  log_msg("PostInstall-OP1", f"  TAB {i}/{tab_count} sent. Waiting {d:.2f} seconds...")
-                  time.sleep(d)
-              log_msg("PostInstall-OP1", f"Phase 8 complete. All {tab_count} TAB keys sent.")
+    # Phase 5 – LEFT x8
+    log_msg(T, "Phase 5 ▶ Sending LEFT arrow x8 (1-2 s delay each)...")
+    for i in range(1, 9):
+        log_msg(T, f"  [P5] LEFT key {i}/8...")
+        try:
+            send_keys('{LEFT}')
+            log_msg(T, f"  [P5] LEFT {i}/8 sent ✓")
+        except Exception as e:
+            log_msg(T, f"  [P5] LEFT {i}/8 error: {e}")
+        d = random.uniform(1.0, 2.0)
+        log_msg(T, f"  [P5] Waiting {d:.2f} s...")
+        time.sleep(d)
+    log_msg(T, "Phase 5 ✓ All 8 LEFT keys sent.")
 
-              log_msg("PostInstall-OP1", "Phase 9: Sending final ENTER key...")
-              send_keys('{ENTER}')
-              log_msg("PostInstall-OP1", "Phase 9 complete. Final ENTER key sent.")
+    # Phase 6 – ENTER
+    log_msg(T, "Phase 6 ▶ Sending ENTER...")
+    try:
+        send_keys('{ENTER}')
+        log_msg(T, "Phase 6 ✓ ENTER sent.")
+    except Exception as e:
+        log_msg(T, f"Phase 6 ✗ ENTER error: {e}")
 
-              log_msg("PostInstall-OP1", "=== Opera One Post-Install Sequence Completed Successfully ===")
+    # Phase 7 – wait → Ctrl+T → wait
+    d = random.uniform(1.0, 2.0)
+    log_msg(T, f"Phase 7 ▶ Post-ENTER wait {d:.2f} s...")
+    time.sleep(d)
+    log_msg(T, "Phase 7 ▶ Sending Ctrl+T (new tab)...")
+    try:
+        send_keys('^t')
+        log_msg(T, "Phase 7 ✓ Ctrl+T sent.")
+    except Exception as e:
+        log_msg(T, f"Phase 7 ✗ Ctrl+T error: {e}")
+    d = random.uniform(1.0, 2.0)
+    log_msg(T, f"Phase 7 ▶ Post-Ctrl+T wait {d:.2f} s...")
+    time.sleep(d)
+    log_msg(T, "Phase 7 ✓ Done.")
 
-          def handle_automation(username, password, software_type, use_proxy, action_mode, timeout=360):
-              desktop = Desktop(backend="uia")
-              start_time = time.time()
-              proxy_auth_time = start_time
-              
-              log_msg("UI-Engine", f"Started monitoring. Action Mode: {action_mode.upper()} | Type: {software_type}")
-              
-              last_ctrl_j_time = time.time()
-              last_dl_click_time = 0
-              ctrl_j_attempts = 0
-              keep_clicked = False
-              avg_download_clicked = False
-              
-              smart_link_interstitial_done = False
-              smart_link_interstitial_time = 0
-              
-              opera_launched_time = None
-              opera_setup_completed = False
+    # Phase 8 – TAB x6-12
+    n = random.randint(6, 12)
+    log_msg(T, f"Phase 8 ▶ Sending TAB x{n} (random 6-12, 1-2 s delay each)...")
+    for i in range(1, n+1):
+        log_msg(T, f"  [P8] TAB {i}/{n}...")
+        try:
+            send_keys('{TAB}')
+            log_msg(T, f"  [P8] TAB {i}/{n} sent ✓")
+        except Exception as e:
+            log_msg(T, f"  [P8] TAB {i}/{n} error: {e}")
+        d = random.uniform(1.0, 2.0)
+        log_msg(T, f"  [P8] Waiting {d:.2f} s...")
+        time.sleep(d)
+    log_msg(T, f"Phase 8 ✓ All {n} TABs sent.")
 
-              # Opera One: track when installer was executed so we can fire the
-              # post-install sequence exactly 30+10s later
-              opera_one_installer_executed_time = None
-              opera_one_post_install_done = False
-              
-              sentinel_path = os.path.join(tempfile.gettempdir(), "download_done.flag")
-              download_windows_closed = False
+    # Phase 9 – final ENTER
+    log_msg(T, "Phase 9 ▶ Sending final ENTER...")
+    try:
+        send_keys('{ENTER}')
+        log_msg(T, "Phase 9 ✓ Final ENTER sent.")
+    except Exception as e:
+        log_msg(T, f"Phase 9 ✗ ENTER error: {e}")
 
-              # Sentinel written by PowerShell watcher when the exe is detected
-              installer_executed_sentinel = os.path.join(tempfile.gettempdir(), "installer_executed.flag")
-              
-              while time.time() - start_time < timeout:
-                  try:
-                      edge_window = None
-                      opera_window = None
-                      
-                      for window in desktop.windows(visible_only=True):
-                          wt = window.window_text()
-                          if not wt: continue
-                          if "Microsoft Edge" in wt or "sudetyj" in wt or "Chrome Web Store" in wt or "Edge" in wt:
-                              edge_window = window
-                          if "Opera" in wt or "Speed Dial" in wt or "Start Page" in wt or "Welcome" in wt:
-                              if "Microsoft Edge" not in wt and "Edge" not in wt and "Chrome Web Store" not in wt:
-                                  opera_window = window
-                                  
-                      # G. Close download/thanks windows once sentinel file is written
-                      if not download_windows_closed and os.path.exists(sentinel_path):
-                          log_msg("Sentinel", "Flag detected (EXE found). Initiating download window cleanup sequence...")
-                          for attempt in range(1, 6):
-                              still_open = close_download_windows(desktop, attempt_label=f"#{attempt}")
-                              time.sleep(2)
-                              if not still_open:
-                                  log_msg("Sentinel", f"Cleanup successful. No download tabs remain on attempt #{attempt}.")
-                                  break
-                          download_windows_closed = True
-                          edge_window = None
+    log_msg(T, "═══════════════════════════════════════")
+    log_msg(T, "  Opera One Post-Install — COMPLETE")
+    log_msg(T, "═══════════════════════════════════════")
 
-                      # Opera One post-install timing: detect when installer was executed
-                      # The PowerShell watcher writes installer_executed.flag right before Start-Process installer
-                      if (software_type == "opera_one" and action_mode == "install"
-                              and not opera_one_post_install_done
-                              and opera_one_installer_executed_time is None
-                              and os.path.exists(installer_executed_sentinel)):
-                          opera_one_installer_executed_time = time.time()
-                          log_msg("PostInstall-OP1", f"Installer-executed sentinel detected. Post-install sequence will fire in 30s.")
+# -----------------------------------------------------------------------
+def handle_automation(username, password, software_type, use_proxy, action_mode, timeout=360):
+    desktop         = Desktop(backend="uia")
+    start_time      = time.time()
+    proxy_auth_time = start_time
 
-                      # Fire the Opera One post-install sequence 30s after installer was run
-                      if (software_type == "opera_one" and action_mode == "install"
-                              and not opera_one_post_install_done
-                              and opera_one_installer_executed_time is not None
-                              and (time.time() - opera_one_installer_executed_time) >= 30):
-                          log_msg("PostInstall-OP1", "30-second installer wait elapsed. Launching post-install sequence now.")
-                          opera_one_post_install_sequence(opera_window)
-                          opera_one_post_install_done = True
-                          opera_setup_completed = True  # prevent old flow from also running
-                                  
-                      # A. Proxy Authentication dialog
-                      if use_proxy and (edge_window or opera_window):
-                          for w in [edge_window, opera_window]:
-                              if w:
-                                  user_fields = w.descendants(control_type="Edit", title="Username")
-                                  pass_fields = w.descendants(control_type="Edit", title="Password")
-                                  if user_fields and pass_fields:
-                                      try:
-                                          log_msg("Proxy", "Authentication dialog detected.")
-                                          w.set_focus()
-                                          time.sleep(0.5)
-                                          log_msg("Proxy", "Clicking Username field...")
-                                          user_fields[0].click_input()
-                                          log_msg("Proxy", "Typing Username...")
-                                          user_fields[0].type_keys(username, with_spaces=True, pause=0.02)
-                                          log_msg("Proxy", "Clicking Password field...")
-                                          pass_fields[0].click_input()
-                                          log_msg("Proxy", "Typing Password...")
-                                          pass_fields[0].type_keys(password, with_spaces=True, pause=0.02)
-                                          btn = w.descendants(control_type="Button", title="Sign in")
-                                          if btn:
-                                              log_msg("Proxy", "Clicking 'Sign in' button...")
-                                              btn[0].click_input()
-                                          else:
-                                              log_msg("Proxy", "Pressing '{ENTER}' to submit credentials...")
-                                              pass_fields[0].type_keys("{ENTER}")
-                                          proxy_auth_time = time.time()
-                                          log_msg("Proxy", "Credentials injected. Resetting load timers.")
-                                      except Exception as e: 
-                                          log_msg("Proxy", f"Auth injection failed: {e}")
-                                          pass
-                                          
-                      # Cookie Handling (Always execute)
-                      if edge_window:
-                          for cookie_btn in ["Accept all", "Accepter tout", "Tout accepter", "Accept Cookies", "Allow all", "Accept selection"]:
-                              btns = edge_window.descendants(control_type="Button", title=cookie_btn)
-                              if btns:
-                                  try:
-                                      log_msg("Cookies", f"Found consent button: '{cookie_btn}'. Clicking...")
-                                      btns[0].click_input()
-                                      log_msg("Cookies", "Consent button clicked.")
-                                      time.sleep(1)
-                                  except: pass
+    log_msg("UI-Engine", f"Started. Mode={action_mode.upper()} Type={software_type} Proxy={'YES' if use_proxy else 'NO'}")
 
-                      # H. SMART LINK INTERSTITIAL TAB+ENTER LOGIC
-                      if edge_window and software_type == "opera_smart_link":
-                          elapsed = time.time() - proxy_auth_time
-                          if not smart_link_interstitial_done:
-                              if elapsed > 20:
-                                  try:
-                                      log_msg("SmartLink", f"{elapsed:.1f}s elapsed. Executing TAB + ENTER interstitial bypass...")
-                                      log_msg("SmartLink", "Focusing window...")
-                                      edge_window.set_focus()
-                                      time.sleep(0.5)
-                                      log_msg("SmartLink", "Pressing '{TAB}'...")
-                                      send_keys('{TAB}')
-                                      time.sleep(0.5)
-                                      log_msg("SmartLink", "Pressing '{ENTER}'...")
-                                      send_keys('{ENTER}')
-                                      log_msg("SmartLink", "TAB + ENTER injected. Waiting 15s for download page to load.")
-                                  except Exception as e:
-                                      log_msg("SmartLink", f"Bypass failed: {e}")
-                                  smart_link_interstitial_done = True
-                                  smart_link_interstitial_time = time.time()
+    last_ctrl_j_time     = time.time()
+    last_dl_click_time   = 0
+    ctrl_j_attempts      = 0
+    keep_clicked         = False
+    avg_download_clicked = False
 
-                      # --- Skip logic for Click-Only mode ---
-                      if action_mode == "click":
-                          if software_type == "opera_smart_link":
-                              if not smart_link_interstitial_done:
-                                  time.sleep(1)
-                                  continue
-                              elif time.time() - smart_link_interstitial_time < 15:
-                                  time.sleep(1)
-                                  continue
-                          time.sleep(1)
-                          continue
-                                          
-                      # B. Edge Download Protection: "Keep" & "Keep anyway"
-                      if edge_window and action_mode == "install":
-                          keep_btns = edge_window.descendants(control_type="Button", title="Keep")
-                          if keep_btns:
-                              log_msg("EdgeProtect", "Detected 'Keep' warning. Clicking...")
-                              keep_clicked = True
-                              keep_btns[0].click_input()
-                              time.sleep(0.5)
-                          keep_anyway = edge_window.descendants(control_type="Button", title="Keep anyway")
-                          if keep_anyway:
-                              log_msg("EdgeProtect", "Detected 'Keep anyway' warning. Clicking...")
-                              keep_clicked = True
-                              keep_anyway[0].click_input()
-                              time.sleep(0.5)
-                              
-                      # C. Interstitial & Final Download Auto-Clicker
-                      can_click_download = True
-                      if software_type == "opera_smart_link":
-                          if not smart_link_interstitial_done or (time.time() - smart_link_interstitial_time < 15):
-                              can_click_download = False
+    smart_link_interstitial_done = False
+    smart_link_interstitial_time = 0
 
-                      if edge_window and action_mode == "install" and can_click_download and software_type in ["opera_gx", "opera_one", "ad_mvn", "dynamic_opera", "opera_smart_link"]:
-                          if time.time() - last_dl_click_time > 5:
-                              clicked_something = False
-                              dl_keywords = ["download opera", "download now", "télécharger", "baixar", "herunterladen", "descargar", "download"]
-                              for btn in edge_window.descendants(control_type="Button"):
-                                  btntxt = btn.window_text()
-                                  if btntxt and any(k in btntxt.lower() for k in dl_keywords):
-                                      try:
-                                          log_msg("Download", f"Targeting Final Download Button: '{btntxt}'...")
-                                          edge_window.set_focus()
-                                          time.sleep(0.5)
-                                          log_msg("Download", "Clicking button...")
-                                          btn.click_input()
-                                          last_dl_click_time = time.time()
-                                          clicked_something = True
-                                          log_msg("Download", "Button clicked successfully.")
-                                          break
-                                      except Exception as e:
-                                          log_msg("Download", f"Failed to click button: {e}")
-                              if not clicked_something:
-                                  for el in edge_window.descendants():
-                                      if el.element_info.control_type in ["Hyperlink", "Text", "Image"]:
-                                          wt = el.window_text()
-                                          if wt and "opera" in wt.lower() and len(wt) < 150:
-                                              if "smart link" not in wt.lower() and "http" not in wt.lower() and "playabledownloads" not in wt.lower():
-                                                  try:
-                                                      log_msg("Download", f"Targeting Interstitial Link: '{wt}'...")
-                                                      edge_window.set_focus()
-                                                      log_msg("Download", "Clicking link...")
-                                                      el.click_input()
-                                                      last_dl_click_time = time.time()
-                                                      log_msg("Download", "Link clicked successfully.")
-                                                      break
-                                                  except Exception as e:
-                                                      log_msg("Download", f"Failed to click link: {e}")
-                                                      
-                      # I. Specific AVG Download Trigger
-                      if edge_window and action_mode == "install" and software_type == "avg":
-                          elapsed = time.time() - proxy_auth_time
-                          if not avg_download_clicked and (elapsed > 20):
-                              log_msg("AVG", f"{elapsed:.1f}s elapsed (Threshold: 20s). Initiating AVG TAB+ENTER download trigger.")
-                              try:
-                                  log_msg("AVG", "Setting focus to Edge window...")
-                                  edge_window.set_focus()
-                                  time.sleep(0.5)
-                                  
-                                  log_msg("AVG", "Sending '{TAB}' keystroke...")
-                                  send_keys('{TAB}')
-                                  
-                                  delay = random.uniform(1.0, 2.0)
-                                  log_msg("AVG", f"'{TAB}' sent. Delaying for {delay:.2f} seconds...")
-                                  time.sleep(delay)
-                                  
-                                  log_msg("AVG", "Sending '{ENTER}' keystroke...")
-                                  send_keys('{ENTER}')
-                                  log_msg("AVG", "'{ENTER}' sent. Starting 10-second wait phase for download initialization...")
-                                  
-                                  for w in range(1, 11):
-                                      log_msg("AVG", f"Download init wait: {w}/10 seconds...")
-                                      time.sleep(1)
-                                      
-                                  log_msg("AVG", "10-second initialization wait completed. Proceeding.")
-                              except Exception as e:
-                                  log_msg("AVG", f"Keyboard sequence error: {e}")
+    opera_launched_time   = None
+    opera_setup_completed = False
 
-                              avg_download_clicked = True
-                                                      
-                      # D. Browser Extensions Handling
-                      if edge_window and action_mode == "install":
-                          add_ext_btns = edge_window.descendants(control_type="Button", title="Add extension")
-                          if add_ext_btns:
-                              try:
-                                  log_msg("Extension", "Found 'Add extension' confirmation dialog. Setting focus...")
-                                  edge_window.set_focus()
-                                  time.sleep(0.5)
-                                  log_msg("Extension", "Clicking 'Add extension'...")
-                                  add_ext_btns[0].click_input()
-                                  log_msg("Extension", "Clicked successfully. Waiting 2s...")
-                                  time.sleep(2)
-                              except Exception as e: 
-                                  log_msg("Extension", f"Failed to click 'Add extension': {e}")
-                          else:
-                              for btn_name in ["Add to Chrome", "Get"]:
-                                  install_btns = edge_window.descendants(control_type="Button", title=btn_name)
-                                  if install_btns:
-                                      try:
-                                          log_msg("Extension", f"Found '{btn_name}' on web store. Setting focus...")
-                                          edge_window.set_focus()
-                                          time.sleep(0.5)
-                                          log_msg("Extension", f"Clicking '{btn_name}'...")
-                                          install_btns[0].click_input()
-                                          log_msg("Extension", "Clicked successfully. Waiting 2s...")
-                                          time.sleep(2)
-                                          break
-                                      except Exception as e:
-                                          log_msg("Extension", f"Failed to click '{btn_name}': {e}")
-                                          
-                      # E. Ctrl+J to open downloads flyout
-                      can_ctrl_j = True
-                      if software_type == "avg" and not avg_download_clicked:
-                          can_ctrl_j = False # Block flyout from stealing focus before the AVG button is clicked
-                          
-                      if action_mode == "install" and not keep_clicked and edge_window and can_ctrl_j and (time.time() - last_ctrl_j_time > 15) and ctrl_j_attempts < 4:
-                          try:
-                              log_msg("Utility", "Setting window focus to open downloads flyout...")
-                              edge_window.set_focus()
-                              time.sleep(0.5)
-                              log_msg("Utility", f"Sending '^j' (Ctrl+J)... (Attempt {ctrl_j_attempts + 1}/4)")
-                              send_keys('^j')
-                              last_ctrl_j_time = time.time()
-                              ctrl_j_attempts += 1
-                              log_msg("Utility", "Ctrl+J sent.")
-                          except Exception as e:
-                              log_msg("Utility", f"Ctrl+J failed: {e}")
-                              
-                      # F. Opera Post-install Keyboard Automation Flow
-                      # NOTE: opera_one is now handled by opera_one_post_install_sequence() above.
-                      #       This block only handles opera_gx / ad_mvn / dynamic_opera / opera_smart_link.
-                      if (action_mode == "install"
-                              and software_type in ["opera_gx", "ad_mvn", "dynamic_opera", "opera_smart_link"]
-                              and opera_window
-                              and not opera_setup_completed):
-                          wt = opera_window.window_text()
-                          if software_type in ["ad_mvn", "dynamic_opera", "opera_smart_link"]:
-                              is_gx_flow = "GX" in wt.upper()
-                          else:
-                              is_gx_flow = (software_type == "opera_gx")
-                              
-                          if not opera_launched_time:
-                              opera_launched_time = time.time()
-                              wait_msg = "15s" if is_gx_flow else "90s"
-                              log_msg("PostInstall", f"Launched browser detected: '{wt}'. Flow={is_gx_flow}. Waiting {wait_msg} for full render...")
-                              try:
-                                  log_msg("PostInstall", "Maximizing browser window...")
-                                  opera_window.set_focus()
-                                  opera_window.maximize()
-                              except Exception: pass
-                                  
-                          wait_time = 15 if is_gx_flow else 90
-                          if time.time() - opera_launched_time > wait_time:
-                              try: opera_window.set_focus()
-                              except Exception: pass
-                              time.sleep(1)
-                              if is_gx_flow:
-                                  log_msg("PostInstall", "[Opera GX] Initiating TAB/ENTER sequence...")
-                                  try:
-                                      for t in range(4):
-                                          log_msg("PostInstall", f"[Opera GX] Sending '{{TAB}}' ({t+1}/4)...")
-                                          send_keys('{TAB}')
-                                          time.sleep(0.5)
-                                      log_msg("PostInstall", "[Opera GX] Pushed 4 TABs.")
-                                      
-                                      for i in range(8):
-                                          log_msg("PostInstall", f"[Opera GX] Sending '{{ENTER}}' ({i+1}/8)...")
-                                          send_keys('{ENTER}')
-                                          delay = random.uniform(1.0, 2.0)
-                                          log_msg("PostInstall", f"[Opera GX] Waiting {delay:.2f} seconds...")
-                                          time.sleep(delay)
-                                          
-                                      random_tabs = random.randint(4, 10)
-                                      for t in range(random_tabs):
-                                          log_msg("PostInstall", f"[Opera GX] Sending random '{{TAB}}' ({t+1}/{random_tabs})...")
-                                          send_keys('{TAB}')
-                                          time.sleep(0.3)
-                                          
-                                      log_msg("PostInstall", "[Opera GX] Sending final '{ENTER}'...")
-                                      send_keys('{ENTER}')
-                                      opera_setup_completed = True
-                                      log_msg("PostInstall", "[Opera GX] Setup automation completed successfully.")
-                                  except Exception as e: log_msg("PostInstall", f"[Opera GX] Error: {e}")
-                              else:
-                                  log_msg("PostInstall", "[Opera One (legacy flow)] Initiating post-install sequence...")
-                                  try:
-                                      sw, sh = pyautogui.size()
-                                      cx, cy = sw // 2, sh // 2
-                                      log_msg("PostInstall", f"[Opera One] Executing PyAutoGUI clicks at center screen coords: ({cx}, {cy})")
-                                      for i in range(3):
-                                          log_msg("PostInstall", f"[Opera One] Center click {i+1}/3...")
-                                          pyautogui.click(cx, cy)
-                                          delay = random.uniform(1.0, 2.0)
-                                          time.sleep(delay)
-                                          
-                                      log_msg("PostInstall", "[Opera One] Swiping through setup via RIGHT arrows.")
-                                      for i in range(10):
-                                          log_msg("PostInstall", f"[Opera One] Sending '{{RIGHT}}' ({i+1}/10)...")
-                                          send_keys('{RIGHT}')
-                                          delay = random.uniform(1.0, 2.0)
-                                          time.sleep(delay)
-                                          
-                                      log_msg("PostInstall", "[Opera One] Sending final '{ENTER}'...")
-                                      send_keys('{ENTER}')
-                                      opera_setup_completed = True
-                                      log_msg("PostInstall", "[Opera One] Setup automation completed successfully.")
-                                  except Exception as e: log_msg("PostInstall", f"[Opera One] Error: {e}")
-                                      
-                  except Exception as e: pass
-                  time.sleep(1)
-                  
-          if __name__ == "__main__":
-              username      = sys.argv[1] if len(sys.argv) > 1 else ""
-              password      = sys.argv[2] if len(sys.argv) > 2 else ""
-              software_type = sys.argv[3] if len(sys.argv) > 3 else "avg"
-              use_proxy     = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
-              action_mode   = sys.argv[5] if len(sys.argv) > 5 else "install"
-              
-              handle_automation(username, password, software_type, use_proxy, action_mode)
-          '@
+    opera_one_post_install_done       = False
+    opera_one_installer_executed_time = None
+
+    sentinel_path               = os.path.join(tempfile.gettempdir(), "download_done.flag")
+    installer_executed_sentinel = os.path.join(tempfile.gettempdir(), "installer_executed.flag")
+    download_windows_closed     = False
+
+    while time.time() - start_time < timeout:
+        try:
+            edge_window  = None
+            opera_window = None
+
+            for window in desktop.windows(visible_only=True):
+                wt = window.window_text()
+                if not wt: continue
+                if any(x in wt for x in ["Microsoft Edge","sudetyj","Chrome Web Store","Edge"]):
+                    edge_window = window
+                if any(x in wt for x in ["Opera","Speed Dial","Start Page","Welcome"]) or "first time" in wt.lower():
+                    if not any(x in wt for x in ["Microsoft Edge","Edge","Chrome Web Store"]):
+                        opera_window = window
+
+            # Download sentinel — close thanks tab
+            if not download_windows_closed and os.path.exists(sentinel_path):
+                log_msg("Sentinel", "Download flag found. Starting tab cleanup...")
+                for attempt in range(1, 6):
+                    still_open = close_download_windows(desktop, f"#{attempt}")
+                    time.sleep(2)
+                    if not still_open:
+                        log_msg("Sentinel", f"Cleanup done on attempt #{attempt}."); break
+                download_windows_closed = True; edge_window = None
+
+            # Opera One — detect installer-executed sentinel
+            if (software_type == "opera_one" and action_mode == "install"
+                    and not opera_one_post_install_done
+                    and opera_one_installer_executed_time is None
+                    and os.path.exists(installer_executed_sentinel)):
+                opera_one_installer_executed_time = time.time()
+                log_msg("PostInstall-OP1", "Installer sentinel detected. Post-install fires in 30 s.")
+
+            # Opera One — fire at 30 s
+            if (software_type == "opera_one" and action_mode == "install"
+                    and not opera_one_post_install_done
+                    and opera_one_installer_executed_time is not None
+                    and (time.time() - opera_one_installer_executed_time) >= 30):
+                log_msg("PostInstall-OP1", "30 s elapsed — firing post-install NOW.")
+                opera_one_post_install_sequence()
+                opera_one_post_install_done = True
+                opera_setup_completed       = True
+
+            # A. Proxy auth
+            if use_proxy and (edge_window or opera_window):
+                for w in [edge_window, opera_window]:
+                    if not w: continue
+                    uf = w.descendants(control_type="Edit", title="Username")
+                    pf = w.descendants(control_type="Edit", title="Password")
+                    if uf and pf:
+                        try:
+                            log_msg("Proxy", "Auth dialog detected.")
+                            w.set_focus(); time.sleep(0.5)
+                            log_msg("Proxy", "Clicking username field...")
+                            uf[0].click_input()
+                            log_msg("Proxy", "Typing username...")
+                            uf[0].type_keys(username, with_spaces=True, pause=0.02)
+                            log_msg("Proxy", "Clicking password field...")
+                            pf[0].click_input()
+                            log_msg("Proxy", "Typing password...")
+                            pf[0].type_keys(password, with_spaces=True, pause=0.02)
+                            btn = w.descendants(control_type="Button", title="Sign in")
+                            if btn:
+                                log_msg("Proxy", "Clicking Sign in..."); btn[0].click_input()
+                            else:
+                                log_msg("Proxy", "Pressing ENTER to submit..."); pf[0].type_keys("{ENTER}")
+                            proxy_auth_time = time.time()
+                            log_msg("Proxy", "Credentials injected.")
+                        except Exception as e:
+                            log_msg("Proxy", f"Auth error: {e}")
+
+            # Cookie consent
+            if edge_window:
+                for cb in ["Accept all","Accepter tout","Tout accepter","Accept Cookies","Allow all","Accept selection"]:
+                    btns = edge_window.descendants(control_type="Button", title=cb)
+                    if btns:
+                        try:
+                            log_msg("Cookies", f"Clicking '{cb}'...")
+                            btns[0].click_input()
+                            log_msg("Cookies", "Accepted."); time.sleep(1)
+                        except: pass
+
+            # H. Smart link interstitial
+            if edge_window and software_type == "opera_smart_link":
+                elapsed = time.time() - proxy_auth_time
+                if not smart_link_interstitial_done and elapsed > 20:
+                    try:
+                        log_msg("SmartLink", f"{elapsed:.1f}s. Firing TAB+ENTER bypass...")
+                        edge_window.set_focus(); time.sleep(0.5)
+                        log_msg("SmartLink", "Sending TAB..."); send_keys('{TAB}'); time.sleep(0.5)
+                        log_msg("SmartLink", "Sending ENTER..."); send_keys('{ENTER}')
+                        log_msg("SmartLink", "Bypass sent.")
+                    except Exception as e:
+                        log_msg("SmartLink", f"Bypass failed: {e}")
+                    smart_link_interstitial_done = True
+                    smart_link_interstitial_time = time.time()
+
+            # Click-only: nothing else beyond interstitial
+            if action_mode == "click":
+                if software_type == "opera_smart_link":
+                    if not smart_link_interstitial_done: time.sleep(1); continue
+                    if time.time() - smart_link_interstitial_time < 15: time.sleep(1); continue
+                time.sleep(1); continue
+
+            # B. Edge download protection
+            if edge_window and action_mode == "install":
+                for title in ["Keep","Keep anyway"]:
+                    btns = edge_window.descendants(control_type="Button", title=title)
+                    if btns:
+                        log_msg("EdgeProtect", f"Clicking '{title}'...")
+                        keep_clicked = True; btns[0].click_input(); time.sleep(0.5)
+
+            # C. Download button / interstitial clicker
+            can_dl = True
+            if software_type == "opera_smart_link" and (not smart_link_interstitial_done or time.time()-smart_link_interstitial_time < 15):
+                can_dl = False
+            if edge_window and action_mode == "install" and can_dl and software_type in ["opera_gx","opera_one","ad_mvn","dynamic_opera","opera_smart_link"]:
+                if time.time() - last_dl_click_time > 5:
+                    hit = False
+                    for btn in edge_window.descendants(control_type="Button"):
+                        bt = btn.window_text()
+                        if bt and any(k in bt.lower() for k in ["download opera","download now","télécharger","baixar","herunterladen","descargar","download"]):
+                            try:
+                                log_msg("Download", f"Clicking '{bt}'...")
+                                edge_window.set_focus(); time.sleep(0.5)
+                                btn.click_input(); last_dl_click_time = time.time(); hit = True
+                                log_msg("Download", "Clicked."); break
+                            except Exception as e: log_msg("Download", f"Failed: {e}")
+                    if not hit:
+                        for el in edge_window.descendants():
+                            if el.element_info.control_type in ["Hyperlink","Text","Image"]:
+                                wt = el.window_text()
+                                if wt and "opera" in wt.lower() and len(wt)<150 and "smart link" not in wt.lower() and "http" not in wt.lower() and "playabledownloads" not in wt.lower():
+                                    try:
+                                        log_msg("Download", f"Interstitial link: '{wt}'...")
+                                        edge_window.set_focus(); el.click_input()
+                                        last_dl_click_time = time.time()
+                                        log_msg("Download", "Clicked."); break
+                                    except Exception as e: log_msg("Download", f"Failed: {e}")
+
+            # I. AVG download trigger
+            if edge_window and action_mode == "install" and software_type == "avg":
+                elapsed = time.time() - proxy_auth_time
+                if not avg_download_clicked and elapsed > 20:
+                    log_msg("AVG", f"{elapsed:.1f}s. Firing TAB+ENTER trigger...")
+                    try:
+                        edge_window.set_focus(); time.sleep(0.5)
+                        log_msg("AVG", "Sending TAB..."); send_keys('{TAB}')
+                        d = random.uniform(1.0, 2.0); log_msg("AVG", f"Waiting {d:.2f}s..."); time.sleep(d)
+                        log_msg("AVG", "Sending ENTER..."); send_keys('{ENTER}')
+                        log_msg("AVG", "ENTER sent. 10 s download init wait...")
+                        for w in range(1,11): log_msg("AVG", f"  Init wait {w}/10 s..."); time.sleep(1)
+                        log_msg("AVG", "Init wait done.")
+                    except Exception as e: log_msg("AVG", f"Error: {e}")
+                    avg_download_clicked = True
+
+            # D. Extension dialogs
+            if edge_window and action_mode == "install":
+                ae = edge_window.descendants(control_type="Button", title="Add extension")
+                if ae:
+                    try:
+                        log_msg("Extension", "Clicking 'Add extension'...")
+                        edge_window.set_focus(); time.sleep(0.5); ae[0].click_input()
+                        log_msg("Extension", "Clicked. 2 s wait..."); time.sleep(2)
+                    except Exception as e: log_msg("Extension", f"Failed: {e}")
+                else:
+                    for bn in ["Add to Chrome","Get"]:
+                        ib = edge_window.descendants(control_type="Button", title=bn)
+                        if ib:
+                            try:
+                                log_msg("Extension", f"Clicking '{bn}'...")
+                                edge_window.set_focus(); time.sleep(0.5); ib[0].click_input()
+                                log_msg("Extension", "Clicked. 2 s wait..."); time.sleep(2); break
+                            except Exception as e: log_msg("Extension", f"Failed: {e}")
+
+            # E. Ctrl+J downloads flyout
+            can_cj = not (software_type == "avg" and not avg_download_clicked)
+            if action_mode=="install" and not keep_clicked and edge_window and can_cj and (time.time()-last_ctrl_j_time>15) and ctrl_j_attempts<4:
+                try:
+                    log_msg("Utility", f"Ctrl+J attempt {ctrl_j_attempts+1}/4...")
+                    edge_window.set_focus(); time.sleep(0.5); send_keys('^j')
+                    last_ctrl_j_time=time.time(); ctrl_j_attempts+=1
+                    log_msg("Utility", "Ctrl+J sent.")
+                except Exception as e: log_msg("Utility", f"Ctrl+J failed: {e}")
+
+            # F. Opera GX / dynamic post-install (opera_one handled separately)
+            if (action_mode=="install"
+                    and software_type in ["opera_gx","ad_mvn","dynamic_opera","opera_smart_link"]
+                    and opera_window and not opera_setup_completed):
+                wt = opera_window.window_text()
+                is_gx = "GX" in wt.upper() if software_type in ["ad_mvn","dynamic_opera","opera_smart_link"] else (software_type=="opera_gx")
+                if not opera_launched_time:
+                    opera_launched_time = time.time()
+                    log_msg("PostInstall", f"Browser: '{wt}'. GX={is_gx}. Wait {'15' if is_gx else '90'}s...")
+                    try: opera_window.set_focus(); opera_window.maximize(); log_msg("PostInstall","Maximised.")
+                    except: pass
+                wait_t = 15 if is_gx else 90
+                if time.time() - opera_launched_time > wait_t:
+                    try: opera_window.set_focus()
+                    except: pass
+                    time.sleep(1)
+                    if is_gx:
+                        log_msg("PostInstall","[GX] TAB/ENTER sequence...")
+                        try:
+                            for t in range(4): log_msg("PostInstall",f"  [GX] TAB {t+1}/4..."); send_keys('{TAB}'); time.sleep(0.5)
+                            log_msg("PostInstall","  [GX] 4 TABs done.")
+                            for i in range(8):
+                                log_msg("PostInstall",f"  [GX] ENTER {i+1}/8..."); send_keys('{ENTER}')
+                                d=random.uniform(1.0,2.0); log_msg("PostInstall",f"  [GX] Wait {d:.2f}s..."); time.sleep(d)
+                            rt=random.randint(4,10)
+                            for t in range(rt): log_msg("PostInstall",f"  [GX] Random TAB {t+1}/{rt}..."); send_keys('{TAB}'); time.sleep(0.3)
+                            log_msg("PostInstall","  [GX] Final ENTER..."); send_keys('{ENTER}')
+                            opera_setup_completed=True; log_msg("PostInstall","[GX] Done.")
+                        except Exception as e: log_msg("PostInstall",f"[GX] Error: {e}")
+                    else:
+                        log_msg("PostInstall","[OP1-legacy] Sequence...")
+                        try:
+                            sw,sh=pyautogui.size(); cx,cy=sw//2,sh//2
+                            for i in range(3): log_msg("PostInstall",f"  [OP1] Center click {i+1}/3..."); pyautogui.click(cx,cy); time.sleep(random.uniform(1.0,2.0))
+                            for i in range(10): log_msg("PostInstall",f"  [OP1] RIGHT {i+1}/10..."); send_keys('{RIGHT}'); time.sleep(random.uniform(1.0,2.0))
+                            log_msg("PostInstall","  [OP1] Final ENTER..."); send_keys('{ENTER}')
+                            opera_setup_completed=True; log_msg("PostInstall","[OP1-legacy] Done.")
+                        except Exception as e: log_msg("PostInstall",f"[OP1-legacy] Error: {e}")
+
+        except Exception: pass
+        time.sleep(1)
+
+if __name__ == "__main__":
+    username      = sys.argv[1] if len(sys.argv)>1 else ""
+    password      = sys.argv[2] if len(sys.argv)>2 else ""
+    software_type = sys.argv[3] if len(sys.argv)>3 else "avg"
+    use_proxy     = sys.argv[4].lower()=="true" if len(sys.argv)>4 else False
+    action_mode   = sys.argv[5] if len(sys.argv)>5 else "install"
+    handle_automation(username, password, software_type, use_proxy, action_mode)
+'@
           $handlerPy | Out-File -FilePath "$env:TEMP\auto_handler.py" -Encoding utf8
-          
-          Write-Host "[UI-Engine] Spinning up background Python process..." -ForegroundColor DarkGray
+
+          Write-Host "[UI-Engine] Launching background Python process..." -ForegroundColor DarkGray
           Start-Process -FilePath "python" `
               -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`" `"$env:SOFTWARE_TYPE`" `"$env:USE_PROXY`" `"$env:ACTION_MODE`"" `
               -WindowStyle Hidden
-              
-          # ---------------------------------------------------------------
-          # Software Watcher / Installer background job (INSTALL path only)
-          # ---------------------------------------------------------------
-          $dlFolder    = "$env:USERPROFILE\Downloads"
-          $timeoutSecs = 330
-          $softwareType = $env:SOFTWARE_TYPE
-          $exeFilter   = $env:EXE_FILTER
-          $sentinelPath = "$env:TEMP\download_done.flag"
+
+          # ============================================================
+          # Watcher / installer job (INSTALL path only)
+          # ============================================================
+          $dlFolder                  = "$env:USERPROFILE\Downloads"
+          $timeoutSecs               = 330
+          $softwareType              = $env:SOFTWARE_TYPE
+          $exeFilter                 = $env:EXE_FILTER
+          $sentinelPath              = "$env:TEMP\download_done.flag"
           $installerExecutedSentinel = "$env:TEMP\installer_executed.flag"
-          
+
           if ($env:ACTION_MODE -eq "install") {
-              Write-Host "[Watcher] Action mode is INSTALL. Initializing download directory monitor..." -ForegroundColor Cyan
+              Write-Host "[Watcher] INSTALL path. Starting download monitor..." -ForegroundColor Cyan
+
               $installJob = Start-Job -ScriptBlock {
-                  param($dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath, $installerExecutedSentinel)
-                  $deadline  = (Get-Date).AddSeconds($timeoutSecs)
-                  $installed = $false
-                  
-                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Tracking directory: $dlFolder"
-                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Awaiting file matching: $exeFilter"
-                  
+                  param($dlFolder,$timeoutSecs,$softwareType,$exeFilter,$sentinelPath,$installerExecutedSentinel)
+                  $deadline=$false; $deadline=(Get-Date).AddSeconds($timeoutSecs); $installed=$false
+
+                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Monitoring: $dlFolder  Filter: $exeFilter"
+
                   while (-not $installed -and (Get-Date) -lt $deadline) {
-                      $candidates = Get-ChildItem -Path $dlFolder -Filter $exeFilter -ErrorAction SilentlyContinue |
-                          Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
-                          Sort-Object LastWriteTime -Descending
-                          
-                      if ($candidates.Count -gt 0) {
-                          $file = $candidates[0]
-                          Write-Output "[$($softwareType.ToUpper())-WATCHER] SUCCESS: Payload binary found -> $($file.Name)"
-                          
-                          try { Set-Content -Path $sentinelPath -Value "done" -ErrorAction SilentlyContinue } catch {}
-                          Write-Output "[$($softwareType.ToUpper())-WATCHER] Sentinel flag generated. Instructing Python UI to execute Ctrl+W tab close sequence."
-                          
-                          $actualSoftware = $softwareType
-                          if ($softwareType -eq "ad_mvn" -or $softwareType -eq "dynamic_opera" -or $softwareType -eq "opera_smart_link") {
-                              if ($file.Name -match "OperaGX") {
-                                  $actualSoftware = "opera_gx"
-                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Payload fingerprinted as Opera GX Setup."
-                              } else {
-                                  $actualSoftware = "opera_one"
-                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Payload fingerprinted as Opera One Standard Setup."
-                              }
+                      $c = Get-ChildItem -Path $dlFolder -Filter $exeFilter -ErrorAction SilentlyContinue |
+                           Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
+                           Sort-Object LastWriteTime -Descending
+
+                      if ($c.Count -gt 0) {
+                          $file=$c[0]
+                          Write-Output "[$($softwareType.ToUpper())-WATCHER] Found: $($file.Name)"
+                          try { Set-Content -Path $sentinelPath -Value "done" -EA SilentlyContinue } catch {}
+                          Write-Output "[$($softwareType.ToUpper())-WATCHER] Download sentinel written."
+
+                          $actual=$softwareType
+                          if ($softwareType -in @("ad_mvn","dynamic_opera","opera_smart_link")) {
+                              if ($file.Name -match "OperaGX") { $actual="opera_gx"; Write-Output "[$($softwareType.ToUpper())-WATCHER] Fingerprinted: Opera GX." }
+                              else                              { $actual="opera_one"; Write-Output "[$($softwareType.ToUpper())-WATCHER] Fingerprinted: Opera One." }
                           }
-                          
-                          Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Verifying file I/O lock status..."
-                          $locked = $true
+
+                          Write-Output "[$($actual.ToUpper())-INSTALL] Waiting for file unlock..."
+                          $locked=$true
                           while ($locked) {
                               Start-Sleep -Seconds 2
-                              try {
-                                  $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
-                                  $s.Close()
-                                  $locked = $false
-                                  Write-Output "[$($actualSoftware.ToUpper())-INSTALL] File unlocked and ready."
-                              } catch { }
+                              try { $s=[System.IO.File]::Open($file.FullName,'Open','Read','None'); $s.Close(); $locked=$false; Write-Output "[$($actual.ToUpper())-INSTALL] Unlocked." } catch {}
                           }
-                          
-                          # Write installer-executed sentinel BEFORE launching so Python timer starts from installer launch
-                          Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Writing installer-executed sentinel flag for Python post-install timer..."
-                          try { Set-Content -Path $installerExecutedSentinel -Value "done" -ErrorAction SilentlyContinue } catch {}
-                          Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Sentinel written: $installerExecutedSentinel"
 
-                          Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Executing silent payload installer -> $($file.FullName) /silent"
-                          try {
-                              Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
-                              Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Binary deployed successfully."
-                          } catch {
-                              Write-Output "[$($actualSoftware.ToUpper())-INSTALL] EXCEPTION ERROR running installer: $_"
-                          }
-                          
-                          Write-Output "[$($actualSoftware.ToUpper())-POST] Scanning deployment directories for executable..."
-                          if ($actualSoftware -eq "opera_gx") {
-                              $appPaths = @(
-                                  "$env:LOCALAPPDATA\Programs\Opera GX\launcher.exe",
-                                  "$env:LOCALAPPDATA\Programs\Opera GX\opera.exe",
-                                  "C:\Program Files\Opera GX\launcher.exe",
-                                  "C:\Program Files\Opera GX\opera.exe",
-                                  "C:\Program Files (x86)\Opera GX\launcher.exe",
-                                  "C:\Program Files (x86)\Opera GX\opera.exe"
-                              )
-                          } elseif ($actualSoftware -eq "opera_one") {
-                              $appPaths = @(
-                                  "$env:LOCALAPPDATA\Programs\Opera\launcher.exe",
-                                  "$env:LOCALAPPDATA\Programs\Opera\opera.exe",
-                                  "C:\Program Files\Opera\launcher.exe",
-                                  "C:\Program Files\Opera\opera.exe",
-                                  "C:\Program Files (x86)\Opera\launcher.exe",
-                                  "C:\Program Files (x86)\Opera\opera.exe"
-                              )
+                          # Write sentinel BEFORE launching installer so Python timer is accurate
+                          Write-Output "[$($actual.ToUpper())-INSTALL] Writing installer-executed sentinel..."
+                          try { Set-Content -Path $installerExecutedSentinel -Value "done" -EA SilentlyContinue } catch {}
+                          Write-Output "[$($actual.ToUpper())-INSTALL] Sentinel written: $installerExecutedSentinel"
+
+                          Write-Output "[$($actual.ToUpper())-INSTALL] Launching: $($file.FullName) /silent"
+                          try { Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait; Write-Output "[$($actual.ToUpper())-INSTALL] Installer done." }
+                          catch { Write-Output "[$($actual.ToUpper())-INSTALL] ERROR: $_" }
+
+                          Write-Output "[$($actual.ToUpper())-POST] Scanning for installed exe..."
+                          if ($actual -eq "opera_gx") {
+                              $ap=@("$env:LOCALAPPDATA\Programs\Opera GX\launcher.exe","$env:LOCALAPPDATA\Programs\Opera GX\opera.exe",
+                                    "C:\Program Files\Opera GX\launcher.exe","C:\Program Files\Opera GX\opera.exe",
+                                    "C:\Program Files (x86)\Opera GX\launcher.exe","C:\Program Files (x86)\Opera GX\opera.exe")
+                          } elseif ($actual -eq "opera_one") {
+                              $ap=@("$env:LOCALAPPDATA\Programs\Opera\launcher.exe","$env:LOCALAPPDATA\Programs\Opera\opera.exe",
+                                    "C:\Program Files\Opera\launcher.exe","C:\Program Files\Opera\opera.exe",
+                                    "C:\Program Files (x86)\Opera\launcher.exe","C:\Program Files (x86)\Opera\opera.exe")
                           } else {
-                              $appPaths = @(
-                                  "C:\Program Files\AVG\Browser\Application\AVGBrowser.exe",
-                                  "C:\Program Files (x86)\AVG\Browser\Application\AVGBrowser.exe",
-                                  "C:\Program Files\AVG\Antivirus\AVGUI.exe",
-                                  "C:\Program Files (x86)\AVG\Antivirus\AVGUI.exe"
-                              )
+                              $ap=@("C:\Program Files\AVG\Browser\Application\AVGBrowser.exe",
+                                    "C:\Program Files (x86)\AVG\Browser\Application\AVGBrowser.exe",
+                                    "C:\Program Files\AVG\Antivirus\AVGUI.exe",
+                                    "C:\Program Files (x86)\AVG\Antivirus\AVGUI.exe")
                           }
-                          
-                          $launched = $false
-                          for ($i = 0; $i -lt 300; $i++) {
-                              foreach ($p in $appPaths) {
+
+                          $launched=$false
+                          for ($i=0;$i -lt 300;$i++) {
+                              foreach ($p in $ap) {
                                   if (Test-Path $p) {
                                       Start-Sleep -Seconds 3
-                                      Write-Output "[$($actualSoftware.ToUpper())-POST] Spawning process: $p"
-                                      Start-Process -FilePath $p
-                                      $launched = $true
-                                      break
+                                      Write-Output "[$($actual.ToUpper())-POST] Launching: $p"
+                                      Start-Process -FilePath $p; $launched=$true; break
                                   }
                               }
                               if ($launched) { break }
                               Start-Sleep -Seconds 2
                           }
-                          
-                          if (-not $launched) {
-                              Write-Output "[$($actualSoftware.ToUpper())-POST] FATAL: Executable was not found within timeout."
-                          }
-                          
-                          $installed = $true
-                      } else {
-                          Start-Sleep -Seconds 5
-                      }
+                          if (-not $launched) { Write-Output "[$($actual.ToUpper())-POST] FATAL: exe not found." }
+                          $installed=$true
+                      } else { Start-Sleep -Seconds 5 }
                   }
-                  if (-not $installed) { Write-Output "[$($softwareType.ToUpper())-WATCHER] Timeout reached. No files matching pattern downloaded." }
-              } -ArgumentList $dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath, $installerExecutedSentinel
+                  if (-not $installed) { Write-Output "[$($softwareType.ToUpper())-WATCHER] Timeout. No match." }
+              } -ArgumentList $dlFolder,$timeoutSecs,$softwareType,$exeFilter,$sentinelPath,$installerExecutedSentinel
           }
-          
-          # ---------------------------------------------------------------
-          # Find Edge Path & Build launch args
-          # ---------------------------------------------------------------
+
+          # ============================================================
+          # Launch Edge
+          # ============================================================
           $edgeExe = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-          if (-Not (Test-Path $edgeExe)) {
-              $edgeExe = "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
-          }
-          
-          # Base Edge flags (SmartScreen suppression, no first-run)
+          if (-Not (Test-Path $edgeExe)) { $edgeExe = "C:\Program Files\Microsoft\Edge\Application\msedge.exe" }
+
           $edgeArgs = @(
-              "--no-first-run",
-              "--no-default-browser-check",
-              "--disable-sync",
+              "--no-first-run","--no-default-browser-check","--disable-sync",
               "--safebrowsing-disable-download-protection",
               "--disable-features=msSmartScreenProtection,SmartScreenPuaEnabled"
           )
-          
-          if ($useProxy) {
-              $proxyServer = "residential-proxy.scrapeops.io:8181"
-              $edgeArgs += "--proxy-server=`"http://$proxyServer`""
-          }
+          if ($useProxy) { $edgeArgs += "--proxy-server=`"http://residential-proxy.scrapeops.io:8181`"" }
           $edgeArgs += "`"$env:TARGET_URL`""
-          
-          Write-Host "[System] Launching Edge browser context..." -ForegroundColor Cyan
-          Write-Host "[System] Command: msedge.exe $(($edgeArgs | ForEach-Object { $_ -replace '"','\"' }) -join ' ')" -ForegroundColor DarkGray
+
+          Write-Host "[System] Launching Edge..." -ForegroundColor Cyan
+          Write-Host "[System] Args: $(($edgeArgs | ForEach-Object { $_ -replace '"','\"' }) -join ' ')" -ForegroundColor DarkGray
           Start-Process -FilePath $edgeExe -ArgumentList ($edgeArgs -join " ")
-          
-          # ---------------------------------------------------------------
-          # INSTALL PATH: monitor background watcher job until done
-          # CLICK PATH:   75-second wait then exit cleanly (no Keep Runner Alive)
-          # ---------------------------------------------------------------
+
+          # ============================================================
+          # Runtime control
+          # ============================================================
           Write-Host "========== RUNTIME EXECUTION ==========" -ForegroundColor Cyan
 
           if ($env:ACTION_MODE -eq "install") {
-              # ----- INSTALL: stream job output, then fall through to Keep Runner Alive -----
-              Write-Host "[Runtime] Operating in INSTALL pathway. Monitoring watcher job..." -ForegroundColor Cyan
+              Write-Host "[Runtime] INSTALL pathway. Monitoring watcher job..." -ForegroundColor Cyan
               $deadline = (Get-Date).AddSeconds($timeoutSecs)
               while ($true) {
-                  $output = Receive-Job -Job $installJob -ErrorAction SilentlyContinue
-                  if ($output) { foreach ($line in $output) { Write-Host $line } }
-                  if ($installJob.State -eq 'Completed' -or $installJob.State -eq 'Failed' -or (Get-Date) -gt $deadline) { break }
+                  $out = Receive-Job -Job $installJob -EA SilentlyContinue
+                  if ($out) { foreach ($l in $out) { Write-Host $l } }
+                  if ($installJob.State -in @('Completed','Failed') -or (Get-Date) -gt $deadline) { break }
                   Start-Sleep -Seconds 5
               }
-              Write-Host "[Runtime] Install job concluded. Task complete." -ForegroundColor Green
+              Write-Host "[Runtime] Install job concluded." -ForegroundColor Green
 
           } else {
-              # ----- CLICK PATH: 75-second session + optional random reload then EXIT -----
-              Write-Host "[Runtime] Operating in CLICK-ONLY pathway. All binaries and installations are bypassed." -ForegroundColor Magenta
+              # CLICK path — 75 s session with random reload, then clean exit
+              Write-Host "[Runtime] CLICK-ONLY pathway. Bypassing all installs." -ForegroundColor Magenta
 
               if ($env:SOFTWARE_TYPE -eq "opera_smart_link") {
-                  Write-Host "[Runtime] Allowing 75 seconds for TAB/ENTER interstitial page routing and download page load..." -ForegroundColor Yellow
+                  Write-Host "[Runtime] 75 s: TAB/ENTER interstitial routing + page load..." -ForegroundColor Yellow
               } else {
-                  Write-Host "[Runtime] Allowing 75 seconds to ensure webpage fully loads and view registers..." -ForegroundColor Yellow
+                  Write-Host "[Runtime] 75 s: ensuring page loads and view registers..." -ForegroundColor Yellow
               }
 
               $clickStart      = Get-Date
               $clickTotal      = 75
               $step            = 15
               $reloadFired     = $false
-              $reloadThreshold = Get-Random -Minimum 20 -Maximum 61   # random second between 20-60 to potentially reload
-              $reloadChance    = Get-Random -Minimum 10 -Maximum 101  # 10-100 % chance
+              $reloadThreshold = Get-Random -Minimum 20 -Maximum 61
+              $reloadChance    = Get-Random -Minimum 10 -Maximum 101
 
-              Write-Host "[$env:SOFTWARE_TYPE] Click session started. Reload threshold: ${reloadThreshold}s elapsed | Reload chance roll: ${reloadChance}%" -ForegroundColor DarkGray
+              Write-Host "[$env:SOFTWARE_TYPE] Session start. Reload threshold: ~${reloadThreshold}s | Chance roll: ${reloadChance}%" -ForegroundColor DarkGray
 
               for ($w = 0; $w -lt $clickTotal; $w += $step) {
-                  Write-Host "[$env:SOFTWARE_TYPE] Click tracker maintaining session: $w / $clickTotal seconds elapsed..." -ForegroundColor Yellow
+                  Write-Host "[$env:SOFTWARE_TYPE] Click tracker: $w / $clickTotal s elapsed..." -ForegroundColor Yellow
 
-                  # Check whether it's time to fire the random reload (once only)
                   if (-not $reloadFired) {
-                      $elapsed = [int]((Get-Date) - $clickStart).TotalSeconds
-                      if ($elapsed -ge $reloadThreshold) {
-                          # Roll the chance (10-100%), always fires because minimum is 10 but kept as roll for variability
-                          Write-Host "[$env:SOFTWARE_TYPE] Reload threshold reached at ${elapsed}s. Chance roll was ${reloadChance}% - executing page reload..." -ForegroundColor Cyan
+                      $el = [int]((Get-Date) - $clickStart).TotalSeconds
+                      if ($el -ge $reloadThreshold) {
+                          Write-Host "[$env:SOFTWARE_TYPE] Threshold reached at ${el}s (roll: ${reloadChance}%). Sending F5..." -ForegroundColor Cyan
                           try {
-                              Add-Type -AssemblyName UIAutomationClient
-                              # Send F5 to the foreground window to reload the page
                               $wsh = New-Object -ComObject WScript.Shell
                               $wsh.SendKeys('{F5}')
-                              Write-Host "[$env:SOFTWARE_TYPE] F5 (page reload) sent to foreground window successfully." -ForegroundColor Green
+                              Write-Host "[$env:SOFTWARE_TYPE] F5 sent successfully." -ForegroundColor Green
                           } catch {
-                              Write-Host "[$env:SOFTWARE_TYPE] F5 reload attempt failed: $_" -ForegroundColor Red
+                              Write-Host "[$env:SOFTWARE_TYPE] F5 failed: $_" -ForegroundColor Red
                           }
                           $reloadFired = $true
                       }
@@ -1266,18 +1059,16 @@ jobs:
                   Start-Sleep -Seconds $step
               }
 
-              Write-Host "[Runtime] Click tracking wait complete (75s elapsed). All click-path tasks finished." -ForegroundColor Green
-              Write-Host "[Runtime] Click pathway exiting cleanly — no Keep Runner Alive extension." -ForegroundColor Magenta
-              # Exit 0 terminates this step immediately; the runner finishes without
-              # entering the 'Keep Runner Alive' step (which is gated on install path).
+              Write-Host "[Runtime] 75 s click session complete." -ForegroundColor Green
+              Write-Host "[Runtime] Click pathway exiting cleanly — no Keep Runner Alive." -ForegroundColor Magenta
               exit 0
           }
-          
+
       - name: Keep Runner Alive
-        # Only runs for INSTALL path devices. Click path exits the previous step early.
+        # Install path only — click path exits the step above.
         if: always() && matrix.action_mode == 'install'
         shell: pwsh
         run: |
-          Write-Host "Session lifecycle fully executed." -ForegroundColor Green
-          Write-Host "Leaving runner online to exhaust remaining job timeout margin..." -ForegroundColor DarkGray
+          Write-Host "Session lifecycle complete." -ForegroundColor Green
+          Write-Host "Holding runner for remaining timeout margin..." -ForegroundColor DarkGray
           Start-Sleep -Seconds 360
