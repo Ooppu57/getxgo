@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'AVG - B4Books'
+        default: 'Opera-One - Jimmy'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -841,6 +841,15 @@ jobs:
               return dismissed_any
 
           def close_download_windows(desktop, attempt_label=""):
+              """
+              Close Edge windows that show a 'download complete / thanks' page.
+              Strategy:
+                1. Focus the Edge window.
+                2. Send Ctrl+J  — opens the Edge downloads flyout (confirms download
+                   is registered) and then immediately closes it / the tab with Ctrl+J
+                   again, which also dismisses the downloads panel cleanly.
+                3. Fallback: Alt+F4 to kill the window entirely.
+              """
               closed_any = False
               try:
                   all_windows = desktop.windows(visible_only=True)
@@ -863,47 +872,89 @@ jobs:
 
                       if not is_match: continue
 
-                      log_msg("TabClose", f"Targeting window '{wt}' (Attempt {attempt_label})")
+                      log_msg("EdgeClose", f"Targeting Edge window '{wt}' for Ctrl+J close (Attempt {attempt_label})")
                       closed = False
 
+                      # Primary: Ctrl+J — opens/closes the Edge download shelf,
+                      # then a second Ctrl+J dismisses the panel. This is the
+                      # correct keyboard shortcut for the Edge downloads flyout.
+                      try:
+                          log_msg("EdgeClose", "Focusing Edge window...")
+                          window.set_focus()
+                          time.sleep(0.4)
+
+                          sw, sh = pyautogui.size()
+                          cx, cy = sw // 2, sh // 2
+                          log_msg("EdgeClose", f"Center-clicking ({cx},{cy}) to ensure Edge has input focus...")
+                          pyautogui.click(cx, cy)
+
+                          delay = random.uniform(0.8, 1.5)
+                          log_msg("EdgeClose", f"Waiting {delay:.2f}s before Ctrl+J...")
+                          time.sleep(delay)
+
+                          log_msg("EdgeClose", "Sending Ctrl+J (1st) — open Edge downloads panel...")
+                          send_keys('^j')
+                          time.sleep(0.6)
+
+                          log_msg("EdgeClose", "Sending Ctrl+J (2nd) — close Edge downloads panel/window...")
+                          send_keys('^j')
+                          time.sleep(0.4)
+
+                          closed = True
+                          log_msg("EdgeClose", "Ctrl+J double-tap executed successfully.")
+                      except Exception as e:
+                          log_msg("EdgeClose", f"Ctrl+J sequence failed: {e}")
+
+                      # Fallback: Alt+F4 to close the Edge window entirely
                       if not closed:
                           try:
-                              log_msg("TabClose", "Setting focus to window before executing close sequence...")
-                              window.set_focus()
-                              time.sleep(0.3)
-
-                              sw, sh = pyautogui.size()
-                              cx, cy = sw // 2, sh // 2
-                              log_msg("TabClose", f"Executing PyAutoGUI center screen click at ({cx}, {cy}) to ensure page context...")
-                              pyautogui.click(cx, cy)
-
-                              delay = random.uniform(1.0, 2.0)
-                              log_msg("TabClose", f"Center click executed. Waiting {delay:.2f} seconds before sending Ctrl+W...")
-                              time.sleep(delay)
-
-                              log_msg("TabClose", "Sending '^w' (Ctrl+W) keyboard shortcut...")
-                              send_keys('^w')
-                              closed = True
-                              log_msg("TabClose", "Successfully executed Ctrl+W tab close sequence.")
-                          except Exception as e:
-                              log_msg("TabClose", f"Ctrl+W sequence failed: {e}")
-
-                      if not closed:
-                          try:
-                              log_msg("TabClose", "Executing fallback window close via Alt+F4...")
+                              log_msg("EdgeClose", "Fallback: closing Edge window via Alt+F4...")
                               window.set_focus()
                               time.sleep(0.3)
                               send_keys('%{F4}')
                               closed = True
-                              log_msg("TabClose", "Successfully closed window via Alt+F4 fallback.")
+                              log_msg("EdgeClose", "Alt+F4 fallback executed.")
                           except Exception as e:
-                              log_msg("TabClose", f"Alt+F4 sequence failed: {e}")
+                              log_msg("EdgeClose", f"Alt+F4 fallback failed: {e}")
 
                       if closed:
                           closed_any = True
                           time.sleep(0.5)
                   except Exception: pass
               return closed_any
+
+          def close_edge_window_ctrl_j(edge_window, label=""):
+              """
+              Directly close a known Edge window using Ctrl+J (downloads shortcut).
+              Called immediately after the download sentinel fires, before the
+              post-install sequence begins, to ensure Edge is out of the way.
+              """
+              if not edge_window:
+                  log_msg("EdgeClose", f"[{label}] No Edge window reference provided. Skipping direct Ctrl+J close.")
+                  return False
+              try:
+                  log_msg("EdgeClose", f"[{label}] Focusing Edge window for Ctrl+J close...")
+                  edge_window.set_focus()
+                  time.sleep(0.4)
+
+                  sw, sh = pyautogui.size()
+                  cx, cy = sw // 2, sh // 2
+                  pyautogui.click(cx, cy)
+                  time.sleep(0.5)
+
+                  log_msg("EdgeClose", f"[{label}] Sending Ctrl+J (1st) — open downloads panel...")
+                  send_keys('^j')
+                  time.sleep(0.6)
+
+                  log_msg("EdgeClose", f"[{label}] Sending Ctrl+J (2nd) — close downloads panel/window...")
+                  send_keys('^j')
+                  time.sleep(0.4)
+
+                  log_msg("EdgeClose", f"[{label}] Ctrl+J close complete.")
+                  return True
+              except Exception as e:
+                  log_msg("EdgeClose", f"[{label}] Direct Ctrl+J failed: {e}")
+                  return False
 
           def refocus_target_window(target_window, software_type, label=""):
               """
@@ -1136,13 +1187,12 @@ jobs:
               log_msg("PostInstall-AVG", "Waiting 5 seconds...")
               time.sleep(5)
 
-              # AVG tab cycles: start at 6, increment by 2 each cycle (6, 8, 10, 12, 14, 16)
-              # This is a change from the original +1 increment to +2 increment per cycle
-              tab_start = 6
-              tab_end = 17   # exclusive upper bound (last cycle = 16 tabs)
-              tab_step = 2   # increment by 2 tabs per cycle instead of 1
+              # AVG tab cycles: start at 6, increment randomly by 1 or 2 each cycle
+              # e.g. could go: 6 -> 7 -> 9 -> 10 -> 12 -> 13 -> 15 -> 16 (random each step)
+              tab_count = 6
+              tab_ceiling = 17  # stop when tab_count would exceed this
 
-              for tab_count in range(tab_start, tab_end, tab_step):
+              while tab_count < tab_ceiling:
                   log_msg("PostInstall-AVG", f"--- Cycle: {tab_count} TAB presses ---")
                   
                   # Dismiss interference and re-focus AVG window before Ctrl+T
@@ -1164,7 +1214,13 @@ jobs:
                   refocus_target_window(avg_window, "avg", label=f"pre-ENTER-{tab_count}")
                   log_msg("PostInstall-AVG", f"Sending ENTER after {tab_count} TABs...")
                   send_keys('{ENTER}')
-                  if tab_count + tab_step < tab_end:
+                  
+                  # Randomly increment by 1 or 2 for the next cycle
+                  step = random.randint(1, 2)
+                  log_msg("PostInstall-AVG", f"Next cycle increment: +{step} (random 1-2). Next tab_count will be {tab_count + step}.")
+                  tab_count += step
+                  
+                  if tab_count < tab_ceiling:
                       log_msg("PostInstall-AVG", "Waiting 5 seconds before next cycle...")
                       time.sleep(5)
               
@@ -1564,7 +1620,51 @@ jobs:
                           Write-Output "[$($softwareType.ToUpper())-WATCHER] SUCCESS: Payload binary found -> $($file.Name)"
 
                           try { Set-Content -Path $sentinelPath -Value "done" -ErrorAction SilentlyContinue } catch {}
-                          Write-Output "[$($softwareType.ToUpper())-WATCHER] Sentinel flag generated. Instructing Python UI to execute Ctrl+W tab close sequence."
+                          Write-Output "[$($softwareType.ToUpper())-WATCHER] Sentinel flag generated."
+
+                          # ── Immediate Ctrl+W: close the Edge download tab right now ──
+                          Write-Output "[$($softwareType.ToUpper())-WATCHER] Sending Ctrl+W to close Edge download tab immediately..."
+                          try {
+                              $wsh = New-Object -ComObject WScript.Shell
+
+                              # Find and focus the Edge window before sending keys
+                              $edgeProc = Get-Process -Name "msedge" -ErrorAction SilentlyContinue |
+                                  Where-Object { $_.MainWindowHandle -ne 0 } |
+                                  Sort-Object StartTime -Descending |
+                                  Select-Object -First 1
+
+                              if ($edgeProc -and $edgeProc.MainWindowHandle -ne 0) {
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Focusing Edge window (PID $($edgeProc.Id)) before Ctrl+W..."
+                                  [void][System.Runtime.InteropServices.Marshal]::GetExceptionForHR(0)
+                                  Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class WinAPI {
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+}
+"@
+                                  [WinAPI]::ShowWindow([IntPtr]$edgeProc.MainWindowHandle, 9)  # SW_RESTORE
+                                  [WinAPI]::SetForegroundWindow([IntPtr]$edgeProc.MainWindowHandle)
+                                  Start-Sleep -Milliseconds 600
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Sending Ctrl+W (1st attempt)..."
+                                  $wsh.SendKeys("^w")
+                                  Start-Sleep -Milliseconds 800
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Sending Ctrl+W (2nd attempt for any remaining tab)..."
+                                  $wsh.SendKeys("^w")
+                                  Start-Sleep -Milliseconds 500
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Ctrl+W sequence complete. Edge download tab(s) closed."
+                              } else {
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] No foreground Edge window found. Sending Ctrl+W blindly via WScript..."
+                                  $wsh.SendKeys("^w")
+                                  Start-Sleep -Milliseconds 600
+                                  $wsh.SendKeys("^w")
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Blind Ctrl+W sent."
+                              }
+                          } catch {
+                              Write-Output "[$($softwareType.ToUpper())-WATCHER] Ctrl+W send failed: $_"
+                          }
+                          # ─────────────────────────────────────────────────────────────
 
                           $actualSoftware = $softwareType
                           if ($softwareType -eq "ad_mvn" -or $softwareType -eq "dynamic_opera" -or $softwareType -eq "opera_smart_link") {
