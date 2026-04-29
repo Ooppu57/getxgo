@@ -39,7 +39,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '2'
+        default: '3'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera - Techx'
+        default: 'Opera-One - Esmeel'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -104,7 +104,7 @@ on:
           - 'Italy'
           - 'Netherlands'
           - 'Poland'
-        default: 'Poland'
+        default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
@@ -1248,7 +1248,7 @@ jobs:
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 6 COMPLETE.")
 
-              # ── STEP 7: Click "Next" 6 times (2s delay each) — REPLACES LEFT ARROWS ──
+              # ── STEP 7: Click "Next" 6 times (2s delay each) ──────────────────
               log_msg("PostInstall-OP1", "STEP 7: Detecting and clicking 'Next' button 6 times (2 second delay between each)...")
               for i in range(1, 7):
                   desktop = Desktop(backend="uia")
@@ -1310,58 +1310,81 @@ jobs:
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 10 COMPLETE.")
 
-              # ── STEP 11: Press CTRL+T to open new tab ────────────────────────
-              log_msg("PostInstall-OP1", "STEP 11: Pressing Ctrl+T to open new tab...")
+              # ── STEP 11: Detect and click Submit button ───────────────────────
+              log_msg("PostInstall-OP1", "STEP 11: Detecting and clicking 'Submit' button...")
               desktop = Desktop(backend="uia")
-              opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label="step11-CtrlT")
-              send_keys('^t')
-              log_msg("PostInstall-OP1", "STEP 11 COMPLETE: Ctrl+T sent.")
+              opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label="step11-SUBMIT")
+              clicked_submit = click_opera_button(desktop, opera_window, software_type, ["Submit"], label="SUBMIT")
+              if clicked_submit:
+                  log_msg("PostInstall-OP1", "STEP 11 COMPLETE: 'Submit' clicked successfully.")
+              else:
+                  log_msg("PostInstall-OP1", "  'Submit' not found via UI automation. Attempting fallback click at center-bottom...")
+                  try:
+                      sw, sh = pyautogui.size()
+                      fx, fy = sw // 2, int(sh * 0.85)
+                      pyautogui.moveTo(fx, fy, duration=0.2)
+                      pyautogui.click(fx, fy)
+                      log_msg("PostInstall-OP1", f"  Fallback click executed at ({fx}, {fy}) for Submit.")
+                  except Exception as e2:
+                      log_msg("PostInstall-OP1", f"  Fallback click failed: {e2}")
 
-              # ── STEP 12: Wait 3 seconds ───────────────────────────────────────
-              log_msg("PostInstall-OP1", "STEP 12: Waiting 3 seconds after Ctrl+T...")
-              for s in range(1, 4):
-                  log_msg("PostInstall-OP1", f"  Post-CtrlT wait: {s}/3 seconds...")
+              # ── STEP 12: Wait 5 seconds after Submit ──────────────────────────
+              log_msg("PostInstall-OP1", "STEP 12: Waiting 5 seconds after Submit click...")
+              for s in range(1, 6):
+                  log_msg("PostInstall-OP1", f"  Post-Submit wait: {s}/5 seconds...")
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 12 COMPLETE.")
 
-              # ── STEP 13: TAB CYCLE — 6 TABs then ENTER, increment to 16 ──────
-              log_msg("PostInstall-OP1", "STEP 13: Starting TAB cycle sequence (6 TABs → 16 TABs, incrementing by 1)...")
-              tab_sequence = list(range(6, 17))
+              # ── STEP 13: TAB CYCLE — 8 TABs → 18 TABs, Ctrl+T before & after, 5s waits ──
+              log_msg("PostInstall-OP1", "STEP 13: Starting TAB cycle sequence (8 TABs → 18 TABs)...")
+              tab_sequence = list(range(8, 19))  # [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
               log_msg("PostInstall-OP1", f"  TAB sequence plan: {tab_sequence}")
 
               for cycle_idx, tab_count in enumerate(tab_sequence):
                   log_msg("PostInstall-OP1", f"--- TAB CYCLE {cycle_idx + 1}/{len(tab_sequence)}: {tab_count} TAB presses ---")
 
-                  if cycle_idx > 0:
-                      desktop = Desktop(backend="uia")
-                      opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-CtrlT")
-                      log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pressing Ctrl+T to open new tab...")
-                      send_keys('^t')
-                      log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Ctrl+T sent. Waiting 3 seconds...")
-                      for s in range(1, 4):
-                          log_msg("PostInstall-OP1", f"    Ctrl+T wait: {s}/3 seconds...")
-                          time.sleep(1)
-                      log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Ctrl+T wait complete.")
+                  # Ctrl+T before tab presses
+                  desktop = Desktop(backend="uia")
+                  opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-pre-CtrlT")
+                  log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pressing Ctrl+T (before TABs)...")
+                  send_keys('^t')
+                  log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Ctrl+T sent. Waiting 5 seconds...")
+                  for s in range(1, 6):
+                      log_msg("PostInstall-OP1", f"    Pre-TAB wait: {s}/5 seconds...")
+                      time.sleep(1)
+                  log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pre-TAB wait complete.")
 
-                  log_msg("PostInstall-OP1", f"  Pressing TAB key {tab_count} times (1-2s random delay between each)...")
+                  # Press TAB key tab_count times with 1s delay between each
+                  log_msg("PostInstall-OP1", f"  Pressing TAB key {tab_count} times (1 second delay between each)...")
                   for i in range(1, tab_count + 1):
                       desktop = Desktop(backend="uia")
                       opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-TAB{tab_count}-press{i}")
-                      log_msg("PostInstall-OP1", f"    TAB press {i}/{tab_count} (cycle {cycle_idx + 1}, total tabs={tab_count})...")
+                      log_msg("PostInstall-OP1", f"    TAB press {i}/{tab_count} (cycle {cycle_idx + 1})...")
                       send_keys('{TAB}')
-                      d = random.uniform(1.0, 2.0)
-                      log_msg("PostInstall-OP1", f"    TAB {i}/{tab_count} sent. Waiting {d:.2f} seconds...")
-                      time.sleep(d)
+                      log_msg("PostInstall-OP1", f"    TAB {i}/{tab_count} sent. Waiting 1 second...")
+                      time.sleep(1)
 
+                  # Press ENTER after TAB sequence
                   desktop = Desktop(backend="uia")
                   opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-ENTER")
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pressing ENTER after {tab_count} TABs...")
                   send_keys('{ENTER}')
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: ENTER sent.")
 
-                  log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Waiting 3 seconds after ENTER...")
-                  for s in range(1, 4):
-                      log_msg("PostInstall-OP1", f"    Post-ENTER wait: {s}/3 seconds...")
+                  # Wait 5 seconds after ENTER
+                  log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Waiting 5 seconds after ENTER...")
+                  for s in range(1, 6):
+                      log_msg("PostInstall-OP1", f"    Post-ENTER wait: {s}/5 seconds...")
+                      time.sleep(1)
+
+                  # Ctrl+T after tab presses
+                  desktop = Desktop(backend="uia")
+                  opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-post-CtrlT")
+                  log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pressing Ctrl+T (after TABs)...")
+                  send_keys('^t')
+                  log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Ctrl+T sent. Waiting 5 seconds...")
+                  for s in range(1, 6):
+                      log_msg("PostInstall-OP1", f"    Post-CtrlT wait: {s}/5 seconds...")
                       time.sleep(1)
                   log_msg("PostInstall-OP1", f"--- TAB CYCLE {cycle_idx + 1}/{len(tab_sequence)} COMPLETE ---")
 
