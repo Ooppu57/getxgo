@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '5'
+        default: '2'
       num_clicks:
         description: 'Number of Clicks'
         required: true
@@ -39,7 +39,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '1'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -68,12 +68,12 @@ on:
         description: 'Manual Software URL'
         required: false
         type: string
-        default: ''
+        default: 'https://singingfiles.com/show.php?l=0&u=1784420&id=74419&tracking_id=OPOxPL'
       run_manual_link:
         description: 'Run manual link'
         required: true
         type: boolean
-        default: false
+        default: true
       scrapeops_api_key:
         description: 'ScrapeOps / FloppyData API Key / Manual Proxies'
         required: false
