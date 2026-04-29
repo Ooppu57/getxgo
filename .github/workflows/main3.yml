@@ -39,7 +39,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '2'
+        default: '3'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'AVG - F.Ahmad'
+        default: 'OperaGX - B4Books'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -78,7 +78,7 @@ on:
         description: 'ScrapeOps / FloppyData API Key / Manual Proxies'
         required: false
         type: string
-        default: '578394ea-17bb-495a-8b89-7b7b438c666d'
+        default: '1IFG1IFjMPZi4DcrQ16KF2ku_fbxeCXI'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -104,12 +104,12 @@ on:
           - 'Italy'
           - 'Netherlands'
           - 'Poland'
-        default: 'Poland'
+        default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: true
+        default: false
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
