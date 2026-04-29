@@ -16,7 +16,7 @@ on:
         description: 'Getscreen.me Account Email'
         required: true
         type: string
-        default: 'kuko@ccmail.online'
+        default: 'techx@highmail.site'
       num_devices:
         description: 'Number of Devices to Spawn'
         required: true
@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera-One - Harrari'
+        default: 'AVG - TechxTrader'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
