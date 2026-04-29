@@ -1626,36 +1626,23 @@ jobs:
                           Write-Output "[$($softwareType.ToUpper())-WATCHER] Sending Ctrl+W to close Edge download tab immediately..."
                           try {
                               $wsh = New-Object -ComObject WScript.Shell
-
-                              # Find and focus the Edge window before sending keys
                               $edgeProc = Get-Process -Name "msedge" -ErrorAction SilentlyContinue |
                                   Where-Object { $_.MainWindowHandle -ne 0 } |
                                   Sort-Object StartTime -Descending |
                                   Select-Object -First 1
-
                               if ($edgeProc -and $edgeProc.MainWindowHandle -ne 0) {
-                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Focusing Edge window (PID $($edgeProc.Id)) before Ctrl+W..."
-                                  [void][System.Runtime.InteropServices.Marshal]::GetExceptionForHR(0)
-                                  Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-public class WinAPI {
-    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-}
-"@
-                                  [WinAPI]::ShowWindow([IntPtr]$edgeProc.MainWindowHandle, 9)  # SW_RESTORE
-                                  [WinAPI]::SetForegroundWindow([IntPtr]$edgeProc.MainWindowHandle)
-                                  Start-Sleep -Milliseconds 600
-                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Sending Ctrl+W (1st attempt)..."
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Focusing Edge (PID $($edgeProc.Id)) via AppActivate before Ctrl+W..."
+                                  $wsh.AppActivate($edgeProc.Id)
+                                  Start-Sleep -Milliseconds 700
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Sending Ctrl+W (1st)..."
                                   $wsh.SendKeys("^w")
                                   Start-Sleep -Milliseconds 800
-                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Sending Ctrl+W (2nd attempt for any remaining tab)..."
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Sending Ctrl+W (2nd)..."
                                   $wsh.SendKeys("^w")
                                   Start-Sleep -Milliseconds 500
                                   Write-Output "[$($softwareType.ToUpper())-WATCHER] Ctrl+W sequence complete. Edge download tab(s) closed."
                               } else {
-                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] No foreground Edge window found. Sending Ctrl+W blindly via WScript..."
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] No Edge window found - sending Ctrl+W blindly..."
                                   $wsh.SendKeys("^w")
                                   Start-Sleep -Milliseconds 600
                                   $wsh.SendKeys("^w")
