@@ -729,9 +729,116 @@ jobs:
               "GET READY TO PLAY", "ready to install",
           ]
 
+          # Window titles that are known interference sources and should be dismissed
+          # AVG tends to trigger Windows Settings; Opera/others may trigger terminal windows
+          INTERFERENCE_TITLES = [
+              "Settings",
+              "Windows Settings",
+              "Default apps",
+              "System Settings",
+              "Choose an app",
+              "How do you want to open",
+              "Open with",
+              "Windows PowerShell",
+              "Administrator: Windows PowerShell",
+              "Command Prompt",
+              "Administrator: Command Prompt",
+              "cmd.exe",
+              "PowerShell",
+              "Console Host",
+              "Windows Terminal",
+          ]
+
+          # Partial substring matches for interference windows (case-insensitive)
+          INTERFERENCE_SUBSTRINGS = [
+              "default apps",
+              "choose a default",
+              "set as default",
+              "open with",
+              "how do you want to open",
+          ]
+
           def _is_download_done_window(text):
               t = text.lower()
               return any(frag.lower() in t for frag in DOWNLOAD_DONE_TITLES)
+
+          def _is_interference_window(text):
+              """Check if a window title matches known interference sources."""
+              if not text:
+                  return False
+              for exact in INTERFERENCE_TITLES:
+                  if text.strip().lower() == exact.strip().lower():
+                      return True
+              tl = text.lower()
+              for sub in INTERFERENCE_SUBSTRINGS:
+                  if sub in tl:
+                      return True
+              return False
+
+          def dismiss_interference_windows(desktop, software_type, label=""):
+              """
+              Close/minimize any window that is stealing focus from the target app.
+              - For AVG: aggressively closes Settings-type windows.
+              - For Opera variants: closes terminal/console windows.
+              - Always runs before any TAB/ENTER sequence to ensure correct focus target.
+              Returns True if any interference window was found and dismissed.
+              """
+              dismissed_any = False
+              try:
+                  all_windows = desktop.windows(visible_only=True)
+              except Exception:
+                  return False
+
+              for window in all_windows:
+                  try:
+                      wt = window.window_text()
+                      if not wt:
+                          continue
+                      if not _is_interference_window(wt):
+                          continue
+
+                      log_msg("WinGuard", f"Interference window detected: '{wt}' [{label}] | Software: {software_type}")
+
+                      closed = False
+
+                      # First try: send Alt+F4 to close the window
+                      try:
+                          window.set_focus()
+                          time.sleep(0.3)
+                          send_keys('%{F4}')
+                          time.sleep(0.5)
+                          closed = True
+                          log_msg("WinGuard", f"Closed '{wt}' via Alt+F4.")
+                      except Exception as e:
+                          log_msg("WinGuard", f"Alt+F4 failed for '{wt}': {e}")
+
+                      # Second try: call close() directly
+                      if not closed:
+                          try:
+                              window.close()
+                              time.sleep(0.3)
+                              closed = True
+                              log_msg("WinGuard", f"Closed '{wt}' via window.close().")
+                          except Exception as e:
+                              log_msg("WinGuard", f"window.close() failed for '{wt}': {e}")
+
+                      # Third try: minimize so it stops stealing focus
+                      if not closed:
+                          try:
+                              window.minimize()
+                              time.sleep(0.3)
+                              log_msg("WinGuard", f"Minimized '{wt}' as fallback.")
+                              closed = True
+                          except Exception as e:
+                              log_msg("WinGuard", f"minimize() failed for '{wt}': {e}")
+
+                      if closed:
+                          dismissed_any = True
+
+                  except Exception:
+                      pass
+
+              return dismissed_any
 
           def close_download_windows(desktop, attempt_label=""):
               closed_any = False
@@ -798,11 +905,40 @@ jobs:
                   except Exception: pass
               return closed_any
 
+          def refocus_target_window(target_window, software_type, label=""):
+              """
+              Ensure the correct target window (AVG/Opera/Edge) has focus before
+              sending keyboard input. Dismisses interference windows first.
+              """
+              desktop = Desktop(backend="uia")
+              
+              # Step 1: dismiss any interference windows
+              found_interference = dismiss_interference_windows(desktop, software_type, label=label)
+              if found_interference:
+                  log_msg("WinGuard", f"Interference cleared [{label}]. Re-focusing target window...")
+                  time.sleep(0.5)
+
+              # Step 2: re-focus the target window
+              if target_window:
+                  try:
+                      target_window.set_focus()
+                      time.sleep(0.3)
+                      log_msg("WinGuard", f"Target window re-focused [{label}].")
+                      return True
+                  except Exception as e:
+                      log_msg("WinGuard", f"Re-focus failed [{label}]: {e}")
+              return False
+
           def opera_one_post_install_sequence(opera_window):
               log_msg("PostInstall-OP1", "=== Opera One Post-Install Sequence Starting ===")
               
+              desktop = Desktop(backend="uia")
+              
               if opera_window:
                   try:
+                      # Dismiss any interference before starting
+                      dismiss_interference_windows(desktop, "opera_one", label="pre-sequence")
+                      time.sleep(0.3)
                       opera_window.set_focus()
                       opera_window.maximize()
                       time.sleep(0.5)
@@ -828,6 +964,8 @@ jobs:
               
               log_msg("PostInstall-OP1", "Pressing LEFT arrow key 8 times (1-2s delay each)...")
               for i in range(1, 9):
+                  # Dismiss interference and re-focus before each keypress
+                  refocus_target_window(opera_window, "opera_one", label=f"LEFT-{i}")
                   log_msg("PostInstall-OP1", f"  Sending LEFT arrow ({i}/8)...")
                   send_keys('{LEFT}')
                   d = random.uniform(1.0, 2.0)
@@ -835,12 +973,14 @@ jobs:
                   time.sleep(d)
               log_msg("PostInstall-OP1", "LEFT arrow sequence complete.")
               
+              refocus_target_window(opera_window, "opera_one", label="pre-ENTER")
               log_msg("PostInstall-OP1", "Sending ENTER key...")
               send_keys('{ENTER}')
               d = random.uniform(1.0, 2.0)
               log_msg("PostInstall-OP1", f"Waiting {d:.2f} seconds after ENTER...")
               time.sleep(d)
               
+              refocus_target_window(opera_window, "opera_one", label="pre-CtrlT")
               log_msg("PostInstall-OP1", "Sending Ctrl+T to open new tab...")
               send_keys('^t')
               d = random.uniform(2.0, 3.0)
@@ -851,6 +991,8 @@ jobs:
                   if tab_count > 5:
                       log_msg("PostInstall-OP1", f"Clicking center screen before TAB {tab_count} cycle...")
                       try:
+                          # Dismiss interference before center click
+                          dismiss_interference_windows(Desktop(backend="uia"), "opera_one", label=f"pre-click-TAB{tab_count}")
                           pyautogui.click(cx, cy)
                           log_msg("PostInstall-OP1", "Center click executed.")
                       except Exception as e:
@@ -861,12 +1003,14 @@ jobs:
                   
                   log_msg("PostInstall-OP1", f"Pressing TAB key {tab_count} times (1-2s delay each)...")
                   for i in range(1, tab_count + 1):
+                      refocus_target_window(opera_window, "opera_one", label=f"TAB{tab_count}-press{i}")
                       log_msg("PostInstall-OP1", f"  Sending TAB ({i}/{tab_count})...")
                       send_keys('{TAB}')
                       d = random.uniform(1.0, 2.0)
                       log_msg("PostInstall-OP1", f"  Waiting {d:.2f} seconds...")
                       time.sleep(d)
                   
+                  refocus_target_window(opera_window, "opera_one", label=f"post-TAB{tab_count}-ENTER")
                   log_msg("PostInstall-OP1", f"Sending ENTER after {tab_count} TABs...")
                   send_keys('{ENTER}')
                   d = random.uniform(2.0, 3.0)
@@ -878,8 +1022,13 @@ jobs:
           def opera_gx_post_install_sequence(opera_window):
               log_msg("PostInstall-OPGX", "=== Opera GX Post-Install Sequence Starting ===")
               
+              desktop = Desktop(backend="uia")
+              
               if opera_window:
                   try:
+                      # Dismiss any interference before starting
+                      dismiss_interference_windows(desktop, "opera_gx", label="pre-sequence")
+                      time.sleep(0.3)
                       opera_window.set_focus()
                       opera_window.maximize()
                       time.sleep(0.5)
@@ -903,6 +1052,7 @@ jobs:
               
               log_msg("PostInstall-OPGX", "Pressing TAB key 4 times (1-2s delay each)...")
               for i in range(1, 5):
+                  refocus_target_window(opera_window, "opera_gx", label=f"pre-TAB4-{i}")
                   log_msg("PostInstall-OPGX", f"  Sending TAB ({i}/4)...")
                   send_keys('{TAB}')
                   d = random.uniform(1.0, 2.0)
@@ -911,6 +1061,7 @@ jobs:
               
               log_msg("PostInstall-OPGX", "Pressing ENTER key 8 times (1-2s delay each)...")
               for i in range(1, 9):
+                  refocus_target_window(opera_window, "opera_gx", label=f"ENTER8-{i}")
                   log_msg("PostInstall-OPGX", f"  Sending ENTER ({i}/8)...")
                   send_keys('{ENTER}')
                   d = random.uniform(1.0, 2.0)
@@ -923,26 +1074,31 @@ jobs:
               
               log_msg("PostInstall-OPGX", "Pressing TAB key 6 times (1-2s delay each)...")
               for i in range(1, 7):
+                  refocus_target_window(opera_window, "opera_gx", label=f"TAB6-{i}")
                   log_msg("PostInstall-OPGX", f"  Sending TAB ({i}/6)...")
                   send_keys('{TAB}')
                   d = random.uniform(1.0, 2.0)
                   log_msg("PostInstall-OPGX", f"  Waiting {d:.2f} seconds...")
                   time.sleep(d)
+              refocus_target_window(opera_window, "opera_gx", label="post-TAB6-ENTER")
               log_msg("PostInstall-OPGX", "Sending ENTER...")
               send_keys('{ENTER}')
               log_msg("PostInstall-OPGX", "Waiting 5 seconds...")
               time.sleep(5)
               
               for tab_count in range(7, 17):
+                  refocus_target_window(opera_window, "opera_gx", label=f"pre-CtrlT-{tab_count}")
                   log_msg("PostInstall-OPGX", f"Sending Ctrl+T for cycle TAB {tab_count}...")
                   send_keys('^t')
                   log_msg("PostInstall-OPGX", f"Pressing TAB key {tab_count} times (1-2s delay each)...")
                   for i in range(1, tab_count + 1):
+                      refocus_target_window(opera_window, "opera_gx", label=f"TAB{tab_count}-{i}")
                       log_msg("PostInstall-OPGX", f"  Sending TAB ({i}/{tab_count})...")
                       send_keys('{TAB}')
                       d = random.uniform(1.0, 2.0)
                       log_msg("PostInstall-OPGX", f"  Waiting {d:.2f} seconds...")
                       time.sleep(d)
+                  refocus_target_window(opera_window, "opera_gx", label=f"post-TAB{tab_count}-ENTER")
                   log_msg("PostInstall-OPGX", f"Sending ENTER after {tab_count} TABs...")
                   send_keys('{ENTER}')
                   log_msg("PostInstall-OPGX", "Waiting 5 seconds...")
@@ -953,8 +1109,13 @@ jobs:
           def avg_post_install_sequence(avg_window):
               log_msg("PostInstall-AVG", "=== AVG Post-Install Sequence Starting ===")
               
+              desktop = Desktop(backend="uia")
+              
               if avg_window:
                   try:
+                      # Aggressively dismiss interference windows before starting (Settings is common for AVG)
+                      dismiss_interference_windows(desktop, "avg", label="pre-sequence")
+                      time.sleep(0.5)
                       avg_window.set_focus()
                       avg_window.maximize()
                       time.sleep(0.5)
@@ -974,20 +1135,36 @@ jobs:
               
               log_msg("PostInstall-AVG", "Waiting 5 seconds...")
               time.sleep(5)
-              
-              for tab_count in range(6, 17):
+
+              # AVG tab cycles: start at 6, increment by 2 each cycle (6, 8, 10, 12, 14, 16)
+              # This is a change from the original +1 increment to +2 increment per cycle
+              tab_start = 6
+              tab_end = 17   # exclusive upper bound (last cycle = 16 tabs)
+              tab_step = 2   # increment by 2 tabs per cycle instead of 1
+
+              for tab_count in range(tab_start, tab_end, tab_step):
+                  log_msg("PostInstall-AVG", f"--- Cycle: {tab_count} TAB presses ---")
+                  
+                  # Dismiss interference and re-focus AVG window before Ctrl+T
+                  refocus_target_window(avg_window, "avg", label=f"pre-CtrlT-{tab_count}")
                   log_msg("PostInstall-AVG", f"Sending Ctrl+T for cycle TAB {tab_count}...")
                   send_keys('^t')
+                  
                   log_msg("PostInstall-AVG", f"Pressing TAB key {tab_count} times (1-2s delay each)...")
                   for i in range(1, tab_count + 1):
+                      # Before every TAB keypress: dismiss interference windows and re-focus
+                      refocus_target_window(avg_window, "avg", label=f"TAB{tab_count}-press{i}")
                       log_msg("PostInstall-AVG", f"  Sending TAB ({i}/{tab_count})...")
                       send_keys('{TAB}')
                       d = random.uniform(1.0, 2.0)
                       log_msg("PostInstall-AVG", f"  Waiting {d:.2f} seconds...")
                       time.sleep(d)
+                  
+                  # Dismiss interference and re-focus before ENTER
+                  refocus_target_window(avg_window, "avg", label=f"pre-ENTER-{tab_count}")
                   log_msg("PostInstall-AVG", f"Sending ENTER after {tab_count} TABs...")
                   send_keys('{ENTER}')
-                  if tab_count < 16:
+                  if tab_count + tab_step < tab_end:
                       log_msg("PostInstall-AVG", "Waiting 5 seconds before next cycle...")
                       time.sleep(5)
               
