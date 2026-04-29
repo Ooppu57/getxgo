@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - B4Books'
+        default: 'AVG - TechxTrader'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
