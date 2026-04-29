@@ -27,7 +27,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '2'
+        default: '5'
       num_clicks:
         description: 'Number of Clicks'
         required: true
@@ -39,7 +39,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '0'
+        default: '3'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera - Fatradez'
+        default: 'Opera-One - Esmeel'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -104,12 +104,12 @@ on:
           - 'Italy'
           - 'Netherlands'
           - 'Poland'
-        default: 'Poland'
+        default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: true
+        default: false
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
@@ -1131,6 +1131,65 @@ jobs:
               result = force_maximize_and_focus_target(desktop, target_window, software_type, label=label)
               return result if result else target_window
 
+          def click_opera_button(desktop, opera_window, software_type, button_names, label=""):
+              """Robustly find and click a button in the Opera window by name. Falls back to False if not found."""
+              try:
+                  target = opera_window
+                  if target is None or not target.is_visible():
+                      for w in desktop.windows(visible_only=True):
+                          wt = w.window_text()
+                          if wt and _is_target_software_window(wt, software_type):
+                              target = w
+                              break
+                  if not target:
+                      log_msg("ButtonClick", f"[{label}] Target Opera window not found.")
+                      return False
+
+                  target.set_focus()
+                  time.sleep(0.3)
+
+                  # Strategy 1: Exact title match via descendants filter
+                  for name in button_names:
+                      btns = target.descendants(control_type="Button", title=name)
+                      if btns:
+                          try:
+                              btns[0].click_input()
+                              log_msg("ButtonClick", f"[{label}] Clicked '{name}' via exact title match.")
+                              return True
+                          except Exception as e:
+                              log_msg("ButtonClick", f"[{label}] click_input on '{name}' failed: {e}")
+
+                  # Strategy 2: Partial case-insensitive match across all buttons
+                  for btn in target.descendants(control_type="Button"):
+                      try:
+                          txt = btn.window_text()
+                          if txt:
+                              for name in button_names:
+                                  if name.lower() in txt.lower():
+                                      btn.click_input()
+                                      log_msg("ButtonClick", f"[{label}] Clicked '{txt}' via partial match for '{name}'.")
+                                      return True
+                      except:
+                          continue
+
+                  # Strategy 3: Generic descendant text exact match
+                  for el in target.descendants():
+                      try:
+                          txt = el.window_text()
+                          if txt:
+                              for name in button_names:
+                                  if name.lower() == txt.strip().lower():
+                                      el.click_input()
+                                      log_msg("ButtonClick", f"[{label}] Clicked '{txt}' via generic descendant match.")
+                                      return True
+                      except:
+                          continue
+
+                  return False
+              except Exception as e:
+                  log_msg("ButtonClick", f"[{label}] Exception during button click: {e}")
+                  return False
+
           # ══════════════════════════════════════════════════════════════════════
           # OPERA ONE POST-INSTALL SEQUENCE (FULLY REWRITTEN)
           # ══════════════════════════════════════════════════════════════════════
@@ -1189,21 +1248,51 @@ jobs:
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 6 COMPLETE.")
 
-              # ── STEP 7: Press LEFT arrow 8 times with 2s delay each ───────────
-              log_msg("PostInstall-OP1", "STEP 7: Pressing LEFT arrow key 8 times (2 second delay between each)...")
-              for i in range(1, 9):
+              # ── STEP 7: Click "Next" 6 times (2s delay each) — REPLACES LEFT ARROWS ──
+              log_msg("PostInstall-OP1", "STEP 7: Detecting and clicking 'Next' button 6 times (2 second delay between each)...")
+              for i in range(1, 7):
                   desktop = Desktop(backend="uia")
-                  opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"step7-LEFT-{i}")
-                  log_msg("PostInstall-OP1", f"  LEFT arrow press {i}/8...")
-                  send_keys('{LEFT}')
-                  log_msg("PostInstall-OP1", f"  LEFT {i}/8 sent. Waiting 2 seconds...")
+                  opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"step7-NEXT-{i}")
+                  log_msg("PostInstall-OP1", f"  Next click attempt {i}/6...")
+                  clicked = click_opera_button(desktop, opera_window, software_type, ["Next"], label=f"NEXT-{i}")
+                  if clicked:
+                      log_msg("PostInstall-OP1", f"  Next {i}/6 clicked successfully.")
+                  else:
+                      log_msg("PostInstall-OP1", f"  Next {i}/6 not found via UI automation. Attempting fallback click at bottom-right...")
+                      try:
+                          sw, sh = pyautogui.size()
+                          fx, fy = int(sw * 0.90), int(sh * 0.90)
+                          pyautogui.moveTo(fx, fy, duration=0.2)
+                          pyautogui.click(fx, fy)
+                          log_msg("PostInstall-OP1", f"  Fallback click executed at ({fx}, {fy}).")
+                      except Exception as e2:
+                          log_msg("PostInstall-OP1", f"  Fallback click failed: {e2}")
+                  log_msg("PostInstall-OP1", f"  Waiting 2 seconds after Next click {i}...")
                   time.sleep(2)
-              log_msg("PostInstall-OP1", "STEP 7 COMPLETE: All 8 LEFT arrow presses done.")
+              log_msg("PostInstall-OP1", "STEP 7 COMPLETE: All 6 Next clicks attempted.")
+
+              # ── STEP 7b: Click "Done" (appears in same location after 6th Next) ──
+              log_msg("PostInstall-OP1", "STEP 7b: Detecting and clicking 'Done' button...")
+              desktop = Desktop(backend="uia")
+              opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label="step7b-DONE")
+              clicked_done = click_opera_button(desktop, opera_window, software_type, ["Done", "Finish"], label="DONE")
+              if clicked_done:
+                  log_msg("PostInstall-OP1", "STEP 7b COMPLETE: 'Done' clicked successfully.")
+              else:
+                  log_msg("PostInstall-OP1", "  'Done' not found via UI automation. Attempting fallback click at bottom-right...")
+                  try:
+                      sw, sh = pyautogui.size()
+                      fx, fy = int(sw * 0.90), int(sh * 0.90)
+                      pyautogui.moveTo(fx, fy, duration=0.2)
+                      pyautogui.click(fx, fy)
+                      log_msg("PostInstall-OP1", f"  Fallback click executed at ({fx}, {fy}) for Done.")
+                  except Exception as e2:
+                      log_msg("PostInstall-OP1", f"  Fallback click failed: {e2}")
 
               # ── STEP 8: Wait 5 seconds ────────────────────────────────────────
-              log_msg("PostInstall-OP1", "STEP 8: Waiting 5 seconds after LEFT arrow sequence...")
+              log_msg("PostInstall-OP1", "STEP 8: Waiting 5 seconds after Done click...")
               for s in range(1, 6):
-                  log_msg("PostInstall-OP1", f"  Post-LEFT wait: {s}/5 seconds...")
+                  log_msg("PostInstall-OP1", f"  Post-Done wait: {s}/5 seconds...")
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 8 COMPLETE.")
 
@@ -1236,17 +1325,13 @@ jobs:
               log_msg("PostInstall-OP1", "STEP 12 COMPLETE.")
 
               # ── STEP 13: TAB CYCLE — 6 TABs then ENTER, increment to 16 ──────
-              # Sequence: 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
-              # Between each cycle: Ctrl+T (new tab) → wait 3s → TABs → ENTER → wait 3s
-              # The FIRST cycle (6 TABs) uses the tab already opened in STEP 11
               log_msg("PostInstall-OP1", "STEP 13: Starting TAB cycle sequence (6 TABs → 16 TABs, incrementing by 1)...")
-              tab_sequence = list(range(6, 17))  # [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+              tab_sequence = list(range(6, 17))
               log_msg("PostInstall-OP1", f"  TAB sequence plan: {tab_sequence}")
 
               for cycle_idx, tab_count in enumerate(tab_sequence):
                   log_msg("PostInstall-OP1", f"--- TAB CYCLE {cycle_idx + 1}/{len(tab_sequence)}: {tab_count} TAB presses ---")
 
-                  # For cycles AFTER the first, open a new tab with Ctrl+T first
                   if cycle_idx > 0:
                       desktop = Desktop(backend="uia")
                       opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-CtrlT")
@@ -1258,7 +1343,6 @@ jobs:
                           time.sleep(1)
                       log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Ctrl+T wait complete.")
 
-                  # Press TAB key tab_count times with 1-2s random delay between each
                   log_msg("PostInstall-OP1", f"  Pressing TAB key {tab_count} times (1-2s random delay between each)...")
                   for i in range(1, tab_count + 1):
                       desktop = Desktop(backend="uia")
@@ -1269,14 +1353,12 @@ jobs:
                       log_msg("PostInstall-OP1", f"    TAB {i}/{tab_count} sent. Waiting {d:.2f} seconds...")
                       time.sleep(d)
 
-                  # Press ENTER after TAB sequence
                   desktop = Desktop(backend="uia")
                   opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-ENTER")
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pressing ENTER after {tab_count} TABs...")
                   send_keys('{ENTER}')
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: ENTER sent.")
 
-                  # Wait 3 seconds after ENTER (for all cycles including the last)
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Waiting 3 seconds after ENTER...")
                   for s in range(1, 4):
                       log_msg("PostInstall-OP1", f"    Post-ENTER wait: {s}/3 seconds...")
