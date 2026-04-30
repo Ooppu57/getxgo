@@ -18,7 +18,7 @@ on:
         description: 'Getscreen.me Account Email'
         required: true
         type: string
-        default: 'techx@highmail.site'
+        default: 'techx@justzeus.com'
       num_devices:
         description: 'Number of Devices to Spawn'
         required: true
@@ -29,9 +29,9 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '5'
+        default: '1'
       num_clicks:
-        description: 'Number of Clicks (0 = all install)'
+        description: 'Number of Click-Only Devices (rest will Install)'
         required: true
         type: choice
         options:
@@ -41,12 +41,13 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '2'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
         type: choice
         options:
+          - 'Opera - B4Books'
           - 'Opera - Techx'
           - 'Opera - Fatradez'
           - 'Opera - James'
@@ -61,24 +62,24 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera - Fatradez'
-      manual_software_url:
+        default: 'Opera - B4Books'
+      run_manual_url:
+        description: 'Run Manual URL (Bypass software choice)'
+        required: true
+        type: boolean
+        default: false
+      manual_url:
         description: 'Manual Software URL'
         required: false
         type: string
         default: ''
-      run_manual_link:
-        description: 'Run manual link'
-        required: true
-        type: boolean
-        default: false
       scrapeops_api_key:
-        description: 'ScrapeOps / FloppyData API Key / Manual Proxies'
+        description: 'ScrapeOps API Key / FloppyData API Key / Manual Proxies'
         required: false
         type: string
-        default: '1IFG1IFjMPZi4DcrQ16KF2ku_fbxeCXI'
-      use_without_proxy:
-        description: 'Run without proxy'
+        default: 'fd6d8b71-953d-4c71-9060-cb7bd4b7261e'
+      run_without_proxy:
+        description: 'Run without proxy (Bypass all proxies)'
         required: true
         type: boolean
         default: false
@@ -102,7 +103,7 @@ on:
           - 'Italy'
           - 'Netherlands'
           - 'Poland'
-        default: 'Australia'
+        default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
@@ -135,15 +136,15 @@ jobs:
           NUM_CLICKS: ${{ inputs.num_clicks }}
           OS_VERSION: ${{ inputs.os_version }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
-          MANUAL_URL: ${{ inputs.manual_software_url }}
-          RUN_MANUAL: ${{ inputs.run_manual_link }}
+          RUN_MANUAL: ${{ inputs.run_manual_url }}
+          MANUAL_URL: ${{ inputs.manual_url }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
-          WITHOUT_PROXY: ${{ inputs.use_without_proxy }}
+          RUN_WITHOUT_PROXY: ${{ inputs.run_without_proxy }}
           COUNTRY: ${{ inputs.proxy_country }}
           MOBILE: ${{ inputs.mobile_proxies }}
           STICKY: ${{ inputs.sticky_sessions }}
         run: |
-          import os, json, uuid, random, re, sys, subprocess, time
+          import os, json, uuid, re, sys, subprocess, time, random
 
           print("========== INITIALIZING MATRIX GENERATION ==========")
 
@@ -153,24 +154,26 @@ jobs:
               subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "--quiet"])
               import requests
 
-          email = os.environ.get("EMAIL", "").strip()
-          num_devices = int(os.environ.get("NUM_DEVICES", "1"))
+          email          = os.environ.get("EMAIL", "").strip()
+          num_devices    = int(os.environ.get("NUM_DEVICES", "1"))
           num_clicks_raw = int(os.environ.get("NUM_CLICKS", "0"))
-          os_version = os.environ.get("OS_VERSION", "macos-14")
+          num_clicks     = min(num_clicks_raw, num_devices)
+          num_installs   = num_devices - num_clicks
+          os_version     = os.environ.get("OS_VERSION", "macos-14")
 
-          proxy_input = os.environ.get("API_KEY", "").strip()
-          without_proxy = os.environ.get("WITHOUT_PROXY", "false").lower() == "true"
+          proxy_input      = os.environ.get("API_KEY", "").strip()
+          run_without_proxy = os.environ.get("RUN_WITHOUT_PROXY", "false").lower() == "true"
 
-          is_manual_proxy = False
+          is_manual_proxy      = False
           manual_proxy_strings = []
-          scrapeops_key = ""
-          floppy_key = ""
+          scrapeops_key        = ""
+          floppy_key           = ""
 
           SCRAPEOPS_KEY_RE = re.compile(
               r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
           FLOPPY_KEY_RE = re.compile(r'^[A-Za-z0-9_]{30,80}$')
 
-          if without_proxy:
+          if run_without_proxy:
               print("[Proxy] 'Run without proxy' checked. Disabling proxy.")
               proxy_input = ""
           elif not proxy_input or proxy_input.lower() in ["none", "null", "false", "blank", "empty", "''", '""']:
@@ -185,9 +188,8 @@ jobs:
                       continue
                   if ('://' in item) or ('@' in item) or (item.count(':') >= 2 and len(item) > 10):
                       proxy_candidates.append(item)
-
               if len(proxy_candidates) >= 1:
-                  is_manual_proxy = True
+                  is_manual_proxy      = True
                   manual_proxy_strings = proxy_candidates
                   print(f"[Proxy] Detected MANUAL PROXY mode with {len(manual_proxy_strings)} entries.")
               elif SCRAPEOPS_KEY_RE.match(proxy_input):
@@ -200,68 +202,69 @@ jobs:
                   scrapeops_key = proxy_input
                   print("[Proxy] Could not determine key type — treating as ScrapeOps.")
 
+          country_map = {
+              "USA": "us", "UK": "uk", "Canada": "ca",
+              "Australia": "au", "Germany": "de", "France": "fr",
+              "Brazil": "br", "Mexico": "mx", "Spain": "es",
+              "Vietnam": "vn", "Switzerland": "ch", "Indonesia": "id",
+              "Italy": "it", "Netherlands": "nl", "Poland": "pl"
+          }
+          country_name_to_code = {
+              'united states': 'us', 'united kingdom': 'uk', 'canada': 'ca',
+              'australia': 'au', 'germany': 'de', 'france': 'fr',
+              'brazil': 'br', 'mexico': 'mx', 'spain': 'es',
+              'vietnam': 'vn', 'switzerland': 'ch', 'indonesia': 'id',
+              'italy': 'it', 'netherlands': 'nl', 'poland': 'pl',
+              'usa': 'us', 'uk': 'uk',
+          }
+
           def parse_proxy(proxy_str):
               original = proxy_str.strip()
               if not original:
                   return None
-
               protocol = 'http'
               rest = original
-
               if '://' in rest:
                   protocol, rest = rest.split('://', 1)
                   if protocol.lower() == 'geolocation':
                       protocol = 'http'
-
               floppy_match = re.match(r'^([^:]+):([^@]+)@([^:]+):(\d+):(.+)$', rest)
               if floppy_match:
                   user, pwd, host, port, country_extra = floppy_match.groups()
                   country = country_extra.split(' - ')[0].strip()
-                  return {
-                      'original': original, 'protocol': protocol,
-                      'username': user, 'password': pwd,
-                      'host': host, 'port': int(port),
-                      'server': f"{host}:{port}",
-                      'country_name': country, 'country_code': None,
-                      'url': f"http://{user}:{pwd}@{host}:{port}"
-                  }
-
+                  return {'original': original, 'protocol': protocol,
+                          'username': user, 'password': pwd,
+                          'host': host, 'port': int(port),
+                          'server': f"{host}:{port}", 'country_name': country,
+                          'country_code': None,
+                          'url': f"http://{user}:{pwd}@{host}:{port}"}
               std_match = re.match(r'^([^:]+):([^@]+)@([^:]+):(\d+)$', rest)
               if std_match:
                   user, pwd, host, port = std_match.groups()
-                  return {
-                      'original': original, 'protocol': protocol,
-                      'username': user, 'password': pwd,
-                      'host': host, 'port': int(port),
-                      'server': f"{host}:{port}",
-                      'country_name': None, 'country_code': None,
-                      'url': f"{protocol}://{user}:{pwd}@{host}:{port}"
-                  }
-
+                  return {'original': original, 'protocol': protocol,
+                          'username': user, 'password': pwd,
+                          'host': host, 'port': int(port),
+                          'server': f"{host}:{port}", 'country_name': None,
+                          'country_code': None,
+                          'url': f"{protocol}://{user}:{pwd}@{host}:{port}"}
               alt_match = re.match(r'^([^:]+):(\d+):([^:]+):(.+)$', rest)
               if alt_match:
                   host, port, user, pwd = alt_match.groups()
-                  return {
-                      'original': original, 'protocol': protocol,
-                      'username': user, 'password': pwd,
-                      'host': host, 'port': int(port),
-                      'server': f"{host}:{port}",
-                      'country_name': None, 'country_code': None,
-                      'url': f"{protocol}://{user}:{pwd}@{host}:{port}"
-                  }
-
+                  return {'original': original, 'protocol': protocol,
+                          'username': user, 'password': pwd,
+                          'host': host, 'port': int(port),
+                          'server': f"{host}:{port}", 'country_name': None,
+                          'country_code': None,
+                          'url': f"{protocol}://{user}:{pwd}@{host}:{port}"}
               simple_match = re.match(r'^([^:]+):(\d+)$', rest)
               if simple_match:
                   host, port = simple_match.groups()
-                  return {
-                      'original': original, 'protocol': protocol,
-                      'username': '', 'password': '',
-                      'host': host, 'port': int(port),
-                      'server': f"{host}:{port}",
-                      'country_name': None, 'country_code': None,
-                      'url': f"{protocol}://{host}:{port}"
-                  }
-
+                  return {'original': original, 'protocol': protocol,
+                          'username': '', 'password': '',
+                          'host': host, 'port': int(port),
+                          'server': f"{host}:{port}", 'country_name': None,
+                          'country_code': None,
+                          'url': f"{protocol}://{host}:{port}"}
               return None
 
           def validate_proxy(pinfo):
@@ -272,40 +275,17 @@ jobs:
                   if data.get('status') == 'success':
                       cc = data.get('countryCode', 'US').lower()
                       country = pinfo.get('country_name') or data.get('country', 'Unknown')
-                      return {
-                          'working': True,
-                          'country_name': country,
-                          'country_code': cc,
-                          'ip': data.get('query', ''),
-                          **{k: v for k, v in pinfo.items() if k not in ['working', 'country_name', 'country_code', 'ip']}
-                      }
+                      return {'working': True, 'country_name': country, 'country_code': cc,
+                              'ip': data.get('query', ''),
+                              **{k: v for k, v in pinfo.items() if k not in ['working','country_name','country_code','ip']}}
               except Exception as e:
                   print(f"[ProxyCheck] FAILED {pinfo.get('server','?')}: {e}")
               return {'working': False, **pinfo}
 
-          country_name_to_code = {
-              'united states': 'us', 'united kingdom': 'uk', 'canada': 'ca',
-              'australia': 'au', 'germany': 'de', 'france': 'fr',
-              'brazil': 'br', 'mexico': 'mx', 'spain': 'es',
-              'vietnam': 'vn', 'switzerland': 'ch', 'indonesia': 'id',
-              'italy': 'it', 'netherlands': 'nl', 'poland': 'pl',
-              'usa': 'us', 'uk': 'uk', 'ca': 'ca', 'au': 'au', 'de': 'de',
-              'fr': 'fr', 'br': 'br', 'mx': 'mx', 'es': 'es', 'vn': 'vn',
-              'ch': 'ch', 'id': 'id', 'it': 'it', 'nl': 'nl', 'pl': 'pl'
-          }
-
-          country_map = {
-              "USA": "us", "UK": "uk", "Canada": "ca",
-              "Australia": "au", "Germany": "de", "France": "fr",
-              "Brazil": "br", "Mexico": "mx", "Spain": "es",
-              "Vietnam": "vn", "Switzerland": "ch", "Indonesia": "id",
-              "Italy": "it", "Netherlands": "nl", "Poland": "pl"
-          }
-
           active_proxies = []
-          use_proxy = False
+          use_proxy      = False
 
-          if is_manual_proxy and not without_proxy:
+          if is_manual_proxy and not run_without_proxy:
               parsed = []
               for ps in manual_proxy_strings:
                   p = parse_proxy(ps)
@@ -313,44 +293,38 @@ jobs:
                       parsed.append(p)
                   else:
                       print(f"[ProxyParse] Could not parse: {ps[:60]}...")
-
               print(f"[Proxy] Validating {len(parsed)} parsed proxies...")
               for idx, p in enumerate(parsed):
                   result = validate_proxy(p)
                   if result['working']:
                       if result.get('country_name'):
                           cname = result['country_name'].lower()
-                          result['country_code'] = country_name_to_code.get(cname, result.get('country_code', 'us'))
+                          result['country_code'] = country_name_to_code.get(cname, result.get('country_code','us'))
                       active_proxies.append(result)
-                      print(f"[Proxy] ACTIVE  -> {result['server']} | {result['country_name']} ({result['country_code']}) | IP: {result['ip']}")
+                      print(f"[Proxy] ACTIVE  -> {result['server']} | {result.get('country_name','?')} ({result.get('country_code','?')}) | IP: {result.get('ip','?')}")
                   else:
                       print(f"[Proxy] DEAD    -> {result.get('server','?')}")
                   if idx < len(parsed) - 1:
                       time.sleep(1)
-
               if len(active_proxies) < num_devices:
                   print(f"[Proxy] ERROR: Only {len(active_proxies)} active proxies for {num_devices} devices.")
                   exit(1)
-
               use_proxy = True
               print(f"[Proxy] Manual proxy pool ready: {len(active_proxies)} active for {num_devices} devices.")
 
-          elif floppy_key and not without_proxy:
+          elif floppy_key and not run_without_proxy:
               use_proxy = True
               country_input = os.environ.get("COUNTRY", "USA")
-              mobile = os.environ.get("MOBILE", "false").lower() == "true"
-              sticky = os.environ.get("STICKY", "false").lower() == "true"
-              cc = country_map.get(country_input, "us").upper()
-              proxy_type = "mobile" if mobile else "residential"
-
-              FLOPPY_BASE = "https://client-api.floppy.host"
-              headers = {"X-Api-Key": floppy_key}
-
+              mobile        = os.environ.get("MOBILE", "false").lower() == "true"
+              sticky        = os.environ.get("STICKY", "false").lower() == "true"
+              cc            = country_map.get(country_input, "us").upper()
+              proxy_type    = "mobile" if mobile else "residential"
+              FLOPPY_BASE   = "https://client-api.floppy.host"
+              headers       = {"X-Api-Key": floppy_key}
               print(f"[FloppyData] Fetching base credentials...")
               try:
-                  creds_resp = requests.get(
-                      f"{FLOPPY_BASE}/v1/rotating/smartParamsCredentials",
-                      headers=headers, timeout=15)
+                  creds_resp = requests.get(f"{FLOPPY_BASE}/v1/rotating/smartParamsCredentials",
+                                            headers=headers, timeout=15)
                   creds_data = creds_resp.json()
                   floppy_base_user = creds_data.get("username", "")
                   floppy_base_pass = creds_data.get("password", "")
@@ -358,67 +332,54 @@ jobs:
               except Exception as e:
                   print(f"[FloppyData] ERROR fetching credentials: {e}")
                   exit(1)
-
               print(f"[FloppyData] Building {num_devices} device proxy configs (type={proxy_type}, country={cc})...")
               for i in range(1, num_devices + 1):
                   session_id = str(uuid.uuid4())[:8] if sticky else ""
-                  params = {
-                      "type": proxy_type,
-                      "country": cc,
-                      "protocol": "http",
-                      "rotation": "0" if sticky else "-1",
-                  }
+                  params = {"type": proxy_type, "country": cc, "protocol": "http",
+                            "rotation": "0" if sticky else "-1"}
                   if sticky and session_id:
                       params["session"] = f"dev{i}_{session_id}"
-
                   try:
-                      builder_resp = requests.get(
-                          f"{FLOPPY_BASE}/v1/rotating/smartParamsBuilder",
-                          headers=headers, params=params, timeout=15)
+                      builder_resp = requests.get(f"{FLOPPY_BASE}/v1/rotating/smartParamsBuilder",
+                                                  headers=headers, params=params, timeout=15)
                       builder_data = builder_resp.json()
-                      floppy_user = builder_data.get("username", floppy_base_user)
-                      floppy_pass = builder_data.get("password", floppy_base_pass)
-                      floppy_host = builder_data.get("host", "geo.g-w.info")
-                      floppy_port = str(builder_data.get("port", 10080))
+                      floppy_user  = builder_data.get("username", floppy_base_user)
+                      floppy_pass  = builder_data.get("password", floppy_base_pass)
+                      floppy_host  = builder_data.get("host", "geo.g-w.info")
+                      floppy_port  = str(builder_data.get("port", 10080))
                       print(f"[FloppyData] Device {i}: {floppy_host}:{floppy_port} | user={floppy_user[:16]}... | session={'YES' if sticky else 'NO'}")
                   except Exception as e:
                       print(f"[FloppyData] ERROR building params for device {i}: {e}")
                       exit(1)
-
                   active_proxies.append({
-                      'username': floppy_user,
-                      'password': floppy_pass,
-                      'host': floppy_host,
-                      'port': int(floppy_port),
+                      'username': floppy_user, 'password': floppy_pass,
+                      'host': floppy_host, 'port': int(floppy_port),
                       'server': f"{floppy_host}:{floppy_port}",
-                      'country_code': cc.lower(),
-                      'country_name': country_input,
+                      'country_code': cc.lower(), 'country_name': country_input,
                       'proxy_type_label': "floppydata",
                       'url': f"http://{floppy_user}:{floppy_pass}@{floppy_host}:{floppy_port}"
                   })
                   time.sleep(0.3)
-
               print(f"[FloppyData] Proxy pool ready: {len(active_proxies)} entries.")
 
-          elif scrapeops_key and not without_proxy:
+          elif scrapeops_key and not run_without_proxy:
               use_proxy = True
               print("[Proxy] ScrapeOps proxy pool ready.")
 
-          num_clicks = min(num_clicks_raw, num_devices)
-          num_installs = num_devices - num_clicks
+          # Build action list: install x num_installs, click x num_clicks, shuffled
           action_list = ["install"] * num_installs + ["click"] * num_clicks
           random.shuffle(action_list)
-
           print(f"[Action Matrix] Total Devices : {num_devices}")
           print(f"[Action Matrix] Install Paths : {num_installs}")
           print(f"[Action Matrix] Click Paths   : {num_clicks}")
           print(f"[Action Matrix] Randomized Queue: {action_list}")
 
-          run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
-          manual_url_input = os.environ.get("MANUAL_URL", "").strip()
-          manual_url = manual_url_input if run_manual else ""
+          run_manual   = os.environ.get("RUN_MANUAL", "false").lower() == "true"
+          manual_url   = os.environ.get("MANUAL_URL", "").strip()
+          software_choice = os.environ.get("SOFTWARE_CHOICE", "Opera - B4Books")
 
           opera_urls = {
+              "Opera - B4Books":  "https://u.to/opx-b4b/2nh4Ig",
               "Opera - Techx":    "https://u.to/techxsm/xVyFIg",
               "Opera - Fatradez": "https://u.to/fatradezsm/cF2FIg",
               "Opera - James":    "https://u.to/jamesxsm/eV2FIg",
@@ -440,39 +401,29 @@ jobs:
           }
           all_urls = {**opera_urls, **opera_one_urls, **ad_mvn_urls}
 
-          dynamic_links = ["Opera - Techx", "Opera - Fatradez", "Opera - James", "Opera - Oliver", "Opera - Mahal"]
-          software_choice = os.environ.get("SOFTWARE_CHOICE", "Opera - Fatradez")
+          # Dynamic/smart link software types (Tab+Enter interstitial approach)
+          dynamic_links = list(opera_urls.keys())  # All "Opera - *" are dynamic smart links
 
-          if manual_url:
-              target_url = manual_url
+          if run_manual and manual_url:
+              target_url    = manual_url
               software_type = "dynamic_opera"
-              dmg_filter = "*Opera*"
-              print(f"[Target] Manual URL selected: {target_url}")
+              dmg_filter    = "*Opera*"
           else:
-              target_url = all_urls.get(software_choice, opera_urls["Opera - Techx"])
-              if software_choice in dynamic_links:
+              target_url = all_urls.get(software_choice, opera_urls["Opera - B4Books"])
+              if software_choice in dynamic_links or software_choice.startswith("Ad-MVN"):
                   software_type = "opera_smart_link"
-                  dmg_filter = "*Opera*"
-              elif software_choice.startswith("Ad-MVN"):
-                  software_type = "dynamic_opera"
-                  dmg_filter = "*Opera*"
+                  dmg_filter    = "*Opera*"
               elif software_choice.startswith("Opera-One"):
                   software_type = "opera_one"
-                  dmg_filter = "*Opera*"
+                  dmg_filter    = "*Opera*"
               else:
-                  software_type = "opera_gx"
-                  dmg_filter = "*OperaGX*"
-              print(f"[Target] Software: {software_choice} -> URL: {target_url}")
-              print(f"[Target] Engine Type: {software_type} | Filter: {dmg_filter}")
+                  software_type = "dynamic_opera"
+                  dmg_filter    = "*Opera*"
 
           def short_os(os_ver):
               mapping = {
-                  "macos-15":        "M15",
-                  "macos-14":        "M14",
-                  "macos-13":        "M13",
-                  "macos-15-xlarge": "M15X",
-                  "macos-26":        "M26",
-                  "macos-26-intel":  "M26I",
+                  "macos-15": "M15", "macos-14": "M14", "macos-13": "M13",
+                  "macos-26": "M26", "macos-26-intel": "M26I",
               }
               return mapping.get(os_ver, "MAC")
 
@@ -492,68 +443,68 @@ jobs:
               return choice.replace(" ", "").replace("-", "")
 
           short_os_tag = short_os(os_version)
-          short_sw_tag = short_software(software_choice)
+          short_sw_tag = "MANUAL" if (run_manual and manual_url) else short_software(software_choice)
 
           includes = []
           if email:
               for i in range(1, num_devices + 1):
                   action_mode = action_list[i - 1]
-                  action_cap = action_mode.capitalize()
+                  action_cap  = action_mode.capitalize()
 
                   if is_manual_proxy and active_proxies:
-                      proxy = active_proxies[i - 1]
-                      cc = proxy['country_code'].upper()
-                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{cc}"
+                      proxy      = active_proxies[i - 1]
+                      cc_upper   = (proxy.get('country_code') or 'XX').upper()
+                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{cc_upper}"
                       includes.append({
                           "device": device_name, "email": email, "os": os_version,
                           "use_proxy": "true",
                           "proxy_server": proxy['server'],
-                          "proxy_user": proxy['username'],
-                          "proxy_pass": proxy['password'],
-                          "proxy_type": "manual",
-                          "target_url": target_url, "software_type": software_type,
-                          "dmg_filter": dmg_filter, "action_mode": action_mode
+                          "proxy_user":   proxy.get('username', ''),
+                          "proxy_pass":   proxy.get('password', ''),
+                          "proxy_type":   "manual",
+                          "target_url":   target_url, "software_type": software_type,
+                          "dmg_filter":   dmg_filter, "action_mode":   action_mode,
                       })
-                      print(f"[Device Added] {device_name} | Proxy: {proxy['server']} ({cc}) | Auth: {'YES' if proxy['username'] else 'NO'}")
+                      print(f"[Device Added] {device_name} | Proxy: {proxy['server']} ({cc_upper}) | Auth: {'YES' if proxy.get('username') else 'NO'}")
 
                   elif floppy_key and active_proxies:
-                      proxy = active_proxies[i - 1]
-                      cc = proxy['country_code'].upper()
-                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{cc}"
+                      proxy      = active_proxies[i - 1]
+                      cc_upper   = (proxy.get('country_code') or 'XX').upper()
+                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{cc_upper}"
                       includes.append({
                           "device": device_name, "email": email, "os": os_version,
                           "use_proxy": "true",
                           "proxy_server": proxy['server'],
-                          "proxy_user": proxy['username'],
-                          "proxy_pass": proxy['password'],
-                          "proxy_type": "floppydata",
-                          "target_url": target_url, "software_type": software_type,
-                          "dmg_filter": dmg_filter, "action_mode": action_mode
+                          "proxy_user":   proxy['username'],
+                          "proxy_pass":   proxy['password'],
+                          "proxy_type":   "floppydata",
+                          "target_url":   target_url, "software_type": software_type,
+                          "dmg_filter":   dmg_filter, "action_mode":   action_mode,
                       })
-                      print(f"[Device Added] {device_name} | Proxy: FloppyData ({proxy['server']}) ({cc})")
+                      print(f"[Device Added] {device_name} | Proxy: FloppyData ({proxy['server']}) ({cc_upper})")
 
                   elif use_proxy and scrapeops_key:
                       country_input = os.environ.get("COUNTRY", "USA")
-                      mobile = os.environ.get("MOBILE", "false").lower() == "true"
-                      sticky = os.environ.get("STICKY", "false").lower() == "true"
-                      cc = country_map.get(country_input, "us")
-                      country_cap = cc.upper()
-                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{country_cap}"
-                      proxy_user = f"scrapeops.country={cc}"
+                      mobile        = os.environ.get("MOBILE", "false").lower() == "true"
+                      sticky        = os.environ.get("STICKY", "false").lower() == "true"
+                      cc            = country_map.get(country_input, "us")
+                      country_cap   = cc.upper()
+                      device_name   = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{country_cap}"
+                      proxy_user    = f"scrapeops.country={cc}"
                       if mobile:
                           proxy_user += ".mobile=true"
                       if sticky:
-                          session_id = str(uuid.uuid4())[:8]
+                          session_id  = str(uuid.uuid4())[:8]
                           proxy_user += f".sticky_session={session_id}"
                       includes.append({
                           "device": device_name, "email": email, "os": os_version,
                           "use_proxy": "true",
                           "proxy_server": "residential-proxy.scrapeops.io:8181",
-                          "proxy_user": proxy_user,
-                          "proxy_pass": scrapeops_key,
-                          "proxy_type": "scrapeops",
-                          "target_url": target_url, "software_type": software_type,
-                          "dmg_filter": dmg_filter, "action_mode": action_mode
+                          "proxy_user":   proxy_user,
+                          "proxy_pass":   scrapeops_key,
+                          "proxy_type":   "scrapeops",
+                          "target_url":   target_url, "software_type": software_type,
+                          "dmg_filter":   dmg_filter, "action_mode":   action_mode,
                       })
                       print(f"[Device Added] {device_name} | Proxy: ScrapeOps ({cc})")
 
@@ -563,19 +514,18 @@ jobs:
                           "device": device_name, "email": email, "os": os_version,
                           "use_proxy": "false",
                           "proxy_server": "", "proxy_user": "", "proxy_pass": "",
-                          "proxy_type": "none",
-                          "target_url": target_url, "software_type": software_type,
-                          "dmg_filter": dmg_filter, "action_mode": action_mode
+                          "proxy_type":   "none",
+                          "target_url":   target_url, "software_type": software_type,
+                          "dmg_filter":   dmg_filter, "action_mode":   action_mode,
                       })
                       print(f"[Device Added] {device_name} | Proxy: NONE")
 
           if not includes:
-              print("Error: Valid configuration could not be generated. Exiting.")
+              print("Error: Valid configuration could not be generated.")
               exit(1)
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"matrix={json.dumps({'include': includes})}\n")
-              f.write(f"is_manual_proxy={str(is_manual_proxy).lower()}\n")
           print("========== MATRIX GENERATION COMPLETE ==========")
 
       - name: Update Workflow Defaults (Remember Inputs)
@@ -586,10 +536,10 @@ jobs:
           NUM_DEVICES: ${{ inputs.num_devices }}
           NUM_CLICKS: ${{ inputs.num_clicks }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
-          MANUAL_URL: ${{ inputs.manual_software_url }}
-          RUN_MANUAL: ${{ inputs.run_manual_link }}
+          RUN_MANUAL: ${{ inputs.run_manual_url }}
+          MANUAL_URL: ${{ inputs.manual_url }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
-          WITHOUT_PROXY: ${{ inputs.use_without_proxy }}
+          RUN_WITHOUT_PROXY: ${{ inputs.run_without_proxy }}
           COUNTRY: ${{ inputs.proxy_country }}
           MOBILE: ${{ inputs.mobile_proxies }}
           STICKY: ${{ inputs.sticky_sessions }}
@@ -600,96 +550,65 @@ jobs:
               r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
           FLOPPY_KEY_RE = re.compile(r'^[A-Za-z0-9_]{30,80}$')
 
-          def update_yaml_default(yaml_str, input_key, new_val, is_bool=False):
-              lines = yaml_str.split("\n")
-              in_target_block = False
-              target_indent = -1
-              for i, line in enumerate(lines):
-                  match = re.match(r"^([ \t]*)" + input_key + r":", line)
-                  if match:
-                      in_target_block = True
-                      target_indent = len(match.group(1))
-                      continue
-                  if in_target_block:
-                      current_indent = len(line) - len(line.lstrip(" \t"))
-                      if line.strip() and current_indent <= target_indent:
-                          in_target_block = False
-                          continue
-                      if line.lstrip(" \t").startswith("default:"):
-                          indent = line[:len(line) - len(line.lstrip(" \t"))]
-                          if is_bool:
-                              val_str = "true" if str(new_val).lower() == "true" else "false"
-                              lines[i] = f"{indent}default: {val_str}"
-                          else:
-                              if new_val is None or str(new_val).strip().lower() in ["none", "null", "blank", "empty", "''", '""']: safe_val = ""
-                              else: safe_val = str(new_val).replace("'", "\\'")
-                              lines[i] = f"{indent}default: '{safe_val}'"
-                          break
-              return "\n".join(lines)
-
-          api_key_input = os.environ.get("API_KEY", "").strip()
-          is_manual_proxy = False
-          is_floppy_key = False
-          is_scrapeops_key = False
-          if api_key_input:
-              raw_items = re.split(r'[\s,;]+', api_key_input)
-              proxy_candidates = [item for item in raw_items if ('://' in item) or ('@' in item) or (item.count(':') >= 2 and len(item) > 10)]
-              if len(proxy_candidates) >= 1:
-                  is_manual_proxy = True
-              elif SCRAPEOPS_KEY_RE.match(api_key_input):
-                  is_scrapeops_key = True
-              elif FLOPPY_KEY_RE.match(api_key_input):
-                  is_floppy_key = True
-              else:
-                  is_scrapeops_key = True
-
           file_path = ".github/workflows/main6.yml"
           if os.path.exists(file_path):
-              print(f"[Workflow State] Attempting to update defaults in {file_path}")
-              with open(file_path, "r", encoding="utf-8") as f:
+              with open(file_path, "r") as f:
                   content = f.read()
 
-              run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
-              content = update_yaml_default(content, "os_version", os.environ.get("OS_VERSION"))
-              content = update_yaml_default(content, "getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
-              content = update_yaml_default(content, "num_devices", os.environ.get("NUM_DEVICES"))
-              content = update_yaml_default(content, "num_clicks", os.environ.get("NUM_CLICKS"))
-              content = update_yaml_default(content, "software_choice", os.environ.get("SOFTWARE_CHOICE"))
+              def update_default_str(input_name, new_val):
+                  global content
+                  pattern = r"(" + input_name + r":[\s\S]*?default:\s*')[^']*(')"
+                  content = re.sub(pattern, rf"\g<1>{new_val}\g<2>", content, count=1)
 
-              manual_url_to_save = os.environ.get("MANUAL_URL") if run_manual else ""
-              content = update_yaml_default(content, "manual_software_url", manual_url_to_save)
-              content = update_yaml_default(content, "run_manual_link", run_manual, is_bool=True)
+              def update_default_bool(input_name, new_val):
+                  global content
+                  pattern = r"(" + input_name + r":[\s\S]*?default:\s*)(true|false)"
+                  content = re.sub(pattern, rf"\g<1>{new_val.lower()}", content, count=1)
 
-              if not is_manual_proxy and api_key_input:
-                  content = update_yaml_default(content, "scrapeops_api_key", api_key_input)
-                  key_type = "FloppyData" if is_floppy_key else "ScrapeOps"
-                  print(f"[Workflow State] Saved {key_type} API key to defaults.")
+              api_key_input = os.environ.get("API_KEY", "").strip()
+              is_manual_proxy = False
+              if api_key_input:
+                  raw_items = re.split(r'[\s,;]+', api_key_input)
+                  proxy_candidates = [item for item in raw_items
+                                      if ('://' in item) or ('@' in item) or (item.count(':') >= 2 and len(item) > 10)]
+                  if len(proxy_candidates) >= 1:
+                      is_manual_proxy = True
+
+              update_default_str("os_version",        os.environ.get("OS_VERSION"))
+              update_default_str("getscreen_email",   os.environ.get("GETSCREEN_EMAIL"))
+              update_default_str("num_devices",       os.environ.get("NUM_DEVICES"))
+              update_default_str("num_clicks",        os.environ.get("NUM_CLICKS"))
+              update_default_str("software_choice",   os.environ.get("SOFTWARE_CHOICE"))
+              update_default_bool("run_manual_url",   os.environ.get("RUN_MANUAL"))
+              if os.environ.get("RUN_MANUAL", "false").lower() == "true":
+                  update_default_str("manual_url",    os.environ.get("MANUAL_URL"))
               else:
-                  print("[Workflow State] Manual proxies detected — NOT saving proxy list to defaults.")
+                  update_default_str("manual_url",    "")
+              if not is_manual_proxy and api_key_input:
+                  update_default_str("scrapeops_api_key", api_key_input)
+              update_default_bool("run_without_proxy", os.environ.get("RUN_WITHOUT_PROXY"))
+              update_default_str("proxy_country",     os.environ.get("COUNTRY"))
+              update_default_bool("mobile_proxies",   os.environ.get("MOBILE"))
+              update_default_bool("sticky_sessions",  os.environ.get("STICKY"))
 
-              content = update_yaml_default(content, "use_without_proxy", os.environ.get("WITHOUT_PROXY"), is_bool=True)
-              content = update_yaml_default(content, "proxy_country", os.environ.get("COUNTRY"))
-              content = update_yaml_default(content, "mobile_proxies", os.environ.get("MOBILE"), is_bool=True)
-              content = update_yaml_default(content, "sticky_sessions", os.environ.get("STICKY"), is_bool=True)
-
-              with open(file_path, "w", encoding="utf-8") as f:
+              with open(file_path, "w") as f:
                   f.write(content)
-              print(f"[Workflow State] Successfully saved new defaults.")
           else:
-              print(f"[Workflow State] Warning: File {file_path} not found. Skipping auto-save.")
+              print(f"File {file_path} not found. Skipping auto-save.")
 
       - name: Commit and Push New Defaults
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .github/workflows/main6.yml
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs [skip ci]" && git push)
+          git diff --quiet && git diff --staged --quiet || \
+            (git commit -m "Update last used inputs[skip ci]" && git push)
 
   remote_session:
-    name: Session ${{ matrix.device }}
+    name: Remote Session ${{ matrix.device }}
     needs: prepare_matrix
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 8
+    timeout-minutes: 9
 
     strategy:
       fail-fast: false
@@ -762,12 +681,12 @@ jobs:
           echo "[$(date '+%H:%M:%S')] All dependencies installed."
 
       # ================================================================== #
-      # STEP 3 — Pre-Grant ALL TCC permissions upfront (CLI-first)         #
+      # STEP 3 — Pre-Grant ALL TCC permissions upfront                      #
       # ================================================================== #
       - name: Pre-Grant TCC Permissions (CLI-first, comprehensive)
         shell: bash
         run: |
-          echo "=== [$(date '+%H:%M:%S')] Pre-Granting TCC Permissions via SQLite (CLI) ==="
+          echo "=== [$(date '+%H:%M:%S')] Pre-Granting TCC Permissions via SQLite ==="
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           grant_tcc() {
             local SERVICE="$1"
@@ -801,7 +720,9 @@ jobs:
           grant_tcc kTCCServiceLocalNetwork  me.getscreen.mac            0
           grant_tcc kTCCServiceLocalNetwork  me.getscreen.desktop        0
           grant_tcc kTCCServiceLocalNetwork  com.getscreen.desktop       0
-          echo "[$(date '+%H:%M:%S')] --- Scanning for GitHub runner + compute-host process paths ---"
+          grant_tcc kTCCServiceCamera        com.google.Chrome           0
+          grant_tcc kTCCServiceMicrophone    com.google.Chrome           0
+          echo "[$(date '+%H:%M:%S')] --- Scanning for GitHub runner process paths ---"
           for RUNNER_DIR in /Users/runner /home/runner /opt/hostedtoolcache /private/var/folders; do
             if [ -d "$RUNNER_DIR" ]; then
               for BIN_NAME in Runner.Worker Runner.Listener Runner.PluginHost run.sh; do
@@ -823,9 +744,6 @@ jobs:
               grant_tcc kTCCServiceAccessibility "$PROC_PATH" 1
             fi
           done || true
-          grant_tcc kTCCServiceCamera     com.google.Chrome 0
-          grant_tcc kTCCServiceMicrophone com.google.Chrome 0
-          echo "[$(date '+%H:%M:%S')] All TCC permissions pre-granted via CLI."
           sudo defaults write /Library/Preferences/com.apple.security \
             "SecAssessmentDisableUserApproval" -bool true 2>/dev/null || true
           CHROME_POLICY_DIR="/Library/Managed Preferences"
@@ -860,8 +778,7 @@ jobs:
           while [ $RETRY -lt $MAX_RETRIES ]; do
             curl -L -o getscreen.dmg "https://getscreen.me/download/getscreen.dmg" \
               --retry 3 --retry-delay 5 --silent --show-error || true
-            FILE_SIZE=$(stat -f%z getscreen.dmg 2>/dev/null || \
-                        stat -c%s getscreen.dmg 2>/dev/null || echo 0)
+            FILE_SIZE=$(stat -f%z getscreen.dmg 2>/dev/null || stat -c%s getscreen.dmg 2>/dev/null || echo 0)
             if [ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
               SUCCESS=true
               break
@@ -887,9 +804,7 @@ jobs:
           sudo cp -R "$APP_PATH" /Applications/
           sudo xattr -dr com.apple.quarantine "/Applications/$APP_NAME" 2>/dev/null || true
           hdiutil detach /Volumes/getscreen -quiet -force || true
-          APP_BUNDLE_ID=$(defaults read \
-            "/Applications/$APP_NAME/Contents/Info.plist" \
-            CFBundleIdentifier 2>/dev/null || echo "")
+          APP_BUNDLE_ID=$(defaults read "/Applications/$APP_NAME/Contents/Info.plist" CFBundleIdentifier 2>/dev/null || echo "")
           echo "[$(date '+%H:%M:%S')] Bundle ID: ${APP_BUNDLE_ID:-<not found>}"
           if [ -n "$APP_BUNDLE_ID" ]; then
             for SVC in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServiceLocalNetwork; do
@@ -900,9 +815,7 @@ jobs:
             done
             echo "[$(date '+%H:%M:%S')] TCC permissions granted for $APP_BUNDLE_ID"
           fi
-          EXEC_NAME=$(defaults read \
-            "/Applications/$APP_NAME/Contents/Info.plist" \
-            CFBundleExecutable 2>/dev/null || echo "")
+          EXEC_NAME=$(defaults read "/Applications/$APP_NAME/Contents/Info.plist" CFBundleExecutable 2>/dev/null || echo "")
           EXEC_PATH="/Applications/$APP_NAME/Contents/MacOS/$EXEC_NAME"
           if [ ! -x "$EXEC_PATH" ]; then
             EXEC_PATH=$(find "/Applications/$APP_NAME/Contents/MacOS" \
@@ -934,7 +847,7 @@ jobs:
           echo "[$(date '+%H:%M:%S')] Getscreen.me registered as '$DEVICE_NAME' and started."
 
       # ================================================================== #
-      # STEP 4.5 — Quick popup dismissal (no heavy filesystem scan)        #
+      # STEP 4.5 — Quick popup dismissal                                   #
       # ================================================================== #
       - name: Pre-Dismiss System Popups (Fast)
         shell: bash
@@ -945,7 +858,7 @@ jobs:
           sudo launchctl kickstart -k system/com.apple.tccd 2>/dev/null || true
           sudo launchctl kickstart -k user/$(id -u)/com.apple.tccd 2>/dev/null || true
           sleep 2
-          echo "[$(date '+%H:%M:%S')] Granting TCC to running processes only..."
+          echo "[$(date '+%H:%M:%S')] Granting TCC to running processes..."
           ps aux 2>/dev/null | awk '{print $11}' | sort -u | while read -r PROC_PATH; do
             if [ -x "$PROC_PATH" ] 2>/dev/null; then
               PROC_LOWER=$(echo "$PROC_PATH" | tr '[:upper:]' '[:lower:]')
@@ -963,7 +876,6 @@ jobs:
               fi
             fi
           done || true
-          echo "[$(date '+%H:%M:%S')] Resetting notification/preference daemons..."
           sudo killall -HUP cfprefsd 2>/dev/null || true
           sudo killall UserNotificationCenter 2>/dev/null || true
           sudo killall NotificationCenter 2>/dev/null || true
@@ -993,14 +905,10 @@ jobs:
                     try
                       repeat with win in (every window of proc)
                         set winTitle to ""
-                        set winDesc to ""
                         try
                           set winTitle to (title of win) as string
                         end try
-                        try
-                          set winDesc to (description of win) as string
-                        end try
-                        if winTitle & " " & winDesc contains "Allow" then
+                        if winTitle contains "Allow" then
                           try
                             click button "Allow" of win
                           end try
@@ -1016,7 +924,7 @@ jobs:
           ASEOF
           osascript /tmp/early_popup_dismiss.applescript > /tmp/early_dismiss.log 2>&1 &
           EARLY_DISMISS_PID=$!
-          echo "[$(date '+%H:%M:%S')] GUI dismisser PID: $EARLY_DISMISS_PID (15s timeout)"
+          echo "[$(date '+%H:%M:%S')] GUI dismisser PID: $EARLY_DISMISS_PID"
           wait $EARLY_DISMISS_PID 2>/dev/null || true
           echo "[$(date '+%H:%M:%S')] Step 4.5 complete — system ready for Chrome launch."
 
@@ -1056,7 +964,7 @@ jobs:
             echo "[$(date '+%H:%M:%S')] Chrome confirmed available."
           else
             echo "CHROME_AVAILABLE=false" >> "$GITHUB_ENV"
-            echo "[$(date '+%H:%M:%S')] Chrome unavailable — Safari will be used for direct-mode only."
+            echo "[$(date '+%H:%M:%S')] Chrome unavailable."
           fi
 
       # ================================================================== #
@@ -1079,16 +987,11 @@ jobs:
           echo " [$(date '+%H:%M:%S')] Zero-Touch Downloader & Installer (macOS)"
           echo " Category  : $SOFTWARE_TYPE"
           echo " Target URL: $TARGET_URL"
-          echo " Action    : ${ACTION_MODE^^} PATHWAY ASSIGNED"
+          echo " Action    : $(echo $ACTION_MODE | tr '[:lower:]' '[:upper:]') PATHWAY ASSIGNED"
           if [ "$USE_PROXY" = "true" ]; then
-            if [ "$PROXY_TYPE" = "manual" ]; then
-              echo " Mode      : Proxy-enabled (Manual) → $PROXY_SERVER"
-            elif [ "$PROXY_TYPE" = "floppydata" ]; then
-              echo " Mode      : Proxy-enabled (FloppyData) → $PROXY_SERVER"
-            else
-              echo " Mode      : Proxy-enabled (ScrapeOps)"
-              echo " Proxy User: $PROXY_USER"
-            fi
+            echo " Mode      : Proxy-enabled ($PROXY_TYPE)"
+            echo " Proxy Srv : $PROXY_SERVER"
+            echo " Proxy User: $PROXY_USER"
           else
             echo " Mode      : Direct (no proxy)"
           fi
@@ -1096,8 +999,12 @@ jobs:
 
           DL_FOLDER="$HOME/Downloads"
           SENTINEL_PATH="/tmp/download_done.flag"
-          TIMEOUT_SECS=360
+          INSTALLER_SENTINEL="/tmp/installer_executed.flag"
+          TIMEOUT_SECS=420
 
+          # ================================================================
+          # Write the Python macOS handler
+          # ================================================================
           cat > /tmp/macos_handler.py << 'PYEOF'
           import time, sys, os, subprocess, random
 
@@ -1105,16 +1012,18 @@ jobs:
               ts = time.strftime("%H:%M:%S")
               print(f"[{ts}] {msg}", flush=True)
 
-          CHROME_WARMUP_SECS      = 20
-          DL_WAIT_AFTER_PROXY     = 30
-          PROXY_RETRY_INTERVAL    = 2
-          PROXY_MAX_ATTEMPTS      = 40
+          CHROME_WARMUP_SECS   = 20
+          DL_WAIT_AFTER_PROXY  = 30
+          PROXY_RETRY_INTERVAL = 2
+          PROXY_MAX_ATTEMPTS   = 40
 
+          # ------------------------------------------------------------
+          # Clipboard helpers
+          # ------------------------------------------------------------
           def clipboard_set(text):
               try:
                   proc = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE,
-                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-                  )
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                   proc.communicate(input=text.encode('utf-8'), timeout=5)
                   time.sleep(0.15)
                   return proc.returncode == 0
@@ -1124,9 +1033,7 @@ jobs:
 
           def clipboard_get():
               try:
-                  result = subprocess.run(
-                      ['pbpaste'], capture_output=True, text=True, timeout=5
-                  )
+                  result = subprocess.run(['pbpaste'], capture_output=True, text=True, timeout=5)
                   return result.stdout
               except Exception:
                   return ""
@@ -1143,8 +1050,7 @@ jobs:
           def run_as(script, silent=False, timeout=20):
               try:
                   r = subprocess.run(["osascript", "-e", script],
-                      capture_output=True, text=True, timeout=timeout
-                  )
+                      capture_output=True, text=True, timeout=timeout)
                   if r.returncode != 0 and not silent:
                       log(f"[AppleScript] stderr: {r.stderr.strip()[:120]}")
                   return r.stdout.strip()
@@ -1159,10 +1065,8 @@ jobs:
 
           def cliclick(cmd):
               try:
-                  result = subprocess.run(
-                      ['cliclick', cmd],
-                      capture_output=True, text=True, timeout=5
-                  )
+                  result = subprocess.run(['cliclick', cmd],
+                      capture_output=True, text=True, timeout=5)
                   return result.returncode == 0
               except Exception as e:
                   log(f"[cliclick] Error running '{cmd}': {e}")
@@ -1181,10 +1085,12 @@ jobs:
               r = run_as(
                   'tell application "System Events" to get name of every process '
                   'whose visible is true', silent=True)
-              return[n.strip() for n in r.split(",") if n.strip()]
+              return [n.strip() for n in r.split(",") if n.strip()]
 
+          # ------------------------------------------------------------
+          # Click a named button in any Opera-related process
+          # ------------------------------------------------------------
           def click_button_exact(label, timeout=5):
-              """Click a button whose name matches *label* (case-insensitive) in any Opera-related process."""
               result = run_as(fr'''
           tell application "System Events"
             repeat with proc in (every process whose visible is true)
@@ -1202,7 +1108,6 @@ jobs:
                 end try
               end if
             end repeat
-            -- fallback: try partial match
             repeat with proc in (every process whose visible is true)
               set pName to name of proc as string
               if pName contains "Opera" then
@@ -1232,6 +1137,9 @@ jobs:
                   return True
               return False
 
+          # ------------------------------------------------------------
+          # System popup dismissal
+          # ------------------------------------------------------------
           def dismiss_compute_host_popup():
               TCC_DB = "/Library/Application Support/com.apple.TCC/TCC.db"
               try:
@@ -1243,7 +1151,6 @@ jobs:
                   ], timeout=5, capture_output=True)
               except Exception:
                   pass
-
               result = run_as(r'''
           tell application "System Events"
             set dismissed to ""
@@ -1273,13 +1180,9 @@ jobs:
                       set wDesc to (description of win) as string
                     end try
                     set combined to (wTitle & " " & wDesc) as string
-                    if combined contains "local network" or ¬
-                       combined contains "Local Network" or ¬
-                       combined contains "hosted-compute" or ¬
-                       combined contains "control \"Google Chrome\"" or ¬
-                       combined contains "find devices" or ¬
-                       combined contains "incoming network" or ¬
-                       combined contains "would like to find" then
+                    if combined contains "local network" or combined contains "Local Network" or ¬
+                       combined contains "hosted-compute" or combined contains "control \"Google Chrome\"" or ¬
+                       combined contains "find devices" or combined contains "incoming network" then
                       try
                         click button "Allow" of win
                         set dismissed to "allowed_in_" & pName
@@ -1335,32 +1238,19 @@ jobs:
                         end if
                       end try
                     end if
-                    if combinedText contains "local network" or ¬
-                       combinedText contains "Local Network" or ¬
-                       combinedText contains "hosted-compute" or ¬
-                       combinedText contains "control \"Google Chrome\"" or ¬
-                       combinedText contains "find devices" or ¬
-                       combinedText contains "incoming network" or ¬
-                       combinedText contains "Incoming Network" then
+                    if combinedText contains "local network" or combinedText contains "Local Network" or ¬
+                       combinedText contains "hosted-compute" or combinedText contains "control \"Google Chrome\"" or ¬
+                       combinedText contains "find devices" or combinedText contains "incoming network" or ¬
+                       combinedText contains "screen and audio" or combinedText contains "bypass the system" or ¬
+                       combinedText contains "window picker" or combinedText contains "Getscreen.me" then
                       try
                         click button "Allow" of win
-                        set popupClicked to "local_network_allowed_in_" & pName
+                        set popupClicked to "system_popup_allowed_in_" & pName
                       end try
                     end if
-                    if combinedText contains "screen and audio" or ¬
-                       combinedText contains "bypass the system" or ¬
-                       combinedText contains "window picker" or ¬
-                       combinedText contains "Getscreen.me" then
+                    if combinedText does not contain "Accessibility" and combinedText does not contain "accessibility" then
                       try
-                        click button "Allow" of win
-                        set popupClicked to "getscreen_screen_allowed"
-                      end try
-                    end if
-                    if combinedText does not contain "Accessibility" and ¬
-                       combinedText does not contain "accessibility" then
-                      try
-                        if (exists button "Allow" of win) and ¬
-                           (exists button "Don't Allow" of win) then
+                        if (exists button "Allow" of win) and (exists button "Don't Allow" of win) then
                           click button "Allow" of win
                           if popupClicked is "" then
                             set popupClicked to "generic_allowed_in_" & pName
@@ -1380,6 +1270,9 @@ jobs:
                   return True
               return False
 
+          # ------------------------------------------------------------
+          # Proxy auth dialog detection (all processes)
+          # ------------------------------------------------------------
           def get_proxy_dialog_info():
               result = run_as(r'''
           tell application "System Events"
@@ -1393,7 +1286,7 @@ jobs:
                     try
                       set wTitle to (title of w) as string
                     end try
-                    if wTitle contains "Sign" or wTitle contains "proxy" or wTitle contains "Proxy" then
+                    if wTitle contains "Sign" or wTitle contains "proxy" or wTitle contains "Proxy" or wTitle contains "Authentication" then
                       set f1pos to position of text field 1 of w
                       set f1sz  to size of text field 1 of w
                       set f1x to ((item 1 of f1pos) + (item 1 of f1sz) / 2) as integer
@@ -1408,7 +1301,7 @@ jobs:
                         repeat with b in (every button of w)
                           set bname to ""
                           try
-                            set bname to name of b as string
+                            set bname to (name of b) as string
                           end try
                           if bname contains "Sign" or bname contains "OK" then
                             set bpos to position of b
@@ -1427,31 +1320,26 @@ jobs:
             return "none"
           end tell
           ''', silent=True)
-
               if not result or result == "none":
                   return None
               try:
-                  parts = result.split("|")
-                  dialog_type = parts[0]
-                  f1x, f1y = map(int, parts[1].split(","))
-                  f2x, f2y = map(int, parts[2].split(","))
+                  parts  = result.split("|")
+                  f1x, f1y   = map(int, parts[1].split(","))
+                  f2x, f2y   = map(int, parts[2].split(","))
                   btnx, btny = map(int, parts[3].split(","))
-                  proc_name = parts[4] if len(parts) > 4 else "unknown"
-                  return {
-                      "type": dialog_type,
-                      "f1": (f1x, f1y),
-                      "f2": (f2x, f2y),
-                      "btn": (btnx, btny),
-                      "process": proc_name
-                  }
+                  proc_name  = parts[4] if len(parts) > 4 else "unknown"
+                  return {"type": parts[0], "f1": (f1x, f1y), "f2": (f2x, f2y),
+                          "btn": (btnx, btny), "process": proc_name}
               except Exception as e:
                   log(f"[DialogInfo] Parse error: {e}, raw={result[:120]}")
                   return None
 
+          # ------------------------------------------------------------
+          # Fill proxy auth dialog (cliclick + keyboard)
+          # ------------------------------------------------------------
           def fill_proxy_auth(user, pwd):
               global PROXY_RETRY_INTERVAL
               info = get_proxy_dialog_info()
-
               if info is None:
                   log("[ProxyAuth] No dialog detected, attempting keyboard-only fallback")
                   run_as('tell application "Google Chrome" to activate', silent=True)
@@ -1513,7 +1401,6 @@ jobs:
 
               run_as(f'tell application "System Events" to tell process "{info["process"]}" to set frontmost to true', silent=True)
               time.sleep(0.4)
-
               f1x, f1y = info["f1"]
               if not cliclick(f'c:{f1x},{f1y}'):
                   run_as(f'tell application "System Events" to click text field 1 of window 1 of process "{info["process"]}"', silent=True)
@@ -1524,9 +1411,8 @@ jobs:
               time.sleep(0.15)
               run_as('tell application "System Events" to keystroke "v" using command down', silent=True)
               time.sleep(0.3)
-
-              f2x, f2y = info["f2"]
               press("tab"); time.sleep(0.2)
+              f2x, f2y = info["f2"]
               if not cliclick(f'c:{f2x},{f2y}'):
                   run_as(f'tell application "System Events" to click text field 2 of window 1 of process "{info["process"]}"', silent=True)
               time.sleep(0.3)
@@ -1536,12 +1422,32 @@ jobs:
               time.sleep(0.15)
               run_as('tell application "System Events" to keystroke "v" using command down', silent=True)
               time.sleep(0.3)
-
               result = _click_sign_in()
               log(f"[ProxyAuth] Sign In result: {result}")
               time.sleep(0.5)
               return result if result else "submitted"
 
+          # ------------------------------------------------------------
+          # Smart-link interstitial bypass: 1 TAB then ENTER after 20s
+          # Used for Opera - Techx / Fatradez / James / Oliver / Mahal etc.
+          # ------------------------------------------------------------
+          def smart_link_tab_enter(sw_type):
+              log("[SmartLink] Activating Chrome for smart-link interstitial bypass...")
+              run_as('tell application "Google Chrome" to activate', silent=True)
+              time.sleep(1)
+              log("[SmartLink] Pressing 1 TAB key...")
+              press("tab")
+              time.sleep(0.5)
+              log("[SmartLink] Pressing ENTER to follow smart link...")
+              press("return")
+              time.sleep(1)
+              run_as('tell application "Google Chrome" to execute active tab of front window javascript "if(document.activeElement) document.activeElement.click()"', silent=True)
+              log("[SmartLink] Smart-link interstitial bypass complete.")
+              return "smart_link_tab_enter"
+
+          # ------------------------------------------------------------
+          # Final download button click — 3 Tabs then Enter
+          # ------------------------------------------------------------
           def click_dl_button(sw_type):
               log("[DLButton] Activating Chrome and giving page time to settle...")
               run_as('tell application "Google Chrome" to activate', silent=True)
@@ -1557,7 +1463,7 @@ jobs:
               return "tab3_enter"
 
           def accept_cookie():
-              for b in["Accept all", "Accept All", "Accept Cookies",
+              for b in ["Accept all", "Accept All", "Accept Cookies",
                         "Allow all", "Accepter tout", "I agree", "Got it"]:
                   r = run_as(f'''
           tell application "System Events"
@@ -1584,7 +1490,7 @@ jobs:
                       time.sleep(2)
                       return True
                   elapsed = int(time.time() - start)
-                  if elapsed % 15 == 0:
+                  if elapsed % 15 == 0 and elapsed > 0:
                       log(f"[LaunchDetect] Still waiting for '{app_name}'... ({elapsed}s elapsed)")
                   time.sleep(1)
               log(f"[LaunchDetect] '{app_name}' did not launch within {timeout}s.")
@@ -1633,149 +1539,200 @@ jobs:
               log(f"[{app_name}] Button click result: {result}")
               return result
 
-          def screen_center():
-              try:
-                  r = subprocess.run(["osascript", "-e",
-                       'tell application "Finder" to get bounds of window of desktop'],
-                      capture_output=True, text=True, timeout=5
-                  )
-                  bounds = [int(x.strip()) for x in r.stdout.strip().split(",")]
-                  center_x = (bounds[0] + bounds[2]) // 2
-                  center_y = (bounds[1] + bounds[3]) // 2
-                  return center_x, center_y
-              except Exception:
-                  return 960, 540
-
+          # ============================================================
+          # OPERA GX POST-INSTALL SEQUENCE (ROBUST, DETAILED LOGGING)
+          # ============================================================
           def opera_gx_flow():
+              log("[Opera GX] ===== POST-INSTALL SEQUENCE STARTING =====")
               if not wait_for_app_launch("Opera GX", timeout=120):
+                  log("[Opera GX] Opera GX did not launch within 120s. Aborting post-install.")
                   return
-              log("[Opera GX] App launched. Dismissing popups for 10s...")
+              log("[Opera GX] STEP 1: Opera GX detected. Activating window...")
+              run_as('tell application "Opera GX" to activate', silent=True)
+              time.sleep(2)
+
+              log("[Opera GX] STEP 2: Dismissing system popups for 10 seconds...")
               t0 = time.time()
+              popup_count = 0
               while time.time() - t0 < 10:
-                  dismiss_system_popups()
-                  dismiss_compute_host_popup()
+                  if dismiss_system_popups():
+                      popup_count += 1
+                  if dismiss_compute_host_popup():
+                      popup_count += 1
                   time.sleep(0.5)
-                  
-              log("[Opera GX] Attempting 'Accept and Install' button click...")
+              log(f"[Opera GX] STEP 2 COMPLETE: Dismissed {popup_count} popup events.")
+
+              log("[Opera GX] STEP 3: Attempting 'Accept and Install' button click...")
               result = click_accept_and_install("Opera GX")
               if result == "not_found":
-                  log("[Opera GX] Button not found via UI — Tab+Enter fallback...")
-                  for _ in range(3):
+                  log("[Opera GX] STEP 3: Button not found via UI. Pressing Tab x3 then Enter as fallback...")
+                  for i in range(3):
+                      log(f"[Opera GX] STEP 3: Tab press {i+1}/3")
                       press("tab"); time.sleep(0.5)
                   press("return")
-                  
-              log("[Opera GX] Waiting 30s for next screen and dismissing popups...")
-              for _ in range(30):
+                  log("[Opera GX] STEP 3: Fallback Tab+Enter executed.")
+              else:
+                  log(f"[Opera GX] STEP 3 COMPLETE: Button clicked ({result}).")
+
+              log("[Opera GX] STEP 4: Waiting 30 seconds for next screen (dismissing popups)...")
+              for s in range(30):
                   dismiss_compute_host_popup()
                   dismiss_system_popups()
+                  if s % 10 == 0 and s > 0:
+                      log(f"[Opera GX] STEP 4: {s}/30 seconds elapsed...")
                   time.sleep(1)
-                  
-              log("[Opera GX] Pressing Tab x4 then Enter x8...")
-              for _ in range(4):
+              log("[Opera GX] STEP 4 COMPLETE: 30s wait done.")
+
+              log("[Opera GX] STEP 5: Pressing Tab x4 then Enter x8 (setup wizard navigation)...")
+              for i in range(4):
+                  log(f"[Opera GX] STEP 5: Tab press {i+1}/4")
                   press("tab"); time.sleep(0.5)
               for i in range(8):
-                  press("return")
                   d = random.uniform(1.0, 2.0)
-                  log(f"[Opera GX] ENTER {i+1}/8 ({d:.2f}s delay)")
+                  log(f"[Opera GX] STEP 5: ENTER press {i+1}/8 (delay {d:.2f}s)")
+                  press("return")
                   time.sleep(d)
-              time.sleep(5)
-              tab_count = random.randint(6, 14)
-              log(f"[Opera GX] Tab x{tab_count} then final Enter...")
-              for _ in range(tab_count):
-                  press("tab"); time.sleep(0.5)
-              press("return")
-              log("[Opera GX] Setup complete.")
+                  dismiss_compute_host_popup()
+                  dismiss_system_popups()
+              log("[Opera GX] STEP 5 COMPLETE.")
 
+              time.sleep(5)
+
+              tab_count = random.randint(6, 14)
+              log(f"[Opera GX] STEP 6: Pressing Tab x{tab_count} then final Enter (cycle navigation)...")
+              run_as('tell application "System Events" to keystroke "n" using command down', silent=True)
+              time.sleep(random.uniform(1, 2))
+              for i in range(tab_count):
+                  log(f"[Opera GX] STEP 6: Tab press {i+1}/{tab_count}")
+                  press("tab"); time.sleep(random.uniform(1.0, 2.0))
+                  dismiss_compute_host_popup()
+                  dismiss_system_popups()
+              log("[Opera GX] STEP 6: Pressing final ENTER...")
+              press("return")
+              log("[Opera GX] ===== POST-INSTALL SEQUENCE COMPLETE =====")
+
+          # ============================================================
+          # OPERA ONE POST-INSTALL SEQUENCE (ROBUST, DETAILED LOGGING)
+          # ============================================================
           def opera_one_flow():
+              log("[Opera One] ===== POST-INSTALL SEQUENCE STARTING =====")
               if not wait_for_app_launch("Opera Installer", timeout=120):
-                  log("[Opera One] Installer not seen, attempting manual launch of /Applications/Opera Installer.app")
+                  log("[Opera One] Installer not seen. Attempting manual launch...")
                   if os.path.exists("/Applications/Opera Installer.app"):
                       subprocess.run(["open", "/Applications/Opera Installer.app"])
                       time.sleep(5)
                       if not wait_for_app_launch("Opera Installer", timeout=60):
-                          log("[Opera One] Still not found, aborting setup.")
+                          log("[Opera One] Still not found. Aborting post-install.")
                           return
                   else:
                       found = subprocess.run(
                           "find /Applications -maxdepth 2 -name 'Opera*.app' 2>/dev/null | head -1",
                           shell=True, capture_output=True, text=True).stdout.strip()
                       if found:
-                          log(f"[Opera One] Opening {found}")
+                          log(f"[Opera One] Opening fallback: {found}")
                           subprocess.run(["open", found])
                           time.sleep(5)
                       if not wait_for_app_launch("Opera", timeout=60):
+                          log("[Opera One] Opera window not found. Aborting.")
                           return
 
-              log("[Opera One] App launched. Dismissing popups for 10s...")
-              t0 = time.time()
-              while time.time() - t0 < 10:
-                  dismiss_system_popups()
-                  dismiss_compute_host_popup()
-                  time.sleep(0.5)
-
-              log("[Opera One] Attempting 'Accept and Install' button click...")
-              result = click_accept_and_install("Opera")
-              if result == "not_found":
-                  log("[Opera One] Button not found via UI — Tab+Enter fallback...")
-                  for _ in range(3):
-                      press("tab"); time.sleep(0.5)
-                  press("return")
-
-              log("[Opera One] Waiting 30s for next screen (dismissing popups)...")
-              for _ in range(30):
-                  dismiss_compute_host_popup()
-                  dismiss_system_popups()
-                  time.sleep(1)
-
-              for i in range(1, 8):
-                  log(f"[Opera One] Clicking 'Next' (attempt {i}/7)...")
-                  clicked = click_button_exact("Next")
-                  if clicked:
-                      log(f"[Opera One] 'Next' clicked successfully.")
-                  else:
-                      log(f"[Opera One] 'Next' button not found, continuing anyway.")
-                  dismiss_compute_host_popup()
-                  dismiss_system_popups()
-                  time.sleep(3)
-
-              log("[Opera One] Looking for 'Get Started' button...")
-              if click_button_exact("Get Started"):
-                  log("[Opera One] 'Get Started' clicked.")
-                  time.sleep(2)
-              else:
-                  log("[Opera One] 'Get Started' not found – skipping.")
-
-              log("[Opera One] Clicking 'Submit'...")
-              if click_button_exact("Submit"):
-                  log("[Opera One] 'Submit' clicked.")
-              else:
-                  log("[Opera One] 'Submit' not found – using keyboard Enter as fallback.")
-                  press("return")
+              log("[Opera One] STEP 1: Opera Installer detected. Activating...")
+              run_as('tell application "System Events" to tell process "Opera Installer" to set frontmost to true', silent=True)
               time.sleep(2)
 
-              log("[Opera One] Opening New Tab (Cmd+N)...")
+              log("[Opera One] STEP 2: Dismissing system popups for 10 seconds...")
+              t0 = time.time()
+              popup_count = 0
+              while time.time() - t0 < 10:
+                  if dismiss_system_popups():
+                      popup_count += 1
+                  if dismiss_compute_host_popup():
+                      popup_count += 1
+                  time.sleep(0.5)
+              log(f"[Opera One] STEP 2 COMPLETE: Dismissed {popup_count} popup events.")
+
+              log("[Opera One] STEP 3: Attempting 'Accept and Install' button click...")
+              result = click_accept_and_install("Opera")
+              if result == "not_found":
+                  log("[Opera One] STEP 3: Button not found via UI. Tab x3 + Enter fallback...")
+                  for i in range(3):
+                      log(f"[Opera One] STEP 3: Tab press {i+1}/3")
+                      press("tab"); time.sleep(0.5)
+                  press("return")
+                  log("[Opera One] STEP 3: Fallback executed.")
+              else:
+                  log(f"[Opera One] STEP 3 COMPLETE: Button clicked ({result}).")
+
+              log("[Opera One] STEP 4: Waiting 30 seconds for Opera One to install (dismissing popups)...")
+              for s in range(30):
+                  dismiss_compute_host_popup()
+                  dismiss_system_popups()
+                  if s % 10 == 0 and s > 0:
+                      log(f"[Opera One] STEP 4: {s}/30 seconds elapsed...")
+                  time.sleep(1)
+              log("[Opera One] STEP 4 COMPLETE: 30s installation wait done.")
+
+              log("[Opera One] STEP 5: Clicking 'Next' button 7 times (3s delay between each)...")
+              for i in range(1, 8):
+                  log(f"[Opera One] STEP 5: Looking for 'Next' button (attempt {i}/7)...")
+                  clicked = click_button_exact("Next")
+                  if clicked:
+                      log(f"[Opera One] STEP 5: 'Next' clicked successfully on attempt {i}.")
+                  else:
+                      log(f"[Opera One] STEP 5: 'Next' not found on attempt {i}. Tab+Enter fallback...")
+                      press("tab"); time.sleep(0.3)
+                      press("return")
+                  dismiss_compute_host_popup()
+                  dismiss_system_popups()
+                  log(f"[Opera One] STEP 5: Waiting 3 seconds after Next click {i}/7...")
+                  time.sleep(3)
+              log("[Opera One] STEP 5 COMPLETE: All 7 Next clicks attempted.")
+
+              log("[Opera One] STEP 6: Looking for 'Get Started' button...")
+              if click_button_exact("Get Started"):
+                  log("[Opera One] STEP 6: 'Get Started' clicked successfully.")
+                  time.sleep(2)
+              else:
+                  log("[Opera One] STEP 6: 'Get Started' not found — skipping.")
+
+              log("[Opera One] STEP 7: Looking for 'Submit' button...")
+              if click_button_exact("Submit"):
+                  log("[Opera One] STEP 7: 'Submit' clicked successfully.")
+              else:
+                  log("[Opera One] STEP 7: 'Submit' not found — pressing ENTER as fallback.")
+                  press("return")
+              time.sleep(2)
+              log("[Opera One] STEP 7 COMPLETE.")
+
+              log("[Opera One] STEP 8: Opening new tab with Cmd+N...")
               run_as('tell application "System Events" to keystroke "n" using command down', silent=True)
               time.sleep(random.uniform(1, 2))
 
               tab_count = random.randint(6, 12)
-              log(f"[Opera One] Pressing Tab x{tab_count}...")
-              for _ in range(tab_count):
+              log(f"[Opera One] STEP 9: Pressing Tab x{tab_count} (cycle navigation)...")
+              for i in range(tab_count):
+                  log(f"[Opera One] STEP 9: Tab press {i+1}/{tab_count}")
                   press("tab")
                   time.sleep(random.uniform(1, 2))
-                  
-              log("[Opera One] Pressing Enter (final)...")
-              press("return")
+                  dismiss_compute_host_popup()
+                  dismiss_system_popups()
 
-              log("[Opera One] Setup complete.")
+              log("[Opera One] STEP 10: Pressing final ENTER...")
+              press("return")
+              log("[Opera One] ===== POST-INSTALL SEQUENCE COMPLETE =====")
 
           def close_chrome():
               run_as('tell application "Google Chrome" to quit', silent=True)
               log("[Chrome] Quit signal sent.")
 
-          def handle(user, pwd, sw_type, use_proxy, action_mode, timeout=420):
+          # ============================================================
+          # MAIN HANDLER — manages Chrome, proxy, download, post-install
+          # ============================================================
+          def handle(user, pwd, sw_type, use_proxy, action_mode, timeout=480):
               global PROXY_RETRY_INTERVAL
               t0 = time.time()
-              sentinel = "/tmp/download_done.flag"
+              sentinel           = "/tmp/download_done.flag"
+              installer_sentinel = "/tmp/installer_executed.flag"
 
               chrome_first_seen  = None
               proxy_done         = False
@@ -1792,16 +1749,14 @@ jobs:
               last_cookie_try     = 0
               last_dl_try         = 0
 
-              smart_link_done     = False
-              smart_link_time     = 0
+              # Smart-link interstitial state (Tab+Enter after 20s)
+              smart_link_interstitial_done = False
+              smart_link_interstitial_time = 0
 
-              CLICK_TOTAL         = 75
-              RELOAD_THRESHOLD    = random.randint(20, 61)
-              RELOAD_FIRED        = False
-
-              log(f"[Handler] ===== HANDLER STARTED | mode={action_mode} | type={sw_type} | proxy={use_proxy} =====")
+              log(f"[Handler] ===== HANDLER STARTED =====")
+              log(f"[Handler] type={sw_type} | proxy={use_proxy} | action={action_mode}")
               if use_proxy:
-                  log(f"[Handler] Proxy user : {user[:30]}...")
+                  log(f"[Handler] Proxy user : {user}")
                   log(f"[Handler] Proxy pass : {pwd[:4]}...{pwd[-4:] if len(pwd)>8 else '****'}")
                   clipboard_set(user)
                   log("[Handler] Username pre-loaded to clipboard.")
@@ -1827,6 +1782,7 @@ jobs:
                           (time.time() - chrome_first_seen) >= CHROME_WARMUP_SECS
                       )
 
+                      # During warmup, dismiss popups only
                       if chrome_first_seen and not warmup_done:
                           dismiss_compute_host_popup()
                           dismiss_system_popups()
@@ -1842,6 +1798,7 @@ jobs:
                           accept_cookie()
                           last_cookie_try = time.time()
 
+                      # ── Proxy Auth ──────────────────────────────────────
                       if (use_proxy and warmup_done and chrome
                               and not proxy_done
                               and proxy_fill_attempts < PROXY_MAX_ATTEMPTS
@@ -1850,71 +1807,73 @@ jobs:
                           proxy_last_try = time.time()
                           proxy_fill_attempts += 1
                           log(f"[ProxyAuth] === Attempt #{proxy_fill_attempts}/{PROXY_MAX_ATTEMPTS} (t={elapsed}s) ===")
-
                           result = fill_proxy_auth(user, pwd)
                           log(f"[ProxyAuth] Result: {result}")
-
                           if result in ("no_dialog", "sheet_loading"):
-                              log(f"[ProxyAuth] Dialog not ready yet ({result}) — will retry in {PROXY_RETRY_INTERVAL}s")
+                              log(f"[ProxyAuth] Dialog not ready yet ({result}) — retrying in {PROXY_RETRY_INTERVAL}s")
                               PROXY_RETRY_INTERVAL = 2
-                          elif "sign" in result.lower() or "ok" in result.lower() or "return" in result.lower() or "submitted" in result.lower() or "keyboard" in result.lower() or "cliclick" in result.lower():
-                              log("[ProxyAuth] ✓ Proxy auth appears complete!")
+                          elif ("sign" in result.lower() or "ok" in result.lower() or
+                                "return" in result.lower() or "submitted" in result.lower() or
+                                "keyboard" in result.lower() or "cliclick" in result.lower()):
+                              log("[ProxyAuth] ✓ Proxy auth complete!")
                               proxy_done      = True
                               proxy_done_time = time.time()
-                              log(f"[ProxyAuth] Will wait {DL_WAIT_AFTER_PROXY}s before clicking download button...")
+                              log(f"[ProxyAuth] Will wait {DL_WAIT_AFTER_PROXY}s before smart-link interstitial...")
                               PROXY_RETRY_INTERVAL = 999
                           else:
                               log(f"[ProxyAuth] Uncertain result — retrying in 2s")
                               PROXY_RETRY_INTERVAL = 2
 
-                      # Smart Link Interstitial (1 Tab + Enter after 20s)
-                      if sw_type in ["opera_smart_link", "dynamic_opera"] and not smart_link_done:
-                          if chrome_first_seen and (time.time() - chrome_first_seen) > 20:
-                              if use_proxy and not proxy_done:
-                                  pass
+                      # ── Smart-Link Interstitial (Tab+Enter after 20s) ──
+                      # For all "Opera - *" and "Ad-MVN - *" smart links
+                      if sw_type in ["opera_smart_link", "ad_mvn", "dynamic_opera"]:
+                          if not smart_link_interstitial_done and chrome and warmup_done:
+                              if use_proxy:
+                                  # Wait for proxy auth, then 20 more seconds
+                                  if proxy_done and proxy_done_time is not None:
+                                      elapsed_since_proxy = time.time() - proxy_done_time
+                                      if elapsed_since_proxy >= 20:
+                                          log(f"[SmartLink] 20s since proxy auth. Executing Tab+Enter interstitial bypass (t={elapsed}s)...")
+                                          smart_link_tab_enter(sw_type)
+                                          smart_link_interstitial_done = True
+                                          smart_link_interstitial_time = time.time()
+                                      elif elapsed_since_proxy % 5 < 1:
+                                          log(f"[SmartLink] Waiting {20 - int(elapsed_since_proxy)}s more before interstitial...")
                               else:
-                                  log(f"[SmartLink] 20s elapsed. Executing TAB + ENTER interstitial bypass...")
-                                  press("tab")
-                                  time.sleep(0.5)
-                                  press("return")
-                                  smart_link_done = True
-                                  smart_link_time = time.time()
-                                  log("[SmartLink] TAB + ENTER injected.")
+                                  # No proxy: 20s after Chrome first seen + warmup
+                                  elapsed_since_chrome = time.time() - chrome_first_seen
+                                  if elapsed_since_chrome >= (CHROME_WARMUP_SECS + 20):
+                                      log(f"[SmartLink] 20s post-warmup. Executing Tab+Enter interstitial bypass (t={elapsed}s)...")
+                                      smart_link_tab_enter(sw_type)
+                                      smart_link_interstitial_done = True
+                                      smart_link_interstitial_time = time.time()
 
-                      # CLICK PATHWAY
+                      # ── CLICK-ONLY PATH: stop after smart link bypass ──
                       if action_mode == "click":
-                          if sw_type in ["opera_smart_link", "dynamic_opera"] and not smart_link_done:
-                              time.sleep(0.5)
-                              continue
-                          if sw_type in ["opera_smart_link", "dynamic_opera"] and (time.time() - smart_link_time) < 15:
-                              time.sleep(0.5)
-                              continue
-
-                          if not RELOAD_FIRED and elapsed >= RELOAD_THRESHOLD:
-                              log(f"[ClickPath] Reload threshold ({RELOAD_THRESHOLD}s) reached. Sending Cmd+R...")
-                              run_as('tell application "Google Chrome" to activate', silent=True)
-                              time.sleep(0.5)
-                              run_as('tell application "System Events" to keystroke "r" using command down', silent=True)
-                              RELOAD_FIRED = True
-                              log("[ClickPath] Page reload sent.")
-
-                          if elapsed >= CLICK_TOTAL:
-                              log("[ClickPath] Click pathway complete (75s). Exiting handler.")
-                              break
-
-                          time.sleep(0.5)
+                          if sw_type in ["opera_smart_link", "ad_mvn", "dynamic_opera"]:
+                              if smart_link_interstitial_done:
+                                  log(f"[Handler] CLICK-ONLY: Smart link interstitial done. Waiting 15s then exiting...")
+                                  time.sleep(15)
+                                  close_chrome()
+                                  log("[Handler] CLICK-ONLY pathway complete. Exiting.")
+                                  return
+                          else:
+                              # Non-smart-link click path: just wait and exit
+                              if warmup_done and elapsed > (CHROME_WARMUP_SECS + 30):
+                                  log(f"[Handler] CLICK-ONLY: Page loaded for {elapsed}s. Exiting click path.")
+                                  close_chrome()
+                                  log("[Handler] CLICK-ONLY pathway complete. Exiting.")
+                                  return
+                          time.sleep(1)
                           continue
 
-                      # INSTALL PATHWAY ONLY BELOW
-                      can_click_download = True
-                      if sw_type in ["opera_smart_link", "dynamic_opera"]:
-                          if not smart_link_done or (time.time() - smart_link_time) < 15:
-                              can_click_download = False
-
-                      if chrome and not dl_clicked and can_click_download:
+                      # ── INSTALL PATH: Download button click ─────────────
+                      if chrome and not dl_clicked:
                           if use_proxy:
                               if not proxy_done:
-                                  pass
+                                  pass  # waiting for proxy auth
+                              elif not smart_link_interstitial_done and sw_type in ["opera_smart_link", "ad_mvn", "dynamic_opera"]:
+                                  pass  # waiting for interstitial
                               elif (time.time() - proxy_done_time) < DL_WAIT_AFTER_PROXY:
                                   wait_left = int(DL_WAIT_AFTER_PROXY - (time.time() - proxy_done_time))
                                   if wait_left % 5 == 0:
@@ -1930,25 +1889,29 @@ jobs:
                                       else:
                                           log(f"[DLButton] Not found yet — retrying in 10s")
                           else:
-                              if chrome_first_seen and (time.time() - chrome_first_seen) > 5:
+                              # No proxy: wait for smart link interstitial first
+                              ready_for_dl = True
+                              if sw_type in ["opera_smart_link", "ad_mvn", "dynamic_opera"]:
+                                  ready_for_dl = smart_link_interstitial_done and \
+                                                 (time.time() - smart_link_interstitial_time >= 10)
+                              if ready_for_dl and chrome_first_seen and (time.time() - chrome_first_seen) > CHROME_WARMUP_SECS + 5:
                                   if time.time() - last_dl_try > 10:
                                       last_dl_try = time.time()
-                                      log(f"[DLButton] === Attempting download button click (t={elapsed}s, no-proxy mode) ===")
+                                      log(f"[DLButton] === Attempting download button click (t={elapsed}s, no-proxy) ===")
                                       result = click_dl_button(sw_type)
                                       if result != "not_found":
                                           dl_clicked = True
                                           log(f"[DLButton] ✓ Download triggered! ({result})")
 
+                      # Close Chrome once download sentinel found
                       if not chrome_closed and os.path.exists(sentinel):
                           log("[Handler] ✓ Download sentinel detected — closing Chrome...")
                           close_chrome()
                           time.sleep(2)
                           chrome_closed = True
 
-                      gx_types = ["opera_gx", "dynamic_opera", "ad_mvn", "opera_smart_link"]
-                      one_types = ["opera_one", "dynamic_opera", "ad_mvn", "opera_smart_link"]
-
-                      if sw_type in gx_types and op_gx and not setup_done:
+                      # ── Opera GX post-install ────────────────────────────
+                      if sw_type in ["opera_gx", "dynamic_opera", "opera_smart_link", "ad_mvn"] and op_gx and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
                               log("[Handler] *** Opera GX detected — starting installer sequence in 5s ***")
@@ -1958,11 +1921,12 @@ jobs:
                               setup_done = True
                               break
 
-                      if sw_type in one_types and op_one and not op_gx and not setup_done:
+                      # ── Opera One post-install ───────────────────────────
+                      if sw_type in ["opera_one", "dynamic_opera", "opera_smart_link", "ad_mvn"] and op_one and not op_gx and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
                               log("[Handler] *** Opera One detected — starting installer sequence in 5s ***")
-                              run_as('tell application "Opera Installer" to activate', silent=True)
+                              run_as('tell application "System Events" to tell process "Opera Installer" to set frontmost to true', silent=True)
                               time.sleep(1)
                           if time.time() - op_launch_t > 5:
                               opera_one_flow()
@@ -1970,30 +1934,31 @@ jobs:
                               break
 
                       if elapsed % 30 == 0 and elapsed > 0:
-                          log(f"[Handler] --- Status t={elapsed}s | chrome={chrome} | warmup={warmup_done} | proxy_done={proxy_done} | dl_clicked={dl_clicked} | sentinel={os.path.exists(sentinel)} ---")
+                          log(f"[Handler] --- Status t={elapsed}s | chrome={chrome} | warmup={warmup_done} | proxy_done={proxy_done} | smart_link={smart_link_interstitial_done} | dl_clicked={dl_clicked} | sentinel={os.path.exists(sentinel)} ---")
 
                   except Exception as e:
                       log(f"[Handler] Exception in main loop: {e}")
 
                   time.sleep(1)
 
-              if action_mode == "click":
-                  log("[Handler] ===== CLICK HANDLER FINISHED SUCCESSFULLY =====")
-              elif setup_done:
-                  log("[Handler] ===== INSTALL HANDLER FINISHED SUCCESSFULLY =====")
+              if setup_done:
+                  log("[Handler] ===== HANDLER FINISHED SUCCESSFULLY =====")
               else:
                   log(f"[Handler] ===== HANDLER TIMEOUT after {int(time.time()-t0)}s =====")
-                  log(f"[Handler] Final state: proxy_done={proxy_done}, dl_clicked={dl_clicked}, sentinel={os.path.exists('/tmp/download_done.flag')}")
+                  log(f"[Handler] Final state: proxy_done={proxy_done}, smart_link={smart_link_interstitial_done}, dl_clicked={dl_clicked}, sentinel={os.path.exists('/tmp/download_done.flag')}")
 
           if __name__ == "__main__":
-              u  = sys.argv[1] if len(sys.argv) > 1 else ""
-              p  = sys.argv[2] if len(sys.argv) > 2 else ""
-              sw = sys.argv[3] if len(sys.argv) > 3 else "opera_gx"
-              px = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
-              am = sys.argv[5] if len(sys.argv) > 5 else "install"
+              u      = sys.argv[1] if len(sys.argv) > 1 else ""
+              p      = sys.argv[2] if len(sys.argv) > 2 else ""
+              sw     = sys.argv[3] if len(sys.argv) > 3 else "opera_smart_link"
+              px     = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
+              am     = sys.argv[5] if len(sys.argv) > 5 else "install"
               handle(u, p, sw, px, am)
           PYEOF
 
+          # ================================================================
+          # Shell: TCC grants refresh + popup dismisser background process
+          # ================================================================
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           grant_tcc() {
             sudo sqlite3 "$TCC_DB" \
@@ -2008,7 +1973,7 @@ jobs:
           grant_tcc kTCCServiceLocalNetwork  com.google.Chrome           0
           grant_tcc kTCCServiceLocalNetwork  com.apple.Terminal          0
           grant_tcc kTCCServiceLocalNetwork  /usr/bin/osascript          1
-          echo "[$(date '+%H:%M:%S')] TCC grants refreshed for automation tools."
+          echo "[$(date '+%H:%M:%S')] TCC grants refreshed."
 
           cat > /tmp/popup_dismisser.sh << 'DISMISSEOF'
           #!/bin/bash
@@ -2049,26 +2014,21 @@ jobs:
                         end if
                       end try
                     end if
-                    if combined contains "local network" or ¬
-                       combined contains "Local Network" or ¬
-                       combined contains "hosted-compute" or ¬
-                       combined contains "control \"Google Chrome\"" or ¬
-                       combined contains "find devices" or ¬
-                       combined contains "incoming network" or ¬
+                    if combined contains "local network" or combined contains "Local Network" or ¬
+                       combined contains "hosted-compute" or combined contains "control \"Google Chrome\"" or ¬
+                       combined contains "find devices" or combined contains "incoming network" or ¬
                        combined contains "would like to find" then
                       try
                         click button "Allow" of win
                       end try
                     end if
-                    if combined contains "screen and audio" or ¬
-                       combined contains "bypass the system" or ¬
+                    if combined contains "screen and audio" or combined contains "bypass the system" or ¬
                        combined contains "window picker" then
                       try
                         click button "Allow" of win
                       end try
                     end if
-                    if combined does not contain "Accessibility" and ¬
-                       combined does not contain "accessibility" then
+                    if combined does not contain "Accessibility" and combined does not contain "accessibility" then
                       try
                         if (exists button "Allow" of win) and (exists button "Don't Allow" of win) then
                           click button "Allow" of win
@@ -2088,11 +2048,14 @@ jobs:
           /tmp/popup_dismisser.sh > /tmp/popup_dismisser.log 2>&1 &
           DISMISSER_PID=$!
           echo "[$(date '+%H:%M:%S')] Background popup dismisser started (PID $DISMISSER_PID)"
-          echo "Waiting 5s before Chrome launch..."
+          echo "[$(date '+%H:%M:%S')] Waiting 5s before Chrome launch..."
           sleep 5
 
+          # ================================================================
+          # Start Python handler
+          # ================================================================
           HANDLER_PYTHON="${UIENV_PYTHON:-python3}"
-          echo "[$(date '+%H:%M:%S')] Starting UI automation handler (PID TBD)..."
+          echo "[$(date '+%H:%M:%S')] Starting UI automation handler..."
           echo "[$(date '+%H:%M:%S')] Handler: proxy=$USE_PROXY | sw_type=$SOFTWARE_TYPE | action=$ACTION_MODE"
           "$HANDLER_PYTHON" -u /tmp/macos_handler.py \
             "$PROXY_USER" "$PROXY_PASS" "$SOFTWARE_TYPE" "$USE_PROXY" "$ACTION_MODE" \
@@ -2100,12 +2063,15 @@ jobs:
           HANDLER_PID=$!
           echo "[$(date '+%H:%M:%S')] Handler started (PID $HANDLER_PID)"
 
+          # ================================================================
+          # INSTALL PATH: file watcher for DMG download
+          # ================================================================
           if [ "$ACTION_MODE" = "install" ]; then
+            echo "[$(date '+%H:%M:%S')] [Watcher] INSTALL path: Monitoring $DL_FOLDER for downloads..."
             touch /tmp/watcher_start_marker
             (
               DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
               INSTALLED=false
-              echo "[$(date '+%H:%M:%S')] [Watcher] Started. Monitoring $DL_FOLDER for downloads..."
               LAST_STATUS=$(($(date +%s)))
               while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
                 NOW=$(date +%s)
@@ -2130,8 +2096,7 @@ jobs:
                     echo "[$(date '+%H:%M:%S')] [Watcher] Waiting for download to complete..."
                     PREV=0
                     for i in $(seq 1 30); do
-                      SZ=$(stat -f%z "$FILE" 2>/dev/null || \
-                           stat -c%s "$FILE" 2>/dev/null || echo 0)
+                      SZ=$(stat -f%z "$FILE" 2>/dev/null || stat -c%s "$FILE" 2>/dev/null || echo 0)
                       if [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 500000 ]; then
                         echo "[$(date '+%H:%M:%S')] [Watcher] File stable at ${SZ}B"
                         break
@@ -2170,7 +2135,6 @@ jobs:
                     EXTRACT_DIR="${DL_FOLDER}/extracted_$(date +%s)"
                     mkdir -p "$EXTRACT_DIR"
                     if ! ditto -xk "$FILE" "$EXTRACT_DIR" 2>/dev/null; then
-                      echo "[$(date '+%H:%M:%S')] [Installer] ditto failed, trying unzip..."
                       unzip -q -o "$FILE" -d "$EXTRACT_DIR" 2>/dev/null || true
                     fi
                     find "$EXTRACT_DIR" -name "__MACOSX" -exec rm -rf {} + 2>/dev/null || true
@@ -2184,8 +2148,7 @@ jobs:
                       INSTALLED_APP_NAME="$AN"
                       rm -rf "$EXTRACT_DIR" 2>/dev/null || true
                     else
-                      echo "[$(date '+%H:%M:%S')] [Installer] WARNING: No .app in ZIP. Listing contents:"
-                      ls -laR "$EXTRACT_DIR" || true
+                      echo "[$(date '+%H:%M:%S')] [Installer] WARNING: No .app in ZIP."
                     fi
                   elif [ "$EXT" = "pkg" ]; then
                     echo "[$(date '+%H:%M:%S')] [Installer] Installing PKG: $FILE"
@@ -2197,8 +2160,13 @@ jobs:
                     sudo codesign --force --deep --sign - "/Applications/$BASENAME" 2>/dev/null || true
                     INSTALLED_APP_NAME="$BASENAME"
                   fi
+
+                  # Write installer sentinel so Python handler knows it's time for post-install
+                  touch "$INSTALLER_SENTINEL"
+                  echo "[$(date '+%H:%M:%S')] [Watcher] Installer sentinel written: $INSTALLER_SENTINEL"
+
                   ACTUAL="$SOFTWARE_TYPE"
-                  if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ] || [ "$ACTUAL" = "opera_smart_link" ]; then
+                  if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "opera_smart_link" ] || [ "$ACTUAL" = "ad_mvn" ]; then
                     if echo "$INSTALLED_APP_NAME$BASENAME" | grep -qi "gx"; then
                       ACTUAL="opera_gx"
                     else
@@ -2206,15 +2174,11 @@ jobs:
                     fi
                   fi
                   echo "[$(date '+%H:%M:%S')] [Watcher] Determined app type: $ACTUAL"
-                  echo "[$(date '+%H:%M:%S')] [Watcher] Closing Chrome download tabs and quitting..."
-                  osascript -e 'tell application "Google Chrome" to activate' >/dev/null 2>&1 || true
-                  sleep 0.5
-                  osascript -e 'tell application "System Events" to keystroke "w" using command down' >/dev/null 2>&1 || true
-                  sleep 0.3
-                  osascript -e 'tell application "System Events" to keystroke "w" using command down' >/dev/null 2>&1 || true
-                  sleep 0.3
+
+                  echo "[$(date '+%H:%M:%S')] [Watcher] Quitting Chrome..."
                   osascript -e 'tell application "Google Chrome" to quit' >/dev/null 2>&1 || true
                   sleep 2
+
                   if [ "$ACTUAL" = "opera_gx" ]; then
                     SEARCH_PATHS=(
                       "/Applications/$INSTALLED_APP_NAME"
@@ -2230,6 +2194,7 @@ jobs:
                       "$HOME/Applications/Opera.app"
                     )
                   fi
+
                   echo "[$(date '+%H:%M:%S')] [Watcher] Waiting for app to appear on disk..."
                   LAUNCHED=false
                   for i in $(seq 1 60); do
@@ -2262,8 +2227,14 @@ jobs:
             ) &
             WATCHER_PID=$!
             echo "[$(date '+%H:%M:%S')] Watcher started (PID $WATCHER_PID)"
+          else
+            echo "[$(date '+%H:%M:%S')] CLICK-ONLY path: Watcher not started (no download/install expected)."
+            WATCHER_PID=""
           fi
 
+          # ================================================================
+          # Launch Chrome with proxy or direct
+          # ================================================================
           CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
           CHROME_FLAGS=(
             --no-first-run
@@ -2283,19 +2254,15 @@ jobs:
           )
 
           if [ "$USE_PROXY" = "true" ]; then
-            if [ "$PROXY_TYPE" = "manual" ] || [ "$PROXY_TYPE" = "floppydata" ]; then
-              PROXY_SRV="$PROXY_SERVER"
-              echo "[$(date '+%H:%M:%S')] Launching Chrome WITH proxy → $TARGET_URL"
-              echo "[$(date '+%H:%M:%S')] Proxy server: $PROXY_SRV (type=$PROXY_TYPE)"
-            else
-              PROXY_SRV="residential-proxy.scrapeops.io:8181"
-              echo "[$(date '+%H:%M:%S')] Launching Chrome WITH ScrapeOps proxy → $TARGET_URL"
-              echo "[$(date '+%H:%M:%S')] Proxy server: $PROXY_SRV"
-            fi
+            # Use proxy server WITHOUT embedding credentials in URL
+            # Auth dialog will appear and Python handler will fill it in
+            echo "[$(date '+%H:%M:%S')] Launching Chrome WITH proxy → $TARGET_URL"
+            echo "[$(date '+%H:%M:%S')] Proxy server: $PROXY_SERVER (type: $PROXY_TYPE)"
+            echo "[$(date '+%H:%M:%S')] Credentials will be auto-filled via proxy auth dialog."
             if [ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
                 "${CHROME_FLAGS[@]}" \
-                --proxy-server="http://$PROXY_SRV" \
+                --proxy-server="http://$PROXY_SERVER" \
                 "$TARGET_URL" &
               CHROME_PID=$!
               echo "[$(date '+%H:%M:%S')] Chrome launched (PID $CHROME_PID)"
@@ -2318,20 +2285,10 @@ jobs:
           fi
 
           echo "[$(date '+%H:%M:%S')] Chrome launch complete. Handler automation is running."
-          echo "[$(date '+%H:%M:%S')] Monitoring handler output in real time below:"
+          echo "[$(date '+%H:%M:%S')] Action Mode: $(echo $ACTION_MODE | tr '[:lower:]' '[:upper:]')"
           echo "------------------------------------------------------------"
 
-          if [ "$ACTION_MODE" = "click" ]; then
-            echo "[$(date '+%H:%M:%S')] Click mode: waiting for handler to complete..."
-            wait $HANDLER_PID
-            echo "[$(date '+%H:%M:%S')] Quitting Chrome after click pathway..."
-            osascript -e 'tell application "Google Chrome" to quit' >/dev/null 2>&1 || true
-            kill $DISMISSER_PID 2>/dev/null || true
-            echo "[$(date '+%H:%M:%S')] Click pathway finished. Exiting step cleanly."
-            exit 0
-          fi
-
-          HANDLER_TIMEOUT=600
+          HANDLER_TIMEOUT=500
           POLL_START=$(date +%s)
           while kill -0 $HANDLER_PID 2>/dev/null; do
             ELAPSED=$(($(date +%s) - POLL_START))
@@ -2345,16 +2302,18 @@ jobs:
 
           echo "------------------------------------------------------------"
           echo "[$(date '+%H:%M:%S')] Handler process finished."
-          kill $WATCHER_PID   2>/dev/null || true
+          [ -n "$WATCHER_PID" ] && kill $WATCHER_PID   2>/dev/null || true
           kill $DISMISSER_PID 2>/dev/null || true
           echo "[$(date '+%H:%M:%S')] === Installation workflow complete ==="
 
       # ================================================================== #
-      # STEP 7 — Keep runner alive                                         #
+      # STEP 7 — Keep runner alive (install path only)                     #
       # ================================================================== #
       - name: Keep Runner Alive
-        if: always() && matrix.action_mode == 'install'
+        if: always()
         shell: bash
         run: |
+          ACTION="${{ matrix.action_mode }}"
+          echo "[$(date '+%H:%M:%S')] Action mode: $(echo $ACTION | tr '[:lower:]' '[:upper:]')"
           echo "[$(date '+%H:%M:%S')] Session active. Runner stays online until job timeout."
           sleep 360
