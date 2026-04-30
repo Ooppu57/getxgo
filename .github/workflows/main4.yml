@@ -20,12 +20,12 @@ on:
         description: 'Getscreen.me Account Email'
         required: true
         type: string
-        default: 'techx@highmail.site'
+        default: 'techx@justzeus.com'
       gologin_email:
         description: 'GoLogin Account Email'
         required: true
         type: string
-        default: 'dc1@mnb.net'
+        default: 'om2@mnb.net'
       num_devices:
         description: 'Number of Devices to Spawn'
         required: true
@@ -74,7 +74,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'AVG - B4Books'
+        default: 'Ad-MVN - Techx'
       run_manual_url:
         description: 'Use Manual URL (overrides software choice if checked)'
         required: true
@@ -84,7 +84,7 @@ on:
         description: 'Manual Software URL (only used if Use Manual URL is checked)'
         required: false
         type: string
-        default: ''
+        default: 'https://checkmyapp.space/sl/v1nrr'
 
 jobs:
   prepare_matrix:
@@ -122,7 +122,6 @@ jobs:
           run_manual     = os.environ.get("RUN_MANUAL", "false").lower() == "true"
           manual_url_in  = os.environ.get("MANUAL_URL", "").strip()
 
-          # ── All affiliate URL maps ──────────────────────────────────────────
           avg_urls = {
               "AVG - TechxTrader": "https://u.to/a-trdr/GoeNIg",
               "AVG - B4Books":     "https://u.to/a-b4b/O4eNIg",
@@ -153,7 +152,6 @@ jobs:
           }
           all_urls = {**avg_urls, **opera_urls, **opera_one_urls, **ad_mvn_urls}
 
-          # ── Determine target URL and software type ─────────────────────────
           if run_manual and manual_url_in:
               target_url    = manual_url_in
               software_type = "dynamic_opera"
@@ -179,18 +177,15 @@ jobs:
                   exe_filter    = "*Opera*Setup*.exe"
                   dmg_filter    = "*Opera*"
               else:
-                  # Opera - * (smart links)
                   software_type = "opera_smart_link"
                   exe_filter    = "*Opera*Setup*.exe"
                   dmg_filter    = "*Opera*"
               print(f"[Target] Software: {software_choice} | Type: {software_type} | URL: {target_url}")
 
-          # ── Build action list: install then click, shuffled ────────────────
           action_list = ["install"] * num_installs + ["click"] * num_clicks
           random.shuffle(action_list)
           print(f"[Actions] install={num_installs} click={num_clicks} order={action_list}")
 
-          # ── Short name helpers ─────────────────────────────────────────────
           def short_os(v):
               m = {"windows-2025":"W25","windows-2022":"W22","windows-11-arm":"W11A",
                    "macos-14":"M14","macos-15":"M15","macos-26":"M26","macos-26-intel":"M26I"}
@@ -312,7 +307,6 @@ jobs:
       # ── WINDOWS STEPS ──────────────────────────────────────────────────
       # ════════════════════════════════════════════════════════════════════
 
-      # ── 1-W: Disable Defender & SmartScreen ────────────────────────────
       - name: Disable Windows Defender & Edge SmartScreen (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -334,7 +328,6 @@ jobs:
           Set-ItemProperty -Path $exemptPath -Name "1" -Value '{"domains":["*"],"file_extension":"exe"}'
           Write-Host "[OK] Windows Defender and SmartScreen configured." -ForegroundColor Green
 
-      # ── 2-W: Install & Start Getscreen.me ──────────────────────────────
       - name: Install and Start Getscreen.me (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -354,7 +347,6 @@ jobs:
           Start-Process msiexec.exe -Wait -ArgumentList $InstallArgs
           Write-Host "[OK] Getscreen.me configured for device: $DeviceName" -ForegroundColor Green
 
-      # ── 3-W: Download, Install & Open GoLogin ──────────────────────────
       - name: Download, Install, and Open GoLogin (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -383,7 +375,6 @@ jobs:
           Start-Process $GoLoginPath
           Write-Host "[OK] GoLogin installed and launched." -ForegroundColor Green
 
-      # ── 4-W: Automate GoLogin Login ────────────────────────────────────
       - name: Automate GoLogin Login (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -422,8 +413,507 @@ jobs:
               print('[ERROR] GoLogin window not found.'); sys.exit(1)
           "
 
-      # ── 5-W: Wait for GoLogin Profile & Run Software URL ───────────────
-      - name: Wait for GoLogin Orbita Profile & Run Software (Windows)
+      # ── 5-W: Write Python handler using a YAML-safe python shell step ─
+      - name: Write Windows Automation Handler
+        if: runner.os == 'Windows'
+        shell: python
+        run: |
+          import os
+          script = '''
+          import time, sys, os, tempfile, random, subprocess, ctypes
+          from pywinauto import Desktop
+          import pyautogui
+          from pywinauto.keyboard import send_keys
+          import psutil
+
+          TARGET_URL    = os.environ.get("TARGET_URL", "")
+          SOFTWARE_TYPE = os.environ.get("SOFTWARE_TYPE", "dynamic_opera")
+          ACTION_MODE   = os.environ.get("ACTION_MODE", "install")
+
+          DL_FOLDER     = os.path.join(os.environ.get("USERPROFILE",""), "Downloads")
+          SENTINEL_PATH = os.path.join(tempfile.gettempdir(), "download_done.flag")
+          INSTALLER_EXECUTED_PATH = os.path.join(tempfile.gettempdir(), "installer_executed.flag")
+
+          def log(tag, msg):
+              print(f"[{time.strftime('%H:%M:%S')}][{tag}] {msg}", flush=True)
+
+          ORBITA_PROCS  = ["orbita", "orbita-browser", "gl-browser", "gl_browser", "gologin"]
+          ORBITA_TITLES = ["orbita", "gologin", "gologin browser", "gl browser", "new tab"]
+
+          def get_orbita_windows(desktop):
+              matches = []
+              try:
+                  for w in desktop.windows(visible_only=True):
+                      wt = (w.window_text() or "").lower()
+                      try:
+                          proc = w.process().name().lower()
+                      except Exception:
+                          proc = ""
+                      if any(p in proc for p in ORBITA_PROCS) or any(t in wt for t in ORBITA_TITLES):
+                          matches.append(w)
+              except Exception as e:
+                  log("Detect", f"Enumeration error: {e}")
+              return matches
+
+          def find_orbita_window(desktop, timeout=300):
+              log("OrbitaNav", f"Waiting up to {timeout}s for Orbita window...")
+              deadline = time.time() + timeout
+              while time.time() < deadline:
+                  desktop = Desktop(backend="uia")
+                  wins = get_orbita_windows(desktop)
+                  if wins:
+                      best = max(wins, key=lambda w: w.rectangle().width() * w.rectangle().height())
+                      log("OrbitaNav", f"Found: '{best.window_text()}' (pid {best.process_id})")
+                      return best
+                  try:
+                      for proc in psutil.process_iter(["name","pid"]):
+                          pname = (proc.info.get("name") or "").lower()
+                          if any(p in pname for p in ORBITA_PROCS):
+                              log("OrbitaNav", f"Process detected (PID {proc.pid}): {proc.info['name']}")
+                              time.sleep(3)
+                              desktop = Desktop(backend="uia")
+                              wins = get_orbita_windows(desktop)
+                              if wins:
+                                  best = max(wins, key=lambda w: w.rectangle().width() * w.rectangle().height())
+                                  return best
+                  except Exception:
+                      pass
+                  remaining = int(deadline - time.time())
+                  if remaining % 30 == 0 and remaining > 0:
+                      log("OrbitaNav", f"Still waiting... {remaining}s")
+                  time.sleep(2)
+              return None
+
+          def navigate_orbita_to_url(desktop, url, max_wait=300):
+              orbita_win = find_orbita_window(desktop, max_wait)
+              if not orbita_win:
+                  log("OrbitaNav", "ERROR: Orbita window never appeared.")
+                  return None
+              try:
+                  orbita_win.set_focus()
+                  orbita_win.maximize()
+                  time.sleep(1.5)
+              except Exception as e:
+                  log("OrbitaNav", f"Focus warning: {e}")
+
+              strategies = [
+                  ("Ctrl+L", lambda: (send_keys("^l"), time.sleep(0.8), send_keys("^a"), time.sleep(0.2), pyautogui.typewrite(url, interval=0.02), time.sleep(0.3), send_keys("{ENTER}"))),
+                  ("F6",     lambda: (send_keys("{F6}"), time.sleep(0.8), send_keys("^a"), time.sleep(0.2), pyautogui.typewrite(url, interval=0.02), time.sleep(0.3), send_keys("{ENTER}"))),
+                  ("ClickBar", lambda: (pyautogui.click(300, 50), time.sleep(0.5), pyautogui.hotkey("ctrl","a"), time.sleep(0.2), pyautogui.typewrite(url, interval=0.02), time.sleep(0.3), send_keys("{ENTER}"))),
+              ]
+              for name, strat in strategies:
+                  try:
+                      orbita_win.set_focus()
+                      time.sleep(0.5)
+                      strat()
+                      log("OrbitaNav", f"Strategy '{name}' executed.")
+                      time.sleep(4)
+                      return orbita_win
+                  except Exception as e:
+                      log("OrbitaNav", f"Strategy '{name}' failed: {e}")
+                      time.sleep(1)
+              log("OrbitaNav", "WARNING: All navigation strategies failed.")
+              return orbita_win
+
+          def close_orbita_browser(orbita_win):
+              try:
+                  orbita_win.set_focus()
+                  time.sleep(0.5)
+                  send_keys("^w")
+                  time.sleep(0.5)
+                  send_keys("^w")
+                  log("Browser", "Sent Ctrl+W to close Orbita tabs.")
+                  time.sleep(1)
+                  send_keys("%{F4}")
+                  log("Browser", "Sent Alt+F4 to close Orbita window.")
+              except Exception as e:
+                  log("Browser", f"Error closing Orbita: {e}")
+                  try:
+                      orbita_win.close()
+                  except:
+                      pass
+
+          DOWNLOAD_DONE_TITLES = [
+              "Thanks for downloading Opera", "Thanks for downloadin",
+              "Download | Thanks", "sudetyj", "GET READY TO PLAY", "ready to install",
+          ]
+          INTERFERENCE_TITLES = [
+              "Settings","Windows Settings","Default apps","System Settings",
+              "Choose an app","How do you want to open","Open with",
+              "Windows PowerShell","Administrator: Windows PowerShell",
+              "Command Prompt","Administrator: Command Prompt","User Account Control",
+          ]
+          INTERFERENCE_SUBS = [
+              "default apps","choose a default","set as default","open with",
+              "how do you want to open","user account control",
+          ]
+
+          def _is_download_done(wt):
+              tl = (wt or "").lower()
+              return any(f.lower() in tl for f in DOWNLOAD_DONE_TITLES)
+
+          def _is_interference(wt):
+              if not wt:
+                  return False
+              for ex in INTERFERENCE_TITLES:
+                  if wt.strip().lower() == ex.strip().lower():
+                      return True
+              tl = wt.lower()
+              return any(s in tl for s in INTERFERENCE_SUBS)
+
+          def _is_target_sw(wt, sw_type):
+              if not wt:
+                  return False
+              tl = wt.lower()
+              if sw_type == "avg":
+                  return "avg" in tl
+              if sw_type == "opera_gx":
+                  return ("opera" in tl and "gx" in tl)
+              return "opera" in tl and "edge" not in tl and "chrome web store" not in tl
+
+          def dismiss_interference(desktop, sw_type, label=""):
+              try:
+                  for w in desktop.windows(visible_only=True):
+                      wt = w.window_text() or ""
+                      if _is_target_sw(wt, sw_type) or not _is_interference(wt):
+                          continue
+                      log("WinGuard", f"Closing interference: '{wt}' [{label}]")
+                      for strategy in [lambda: (w.set_focus(), time.sleep(0.2), send_keys("%{F4}")),
+                                       lambda: w.close(),
+                                       lambda: w.minimize()]:
+                          try:
+                              strategy(); time.sleep(0.3); break
+                          except Exception:
+                              pass
+              except Exception:
+                  pass
+
+          def close_download_windows(desktop):
+              try:
+                  for w in desktop.windows(visible_only=True):
+                      wt = w.window_text() or ""
+                      if not _is_download_done(wt):
+                          continue
+                      log("EdgeClose", f"Closing download-done window: '{wt}'")
+                      for k in [lambda: send_keys("^w"), lambda: send_keys("%{F4}"), lambda: w.close()]:
+                          try:
+                              w.set_focus(); time.sleep(0.3); k(); time.sleep(0.4); break
+                          except Exception:
+                              pass
+              except Exception:
+                  pass
+
+          def robust_maximize(desktop, orbita_win, sw_type, label=""):
+              dismiss_interference(desktop, sw_type, label)
+              try:
+                  orbita_win.set_focus(); time.sleep(0.2)
+                  orbita_win.maximize(); time.sleep(0.3)
+                  try:
+                      ctypes.windll.user32.ShowWindow(orbita_win.handle, 9)
+                      time.sleep(0.2)
+                  except Exception:
+                      pass
+              except Exception:
+                  pass
+              return orbita_win
+
+          def click_button(desktop, win, sw_type, button_names, label=""):
+              if not win:
+                  return False
+              for name in button_names:
+                  for btn in win.descendants(control_type="Button"):
+                      try:
+                          txt = btn.window_text() or ""
+                          if name.lower() in txt.lower():
+                              btn.click_input()
+                              log("BtnClick", f"[{label}] Clicked '{txt}'")
+                              return True
+                      except Exception:
+                          pass
+              return False
+
+          def opera_one_post_install_win(sw_win, sw_type):
+              log("PostInstall-OP1", "=== Opera One Post-Install (Windows) STARTING ===")
+              desktop = Desktop(backend="uia")
+              log("PostInstall-OP1", "STEP 1: Waiting 50s for Opera One to initialize...")
+              for s in range(1, 51):
+                  log("PostInstall-OP1", f"  Init wait {s}/50s")
+                  time.sleep(1)
+              log("PostInstall-OP1", "STEP 2: Maximizing Opera window...")
+              try:
+                  sw_win = robust_maximize(desktop, sw_win, sw_type, "step2")
+              except Exception:
+                  pass
+              time.sleep(5)
+              sw, sh = pyautogui.size(); cx, cy = sw // 2, sh // 2
+              log("PostInstall-OP1", f"STEP 3: Center click at ({cx},{cy})...")
+              pyautogui.click(cx, cy); time.sleep(5)
+              log("PostInstall-OP1", "STEP 4: Clicking Next x6 (2s each)...")
+              for i in range(1, 7):
+                  desktop = Desktop(backend="uia")
+                  sw_win = robust_maximize(desktop, sw_win, sw_type, f"next-{i}")
+                  if not click_button(desktop, sw_win, sw_type, ["Next"], f"NEXT-{i}"):
+                      pyautogui.click(int(sw * 0.90), int(sh * 0.90))
+                  time.sleep(2)
+              log("PostInstall-OP1", "STEP 5: Clicking Done/Finish...")
+              desktop = Desktop(backend="uia")
+              sw_win = robust_maximize(desktop, sw_win, sw_type, "done")
+              if not click_button(desktop, sw_win, sw_type, ["Done", "Finish"], "DONE"):
+                  pyautogui.click(int(sw * 0.90), int(sh * 0.90))
+              time.sleep(5)
+              send_keys("{ENTER}"); time.sleep(5)
+              log("PostInstall-OP1", "STEP 6: Clicking Submit...")
+              desktop = Desktop(backend="uia")
+              sw_win = robust_maximize(desktop, sw_win, sw_type, "submit")
+              if not click_button(desktop, sw_win, sw_type, ["Submit"], "SUBMIT"):
+                  pyautogui.click(sw // 2, int(sh * 0.85))
+              time.sleep(5)
+              log("PostInstall-OP1", "STEP 7: Tab cycle 8->18...")
+              for tab_count in range(8, 19):
+                  desktop = Desktop(backend="uia")
+                  sw_win = robust_maximize(desktop, sw_win, sw_type, f"ctrlT-{tab_count}")
+                  send_keys("^t"); time.sleep(5)
+                  for i in range(1, tab_count + 1):
+                      desktop = Desktop(backend="uia")
+                      sw_win = robust_maximize(desktop, sw_win, sw_type, f"tab{tab_count}-{i}")
+                      send_keys("{TAB}"); time.sleep(1)
+                  send_keys("{ENTER}"); time.sleep(5)
+                  desktop = Desktop(backend="uia")
+                  sw_win = robust_maximize(desktop, sw_win, sw_type, f"post-ctrlT-{tab_count}")
+                  send_keys("^t"); time.sleep(5)
+              log("PostInstall-OP1", "=== Opera One Post-Install COMPLETE ===")
+
+          def opera_gx_post_install_win(sw_win, sw_type):
+              log("PostInstall-OPGX", "=== Opera GX Post-Install (Windows) STARTING ===")
+              desktop = Desktop(backend="uia")
+              sw_win = robust_maximize(desktop, sw_win, sw_type, "init")
+              time.sleep(0.5)
+              sw, sh = pyautogui.size(); cx, cy = sw // 2, sh // 2
+              pyautogui.click(cx, cy); time.sleep(0.15); pyautogui.click(cx, cy)
+              time.sleep(random.uniform(2.0, 3.0))
+              for i in range(4):
+                  sw_win = robust_maximize(Desktop(backend="uia"), sw_win, sw_type, f"tab4-{i}")
+                  send_keys("{TAB}"); time.sleep(random.uniform(1.0, 2.0))
+              for i in range(8):
+                  sw_win = robust_maximize(Desktop(backend="uia"), sw_win, sw_type, f"enter8-{i}")
+                  send_keys("{ENTER}"); time.sleep(random.uniform(1.0, 2.0))
+              time.sleep(random.uniform(2.0, 3.0))
+              for i in range(6):
+                  sw_win = robust_maximize(Desktop(backend="uia"), sw_win, sw_type, f"tab6-{i}")
+                  send_keys("{TAB}"); time.sleep(random.uniform(1.0, 2.0))
+              sw_win = robust_maximize(Desktop(backend="uia"), sw_win, sw_type, "final-enter")
+              send_keys("{ENTER}"); time.sleep(5)
+              for tab_count in range(7, 17):
+                  sw_win = robust_maximize(Desktop(backend="uia"), sw_win, sw_type, f"ctrlT-{tab_count}")
+                  send_keys("^t")
+                  for i in range(1, tab_count + 1):
+                      sw_win = robust_maximize(Desktop(backend="uia"), sw_win, sw_type, f"tab{tab_count}-{i}")
+                      send_keys("{TAB}"); time.sleep(random.uniform(1.0, 2.0))
+                  sw_win = robust_maximize(Desktop(backend="uia"), sw_win, sw_type, f"enter-{tab_count}")
+                  send_keys("{ENTER}"); time.sleep(5)
+              log("PostInstall-OPGX", "=== Opera GX Post-Install COMPLETE ===")
+
+          def avg_post_install_win(avg_win):
+              log("PostInstall-AVG", "=== AVG Post-Install (Windows) STARTING ===")
+              desktop = Desktop(backend="uia")
+              avg_win = robust_maximize(desktop, avg_win, "avg", "init")
+              time.sleep(0.5)
+              sw, sh = pyautogui.size(); cx, cy = sw // 2, sh // 2
+              pyautogui.click(cx, cy); time.sleep(0.15); pyautogui.click(cx, cy)
+              time.sleep(5)
+              tab_count = 6
+              while tab_count < 17:
+                  avg_win = robust_maximize(Desktop(backend="uia"), avg_win, "avg", f"ctrlT-{tab_count}")
+                  send_keys("^t")
+                  for i in range(1, tab_count + 1):
+                      avg_win = robust_maximize(Desktop(backend="uia"), avg_win, "avg", f"tab{tab_count}-{i}")
+                      send_keys("{TAB}"); time.sleep(random.uniform(1.0, 2.0))
+                  avg_win = robust_maximize(Desktop(backend="uia"), avg_win, "avg", f"enter-{tab_count}")
+                  send_keys("{ENTER}")
+                  tab_count += random.randint(1, 2)
+                  if tab_count < 17:
+                      time.sleep(5)
+              log("PostInstall-AVG", "=== AVG Post-Install COMPLETE ===")
+
+          def handle_automation_win(sw_type, action_mode, timeout=3300):
+              desktop = Desktop(backend="uia")
+              start_t = time.time()
+
+              orbita_win = navigate_orbita_to_url(desktop, TARGET_URL, max_wait=300)
+              if not orbita_win:
+                  log("Main", "No Orbita window -- aborting.")
+                  return
+
+              last_ctrl_j_t    = time.time()
+              last_dl_click_t  = 0
+              ctrl_j_attempts  = 0
+              keep_clicked     = False
+              avg_dl_clicked   = False
+              smart_link_done  = False
+              smart_link_t     = 0
+              op1_installer_t  = None
+              op1_done         = False
+              opgx_installer_t = None
+              opgx_done        = False
+              avg_installer_t  = None
+              avg_done         = False
+              dl_windows_closed = False
+              proxy_auth_t     = start_t
+              last_interference = 0
+              orbita_closed    = False
+
+              log("Main", f"Automation loop started | action={action_mode} | type={sw_type}")
+
+              while time.time() - start_t < timeout:
+                  try:
+                      desktop     = Desktop(backend="uia")
+                      edge_win    = None
+                      orbita_win2 = None
+                      op_win      = None
+                      avg_app_win = None
+
+                      for w in desktop.windows(visible_only=True):
+                          wt = w.window_text() or ""
+                          wl = wt.lower()
+                          if "microsoft edge" in wl:
+                              edge_win = w
+                          elif any(p in wl for p in ORBITA_TITLES) or any(p in (w.process().name() or "").lower() for p in ORBITA_PROCS):
+                              orbita_win2 = w
+                          elif "opera" in wl and "edge" not in wl and "chrome web store" not in wl:
+                              op_win = w
+                          elif "avg" in wl:
+                              avg_app_win = w
+
+                      now = time.time()
+
+                      if now - last_interference >= 2:
+                          dismiss_interference(desktop, sw_type, "continuous")
+                          last_interference = now
+
+                      if not dl_windows_closed and os.path.exists(SENTINEL_PATH):
+                          log("Sentinel", "Download sentinel found -- cleaning download windows...")
+                          for _ in range(7):
+                              close_download_windows(desktop); time.sleep(2)
+                          dl_windows_closed = True
+
+                      if dl_windows_closed and not orbita_closed and orbita_win2:
+                          log("Main", "Closing Orbita browser after download...")
+                          close_orbita_browser(orbita_win2)
+                          orbita_closed = True
+
+                      if action_mode == "install" and not op1_done:
+                          is_target = sw_type in ["opera_one","dynamic_opera","ad_mvn","opera_smart_link"]
+                          if is_target:
+                              if op1_installer_t is None and os.path.exists(INSTALLER_EXECUTED_PATH):
+                                  op1_installer_t = time.time()
+                                  log("PostInstall-OP1", "Installer sentinel found. Trigger in 50s.")
+                              if op1_installer_t and (now - op1_installer_t) >= 50:
+                                  if op_win and "GX" in (op_win.window_text() or "").upper():
+                                      op1_done = True
+                                  else:
+                                      opera_one_post_install_win(op_win, sw_type)
+                                      op1_done = True
+
+                      if action_mode == "install" and not opgx_done:
+                          is_target = sw_type in ["opera_gx","dynamic_opera","ad_mvn","opera_smart_link"]
+                          if is_target:
+                              if opgx_installer_t is None and os.path.exists(INSTALLER_EXECUTED_PATH):
+                                  opgx_installer_t = time.time()
+                                  log("PostInstall-OPGX", "Installer sentinel found. Trigger in 40s.")
+                              if opgx_installer_t and (now - opgx_installer_t) >= 40:
+                                  if op_win and "GX" not in (op_win.window_text() or "").upper():
+                                      opgx_done = True
+                                  else:
+                                      opera_gx_post_install_win(op_win, sw_type)
+                                      opgx_done = True
+
+                      if sw_type == "avg" and action_mode == "install" and not avg_done:
+                          if avg_installer_t is None and os.path.exists(INSTALLER_EXECUTED_PATH):
+                              avg_installer_t = time.time()
+                              log("PostInstall-AVG", "Installer sentinel found. Trigger in 60s.")
+                          if avg_installer_t and (now - avg_installer_t) >= 60:
+                              avg_post_install_win(avg_app_win)
+                              avg_done = True
+
+                      active_browser = edge_win or orbita_win2
+                      if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                          if not smart_link_done and active_browser and (now - proxy_auth_t) > 20:
+                              try:
+                                  active_browser.set_focus(); time.sleep(0.5)
+                                  send_keys("{TAB}"); time.sleep(0.5); send_keys("{ENTER}")
+                                  log("SmartLink", "Tab+Enter interstitial bypass sent.")
+                              except Exception as e:
+                                  log("SmartLink", f"Bypass error: {e}")
+                              smart_link_done = True; smart_link_t = now
+
+                      if action_mode == "click":
+                          if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                              if not smart_link_done:
+                                  time.sleep(1); continue
+                              if now - smart_link_t < 15:
+                                  time.sleep(1); continue
+                          time.sleep(1); continue
+
+                      if edge_win and action_mode == "install":
+                          for btn_name in ["Keep", "Keep anyway"]:
+                              btns = edge_win.descendants(control_type="Button", title=btn_name)
+                              if btns:
+                                  try: btns[0].click_input(); keep_clicked = True; time.sleep(0.5)
+                                  except Exception: pass
+
+                      can_dl = True
+                      if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                          if not smart_link_done or (now - smart_link_t < 15):
+                              can_dl = False
+                      if edge_win and action_mode == "install" and can_dl and sw_type not in ["avg"]:
+                          if now - last_dl_click_t > 5:
+                              for btn in (edge_win.descendants(control_type="Button") or []):
+                                  btxt = btn.window_text() or ""
+                                  if any(k in btxt.lower() for k in ["download opera","download now","telecharger","descargar","download"]):
+                                      try:
+                                          edge_win.set_focus(); time.sleep(0.5)
+                                          btn.click_input(); last_dl_click_t = now
+                                          log("Download", f"Clicked: '{btxt}'"); break
+                                      except Exception: pass
+
+                      if edge_win and sw_type == "avg" and action_mode == "install":
+                          if not avg_dl_clicked and (now - proxy_auth_t) > 20:
+                              try:
+                                  edge_win.set_focus(); time.sleep(0.5)
+                                  send_keys("{TAB}"); time.sleep(random.uniform(1, 2))
+                                  send_keys("{ENTER}")
+                                  log("AVG", "Download trigger sent.")
+                                  for w in range(10):
+                                      log("AVG", f"  Init wait {w+1}/10s"); time.sleep(1)
+                              except Exception as e:
+                                  log("AVG", f"Trigger error: {e}")
+                              avg_dl_clicked = True
+
+                      can_ctrlj = not (sw_type == "avg" and not avg_dl_clicked)
+                      if (action_mode == "install" and not keep_clicked and edge_win
+                              and can_ctrlj and (now - last_ctrl_j_t > 15) and ctrl_j_attempts < 4):
+                          try:
+                              edge_win.set_focus(); time.sleep(0.5)
+                              send_keys("^j")
+                              last_ctrl_j_t = now; ctrl_j_attempts += 1
+                              log("Utility", f"Ctrl+J attempt {ctrl_j_attempts}/4")
+                          except Exception: pass
+
+                  except Exception as e:
+                      log("Main", f"Loop exception: {e}")
+                  time.sleep(1)
+
+              log("Main", "Automation loop complete.")
+
+          handle_automation_win(SOFTWARE_TYPE, ACTION_MODE)
+          '''
+          path = os.path.join(os.environ['TEMP'], 'win_handler.py')
+          with open(path, 'w', encoding='utf-8') as f:
+              f.write(script.strip())
+          print(f"[Setup] Handler written to {path}")
+
+      # ── 6-W: Run handler + file watcher (no here-strings = no YAML crash)
+      - name: Run Automation Handler & Watcher (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         env:
@@ -437,432 +927,15 @@ jobs:
           Write-Host "Action Mode : $($env:ACTION_MODE.ToUpper())"
           Write-Host "Software    : $env:SOFTWARE_TYPE"
 
-          pip install pywinauto pyautogui pygetwindow keyboard --quiet
+          pip install pywinauto pyautogui pygetwindow keyboard psutil --quiet
 
-          # ── Inline Python: detect Orbita window, navigate to URL, run flow ─
-          $scriptB64 = "CmltcG9ydCB0aW1lLCBzeXMsIG9zLCB0ZW1wZmlsZSwgcmFuZG9tLCBzdWJwcm9jZXNzLCBjdHlwZXMK" +
-          "ZnJvbSBweXdpbmF1dG8gaW1wb3J0IERlc2t0b3AKaW1wb3J0IHB5YXV0b2d1aQpmcm9tIHB5d2luYXV0" +
-          "by5rZXlib2FyZCBpbXBvcnQgc2VuZF9rZXlzCgpUQVJHRVRfVVJMICAgID0gb3MuZW52aXJvbi5nZXQo" +
-          "IlRBUkdFVF9VUkwiLCAiIikKU09GVFdBUkVfVFlQRSA9IG9zLmVudmlyb24uZ2V0KCJTT0ZUV0FSRV9U" +
-          "WVBFIiwgImR5bmFtaWNfb3BlcmEiKQpFWEVfRklMVEVSICAgID0gb3MuZW52aXJvbi5nZXQoIkVYRV9G" +
-          "SUxURVIiLCAiKi5leGUiKQpBQ1RJT05fTU9ERSAgID0gb3MuZW52aXJvbi5nZXQoIkFDVElPTl9NT0RF" +
-          "IiwgImluc3RhbGwiKQoKRExfRk9MREVSICAgICAgICAgICAgICAgPSBvcy5wYXRoLmpvaW4ob3MuZW52" +
-          "aXJvbi5nZXQoIlVTRVJQUk9GSUxFIiwiIiksICJEb3dubG9hZHMiKQpTRU5USU5FTF9QQVRIICAgICAg" +
-          "ICAgICA9IG9zLnBhdGguam9pbih0ZW1wZmlsZS5nZXR0ZW1wZGlyKCksICJkb3dubG9hZF9kb25lLmZs" +
-          "YWciKQpJTlNUQUxMRVJfRVhFQ1VURURfUEFUSCA9IG9zLnBhdGguam9pbih0ZW1wZmlsZS5nZXR0ZW1w" +
-          "ZGlyKCksICJpbnN0YWxsZXJfZXhlY3V0ZWQuZmxhZyIpCgpkZWYgbG9nKHRhZywgbXNnKToKICAgIHBy" +
-          "aW50KGYiW3t0aW1lLnN0cmZ0aW1lKCclSDolTTolUycpfV1be3RhZ31dIHttc2d9IiwgZmx1c2g9VHJ1" +
-          "ZSkKCiMg4pSA4pSAIE9yYml0YSAvIEdvTG9naW4gYnJvd3NlciBkZXRlY3Rpb24gaGVscGVycyDilIDi" +
-          "lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi" +
-          "lIDilIDilIDilIDilIDilIDilIAKT1JCSVRBX1RJVExFX0ZSQUdNRU5UUyA9IFsKICAgICJvcmJpdGEi" +
-          "LCAiZ29sb2dpbiIsICJHb0xvZ2luIEJyb3dzZXIiLCAiR0wgQnJvd3NlciIKXQpPUkJJVEFfRVhFX0ZS" +
-          "QUdNRU5UUyA9IFsKICAgICJvcmJpdGEiLCAiZ29sb2dpbiIsICJnbC1icm93c2VyIiwgImdsX2Jyb3dz" +
-          "ZXIiCl0KCmRlZiBpc19vcmJpdGFfd2luZG93KHd0KToKICAgIGlmIG5vdCB3dDoKICAgICAgICByZXR1" +
-          "cm4gRmFsc2UKICAgIHRsID0gd3QubG93ZXIoKQogICAgIyBHb0xvZ2luIE9yYml0YSB3aW5kb3dzIG9m" +
-          "dGVuIHNob3cgIi0gT3JiaXRhIiBvciBwcm9jZXNzIGlzIG9yYml0YS5leGUKICAgIGlmIGFueShmIGlu" +
-          "IHRsIGZvciBmIGluIE9SQklUQV9USVRMRV9GUkFHTUVOVFMpOgogICAgICAgIHJldHVybiBUcnVlCiAg" +
-          "ICByZXR1cm4gRmFsc2UKCmRlZiBpc19vcmJpdGFfcHJvY2Vzcyhwcm9jX25hbWUpOgogICAgaWYgbm90" +
-          "IHByb2NfbmFtZToKICAgICAgICByZXR1cm4gRmFsc2UKICAgIHBsID0gcHJvY19uYW1lLmxvd2VyKCkK" +
-          "ICAgIHJldHVybiBhbnkoZiBpbiBwbCBmb3IgZiBpbiBPUkJJVEFfRVhFX0ZSQUdNRU5UUykKCmRlZiBm" +
-          "aW5kX29yYml0YV93aW5kb3coZGVza3RvcCk6CiAgICAiIiJSZXR1cm4gdGhlIGZpcnN0IHZpc2libGUg" +
-          "T3JiaXRhL0dvTG9naW4gYnJvd3NlciB3aW5kb3cgZm91bmQuIiIiCiAgICB0cnk6CiAgICAgICAgZm9y" +
-          "IHcgaW4gZGVza3RvcC53aW5kb3dzKHZpc2libGVfb25seT1UcnVlKToKICAgICAgICAgICAgd3QgPSB3" +
-          "LndpbmRvd190ZXh0KCkgb3IgIiIKICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAgICAgcHJvY19u" +
-          "YW1lID0gdy5wcm9jZXNzKCkubmFtZSgpCiAgICAgICAgICAgIGV4Y2VwdCBFeGNlcHRpb246CiAgICAg" +
-          "ICAgICAgICAgICBwcm9jX25hbWUgPSAiIgogICAgICAgICAgICBpZiBpc19vcmJpdGFfd2luZG93KHd0" +
-          "KSBvciBpc19vcmJpdGFfcHJvY2Vzcyhwcm9jX25hbWUpOgogICAgICAgICAgICAgICAgcmV0dXJuIHcK" +
-          "ICAgIGV4Y2VwdCBFeGNlcHRpb246CiAgICAgICAgcGFzcwogICAgcmV0dXJuIE5vbmUKCmRlZiBuYXZp" +
-          "Z2F0ZV9vcmJpdGFfdG9fdXJsKGRlc2t0b3AsIHVybCwgbWF4X3dhaXQ9MzAwKToKICAgICIiIgogICAg" +
-          "V2FpdCB1bnRpbCBhIEdvTG9naW4gT3JiaXRhIHByb2ZpbGUgd2luZG93IG9wZW5zLCB0aGVuIG5hdmln" +
-          "YXRlIGl0CiAgICB0byB0aGUgZ2l2ZW4gVVJMIHVzaW5nIHRoZSBhZGRyZXNzIGJhciAoQ3RybCtMIC8g" +
-          "RjYg4oaSIHR5cGUg4oaSIEVudGVyKS4KICAgIFJldHVybnMgdGhlIHdpbmRvdyBoYW5kbGUgb3IgTm9u" +
-          "ZS4KICAgICIiIgogICAgbG9nKCJPcmJpdGFOYXYiLCBmIldhaXRpbmcgdXAgdG8ge21heF93YWl0fXMg" +
-          "Zm9yIEdvTG9naW4gT3JiaXRhIHByb2ZpbGUgd2luZG93Li4uIikKICAgIGRlYWRsaW5lID0gdGltZS50" +
-          "aW1lKCkgKyBtYXhfd2FpdAogICAgb3JiaXRhX3dpbiA9IE5vbmUKICAgIHdoaWxlIHRpbWUudGltZSgp" +
-          "IDwgZGVhZGxpbmU6CiAgICAgICAgZGVza3RvcCA9IERlc2t0b3AoYmFja2VuZD0idWlhIikKICAgICAg" +
-          "ICBvcmJpdGFfd2luID0gZmluZF9vcmJpdGFfd2luZG93KGRlc2t0b3ApCiAgICAgICAgaWYgb3JiaXRh" +
-          "X3dpbjoKICAgICAgICAgICAgbG9nKCJPcmJpdGFOYXYiLCBmIk9yYml0YSB3aW5kb3cgZm91bmQ6ICd7" +
-          "b3JiaXRhX3dpbi53aW5kb3dfdGV4dCgpfSciKQogICAgICAgICAgICBicmVhawogICAgICAgICMgQWxz" +
-          "byBzY2FuIGFsbCBwcm9jZXNzZXMgZm9yIGNocm9taXVtLWJhc2VkIEdvTG9naW4gd2luZG93cwogICAg" +
-          "ICAgICMgYnkgY2hlY2tpbmcgcHJvY2VzcyBuYW1lcyB2aWEgcHN1dGlsIGlmIGF2YWlsYWJsZQogICAg" +
-          "ICAgIHRyeToKICAgICAgICAgICAgaW1wb3J0IHBzdXRpbAogICAgICAgICAgICBmb3IgcHJvYyBpbiBw" +
-          "c3V0aWwucHJvY2Vzc19pdGVyKFsibmFtZSIsICJwaWQiXSk6CiAgICAgICAgICAgICAgICBwbmFtZSA9" +
-          "IChwcm9jLmluZm8uZ2V0KCJuYW1lIikgb3IgIiIpLmxvd2VyKCkKICAgICAgICAgICAgICAgIGlmIGFu" +
-          "eShmIGluIHBuYW1lIGZvciBmIGluIE9SQklUQV9FWEVfRlJBR01FTlRTKToKICAgICAgICAgICAgICAg" +
-          "ICAgICBsb2coIk9yYml0YU5hdiIsIGYiT3JiaXRhIHByb2Nlc3MgZGV0ZWN0ZWQgKFBJRCB7cHJvYy5w" +
-          "aWR9KToge3Byb2MuaW5mb1snbmFtZSddfSDigJQgd2FpdGluZyBmb3Igd2luZG93Li4uIikKICAgICAg" +
-          "ICAgICAgICAgICAgICB0aW1lLnNsZWVwKDMpCiAgICAgICAgICAgICAgICAgICAgZGVza3RvcCA9IERl" +
-          "c2t0b3AoYmFja2VuZD0idWlhIikKICAgICAgICAgICAgICAgICAgICBvcmJpdGFfd2luID0gZmluZF9v" +
-          "cmJpdGFfd2luZG93KGRlc2t0b3ApCiAgICAgICAgICAgICAgICAgICAgaWYgb3JiaXRhX3dpbjoKICAg" +
-          "ICAgICAgICAgICAgICAgICAgICAgbG9nKCJPcmJpdGFOYXYiLCBmIkdvdCBPcmJpdGEgd2luZG93IGFm" +
-          "dGVyIHByb2Nlc3Mgc2Nhbi4iKQogICAgICAgICAgICAgICAgICAgICAgICBicmVhawogICAgICAgIGV4" +
-          "Y2VwdCBJbXBvcnRFcnJvcjoKICAgICAgICAgICAgcGFzcwogICAgICAgIGVsYXBzZWQgPSBpbnQoZGVh" +
-          "ZGxpbmUgLSB0aW1lLnRpbWUoKSkKICAgICAgICBpZiBlbGFwc2VkICUgMzAgPT0gMDoKICAgICAgICAg" +
-          "ICAgbG9nKCJPcmJpdGFOYXYiLCBmIlN0aWxsIHdhaXRpbmcgZm9yIE9yYml0YS4uLiB7ZWxhcHNlZH1z" +
-          "IHJlbWFpbmluZyIpCiAgICAgICAgdGltZS5zbGVlcCgyKQoKICAgIGlmIG5vdCBvcmJpdGFfd2luOgog" +
-          "ICAgICAgIGxvZygiT3JiaXRhTmF2IiwgIkVSUk9SOiBPcmJpdGEgd2luZG93IG5ldmVyIGFwcGVhcmVk" +
-          "LiBBYm9ydGluZy4iKQogICAgICAgIHJldHVybiBOb25lCgogICAgIyDilIDilIAgRm9jdXMgdGhlIE9y" +
-          "Yml0YSB3aW5kb3cg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA" +
-          "4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA" +
-          "4pSA4pSA4pSA4pSA4pSACiAgICB0cnk6CiAgICAgICAgb3JiaXRhX3dpbi5zZXRfZm9jdXMoKQogICAg" +
-          "ICAgIG9yYml0YV93aW4ubWF4aW1pemUoKQogICAgICAgIHRpbWUuc2xlZXAoMS41KQogICAgZXhjZXB0" +
-          "IEV4Y2VwdGlvbiBhcyBlOgogICAgICAgIGxvZygiT3JiaXRhTmF2IiwgZiJGb2N1cy9tYXhpbWl6ZSB3" +
-          "YXJuaW5nOiB7ZX0iKQoKICAgICMg4pSA4pSAIE5hdmlnYXRlIHRvIHRhcmdldCBVUkwg4pSA4pSA4pSA" +
-          "4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA" +
-          "4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACiAgICBs" +
-          "b2coIk9yYml0YU5hdiIsIGYiTmF2aWdhdGluZyB0bzoge3VybH0iKQogICAgIyBTdHJhdGVneSAxOiBD" +
-          "dHJsK0wgKGFkZHJlc3MgYmFyIHNob3J0Y3V0IOKAlCB3b3JrcyBpbiBhbGwgQ2hyb21pdW0gYnJvd3Nl" +
-          "cnMpCiAgICB0cnk6CiAgICAgICAgb3JiaXRhX3dpbi5zZXRfZm9jdXMoKQogICAgICAgIHRpbWUuc2xl" +
-          "ZXAoMC41KQogICAgICAgIHNlbmRfa2V5cygiXmwiKSAgICAgICAgICMgQ3RybCtMICDigJMgZm9jdXMg" +
-          "YWRkcmVzcyBiYXIKICAgICAgICB0aW1lLnNsZWVwKDAuOCkKICAgICAgICAjIENsZWFyIHdoYXRldmVy" +
-          "IGlzIHRoZXJlLCB0aGVuIHR5cGUgVVJMCiAgICAgICAgc2VuZF9rZXlzKCJeYSIpCiAgICAgICAgdGlt" +
-          "ZS5zbGVlcCgwLjIpCiAgICAgICAgcHlhdXRvZ3VpLmhvdGtleSgiY3RybCIsICJhIikKICAgICAgICB0" +
-          "aW1lLnNsZWVwKDAuMSkKICAgICAgICBweWF1dG9ndWkudHlwZXdyaXRlKHVybCwgaW50ZXJ2YWw9MC4w" +
-          "MykKICAgICAgICB0aW1lLnNsZWVwKDAuMykKICAgICAgICBzZW5kX2tleXMoIntFTlRFUn0iKQogICAg" +
-          "ICAgIGxvZygiT3JiaXRhTmF2IiwgIlVSTCBlbnRlcmVkIHZpYSBDdHJsK0wgc3RyYXRlZ3kuIikKICAg" +
-          "ICAgICB0aW1lLnNsZWVwKDIpCiAgICAgICAgcmV0dXJuIG9yYml0YV93aW4KICAgIGV4Y2VwdCBFeGNl" +
-          "cHRpb24gYXMgZToKICAgICAgICBsb2coIk9yYml0YU5hdiIsIGYiQ3RybCtMIHN0cmF0ZWd5IGZhaWxl" +
-          "ZDoge2V9IikKCiAgICAjIFN0cmF0ZWd5IDI6IEY2IChhbHRlcm5hdGl2ZSBhZGRyZXNzIGJhciBmb2N1" +
-          "cykKICAgIHRyeToKICAgICAgICBvcmJpdGFfd2luLnNldF9mb2N1cygpCiAgICAgICAgdGltZS5zbGVl" +
-          "cCgwLjUpCiAgICAgICAgc2VuZF9rZXlzKCJ7RjZ9IikKICAgICAgICB0aW1lLnNsZWVwKDAuOCkKICAg" +
-          "ICAgICBzZW5kX2tleXMoIl5hIikKICAgICAgICB0aW1lLnNsZWVwKDAuMikKICAgICAgICBweWF1dG9n" +
-          "dWkudHlwZXdyaXRlKHVybCwgaW50ZXJ2YWw9MC4wMykKICAgICAgICB0aW1lLnNsZWVwKDAuMykKICAg" +
-          "ICAgICBzZW5kX2tleXMoIntFTlRFUn0iKQogICAgICAgIGxvZygiT3JiaXRhTmF2IiwgIlVSTCBlbnRl" +
-          "cmVkIHZpYSBGNiBzdHJhdGVneS4iKQogICAgICAgIHRpbWUuc2xlZXAoMikKICAgICAgICByZXR1cm4g" +
-          "b3JiaXRhX3dpbgogICAgZXhjZXB0IEV4Y2VwdGlvbiBhcyBlOgogICAgICAgIGxvZygiT3JiaXRhTmF2" +
-          "IiwgZiJGNiBzdHJhdGVneSBmYWlsZWQ6IHtlfSIpCgogICAgbG9nKCJPcmJpdGFOYXYiLCAiV0FSTklO" +
-          "RzogQ291bGQgbm90IG5hdmlnYXRlIE9yYml0YSB0byBVUkwuIikKICAgIHJldHVybiBvcmJpdGFfd2lu" +
-          "CgojIOKUgOKUgCBJbnRlcmZlcmVuY2UgLyBkb3dubG9hZCB3aW5kb3cgaGVscGVycyDilIDilIDilIDi" +
-          "lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi" +
-          "lIDilIDilIDilIDilIDilIDilIDilIDilIAKRE9XTkxPQURfRE9ORV9USVRMRVMgPSBbCiAgICAiVGhh" +
-          "bmtzIGZvciBkb3dubG9hZGluZyBPcGVyYSIsICJUaGFua3MgZm9yIGRvd25sb2FkaW4iLAogICAgIkRv" +
-          "d25sb2FkIHwgVGhhbmtzIiwgInN1ZGV0eWoiLCAiR0VUIFJFQURZIFRPIFBMQVkiLCAicmVhZHkgdG8g" +
-          "aW5zdGFsbCIsCl0KSU5URVJGRVJFTkNFX1RJVExFUyAgPSBbCiAgICAiU2V0dGluZ3MiLCJXaW5kb3dz" +
-          "IFNldHRpbmdzIiwiRGVmYXVsdCBhcHBzIiwiU3lzdGVtIFNldHRpbmdzIiwKICAgICJDaG9vc2UgYW4g" +
-          "YXBwIiwiSG93IGRvIHlvdSB3YW50IHRvIG9wZW4iLCJPcGVuIHdpdGgiLAogICAgIldpbmRvd3MgUG93" +
-          "ZXJTaGVsbCIsIkFkbWluaXN0cmF0b3I6IFdpbmRvd3MgUG93ZXJTaGVsbCIsCiAgICAiQ29tbWFuZCBQ" +
-          "cm9tcHQiLCJBZG1pbmlzdHJhdG9yOiBDb21tYW5kIFByb21wdCIsIlVzZXIgQWNjb3VudCBDb250cm9s" +
-          "IiwKXQpJTlRFUkZFUkVOQ0VfU1VCUyAgICA9IFsKICAgICJkZWZhdWx0IGFwcHMiLCJjaG9vc2UgYSBk" +
-          "ZWZhdWx0Iiwic2V0IGFzIGRlZmF1bHQiLCJvcGVuIHdpdGgiLAogICAgImhvdyBkbyB5b3Ugd2FudCB0" +
-          "byBvcGVuIiwidXNlciBhY2NvdW50IGNvbnRyb2wiLApdCgpkZWYgX2lzX2Rvd25sb2FkX2RvbmUod3Qp" +
-          "OgogICAgdGwgPSAod3Qgb3IgIiIpLmxvd2VyKCkKICAgIHJldHVybiBhbnkoZi5sb3dlcigpIGluIHRs" +
-          "IGZvciBmIGluIERPV05MT0FEX0RPTkVfVElUTEVTKQoKZGVmIF9pc19pbnRlcmZlcmVuY2Uod3QpOgog" +
-          "ICAgaWYgbm90IHd0OgogICAgICAgIHJldHVybiBGYWxzZQogICAgZm9yIGV4IGluIElOVEVSRkVSRU5D" +
-          "RV9USVRMRVM6CiAgICAgICAgaWYgd3Quc3RyaXAoKS5sb3dlcigpID09IGV4LnN0cmlwKCkubG93ZXIo" +
-          "KToKICAgICAgICAgICAgcmV0dXJuIFRydWUKICAgIHRsID0gd3QubG93ZXIoKQogICAgcmV0dXJuIGFu" +
-          "eShzIGluIHRsIGZvciBzIGluIElOVEVSRkVSRU5DRV9TVUJTKQoKZGVmIF9pc190YXJnZXRfc3cod3Qs" +
-          "IHN3X3R5cGUpOgogICAgaWYgbm90IHd0OgogICAgICAgIHJldHVybiBGYWxzZQogICAgdGwgPSB3dC5s" +
-          "b3dlcigpCiAgICBpZiBzd190eXBlID09ICJhdmciOgogICAgICAgIHJldHVybiAiYXZnIiBpbiB0bAog" +
-          "ICAgaWYgc3dfdHlwZSA9PSAib3BlcmFfZ3giOgogICAgICAgIHJldHVybiAoIm9wZXJhIiBpbiB0bCBh" +
-          "bmQgImd4IiBpbiB0bCkKICAgIHJldHVybiAib3BlcmEiIGluIHRsIGFuZCAiZWRnZSIgbm90IGluIHRs" +
-          "IGFuZCAiY2hyb21lIHdlYiBzdG9yZSIgbm90IGluIHRsCgpkZWYgZGlzbWlzc19pbnRlcmZlcmVuY2Uo" +
-          "ZGVza3RvcCwgc3dfdHlwZSwgbGFiZWw9IiIpOgogICAgdHJ5OgogICAgICAgIGZvciB3IGluIGRlc2t0" +
-          "b3Aud2luZG93cyh2aXNpYmxlX29ubHk9VHJ1ZSk6CiAgICAgICAgICAgIHd0ID0gdy53aW5kb3dfdGV4" +
-          "dCgpIG9yICIiCiAgICAgICAgICAgIGlmIF9pc190YXJnZXRfc3cod3QsIHN3X3R5cGUpIG9yIG5vdCBf" +
-          "aXNfaW50ZXJmZXJlbmNlKHd0KToKICAgICAgICAgICAgICAgIGNvbnRpbnVlCiAgICAgICAgICAgIGxv" +
-          "ZygiV2luR3VhcmQiLCBmIkNsb3NpbmcgaW50ZXJmZXJlbmNlOiAne3d0fScgW3tsYWJlbH1dIikKICAg" +
-          "ICAgICAgICAgZm9yIHN0cmF0ZWd5IGluIFtsYW1iZGE6ICh3LnNldF9mb2N1cygpLCB0aW1lLnNsZWVw" +
-          "KDAuMiksIHNlbmRfa2V5cygiJXtGNH0iKSksCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgbGFt" +
-          "YmRhOiB3LmNsb3NlKCksCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgbGFtYmRhOiB3Lm1pbmlt" +
-          "aXplKCldOgogICAgICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAgICAgICAgIHN0cmF0ZWd5KCk7" +
-          "IHRpbWUuc2xlZXAoMC4zKTsgYnJlYWsKICAgICAgICAgICAgICAgIGV4Y2VwdCBFeGNlcHRpb246CiAg" +
-          "ICAgICAgICAgICAgICAgICAgcGFzcwogICAgZXhjZXB0IEV4Y2VwdGlvbjoKICAgICAgICBwYXNzCgpk" +
-          "ZWYgY2xvc2VfZG93bmxvYWRfd2luZG93cyhkZXNrdG9wKToKICAgIHRyeToKICAgICAgICBmb3IgdyBp" +
-          "biBkZXNrdG9wLndpbmRvd3ModmlzaWJsZV9vbmx5PVRydWUpOgogICAgICAgICAgICB3dCA9IHcud2lu" +
-          "ZG93X3RleHQoKSBvciAiIgogICAgICAgICAgICBpZiBub3QgX2lzX2Rvd25sb2FkX2RvbmUod3QpOgog" +
-          "ICAgICAgICAgICAgICAgY29udGludWUKICAgICAgICAgICAgbG9nKCJFZGdlQ2xvc2UiLCBmIkNsb3Np" +
-          "bmcgZG93bmxvYWQtZG9uZSB3aW5kb3c6ICd7d3R9JyIpCiAgICAgICAgICAgIGZvciBrIGluIFtsYW1i" +
-          "ZGE6IHNlbmRfa2V5cygiXnciKSwgbGFtYmRhOiBzZW5kX2tleXMoIiV7RjR9IiksIGxhbWJkYTogdy5j" +
-          "bG9zZSgpXToKICAgICAgICAgICAgICAgIHRyeToKICAgICAgICAgICAgICAgICAgICB3LnNldF9mb2N1" +
-          "cygpOyB0aW1lLnNsZWVwKDAuMyk7IGsoKTsgdGltZS5zbGVlcCgwLjQpOyBicmVhawogICAgICAgICAg" +
-          "ICAgICAgZXhjZXB0IEV4Y2VwdGlvbjoKICAgICAgICAgICAgICAgICAgICBwYXNzCiAgICBleGNlcHQg" +
-          "RXhjZXB0aW9uOgogICAgICAgIHBhc3MKCmRlZiByb2J1c3RfbWF4aW1pemUoZGVza3RvcCwgb3JiaXRh" +
-          "X3dpbiwgc3dfdHlwZSwgbGFiZWw9IiIpOgogICAgIiIiS2VlcCB0aGUgdGFyZ2V0IHNvZnR3YXJlIHdp" +
-          "bmRvdyBvbiB0b3AgYW5kIG1heGltaXplZC4iIiIKICAgIGRpc21pc3NfaW50ZXJmZXJlbmNlKGRlc2t0" +
-          "b3AsIHN3X3R5cGUsIGxhYmVsKQogICAgdGFyZ2V0ID0gb3JiaXRhX3dpbgogICAgdHJ5OgogICAgICAg" +
-          "IHRhcmdldC5zZXRfZm9jdXMoKTsgdGltZS5zbGVlcCgwLjIpCiAgICAgICAgdGFyZ2V0Lm1heGltaXpl" +
-          "KCk7IHRpbWUuc2xlZXAoMC4zKQogICAgICAgICMgY3R5cGVzIFNXX01BWElNSVpFCiAgICAgICAgdHJ5" +
-          "OgogICAgICAgICAgICBjdHlwZXMud2luZGxsLnVzZXIzMi5TaG93V2luZG93KHRhcmdldC5oYW5kbGUs" +
-          "IDkpCiAgICAgICAgICAgIHRpbWUuc2xlZXAoMC4yKQogICAgICAgIGV4Y2VwdCBFeGNlcHRpb246CiAg" +
-          "ICAgICAgICAgIHBhc3MKICAgIGV4Y2VwdCBFeGNlcHRpb246CiAgICAgICAgcGFzcwogICAgcmV0dXJu" +
-          "IHRhcmdldAoKZGVmIGNsaWNrX2J1dHRvbihkZXNrdG9wLCB3aW4sIHN3X3R5cGUsIGJ1dHRvbl9uYW1l" +
-          "cywgbGFiZWw9IiIpOgogICAgaWYgbm90IHdpbjoKICAgICAgICByZXR1cm4gRmFsc2UKICAgIGZvciBu" +
-          "YW1lIGluIGJ1dHRvbl9uYW1lczoKICAgICAgICBmb3IgYnRuIGluIHdpbi5kZXNjZW5kYW50cyhjb250" +
-          "cm9sX3R5cGU9IkJ1dHRvbiIpOgogICAgICAgICAgICB0cnk6CiAgICAgICAgICAgICAgICB0eHQgPSBi" +
-          "dG4ud2luZG93X3RleHQoKSBvciAiIgogICAgICAgICAgICAgICAgaWYgbmFtZS5sb3dlcigpIGluIHR4" +
-          "dC5sb3dlcigpOgogICAgICAgICAgICAgICAgICAgIGJ0bi5jbGlja19pbnB1dCgpCiAgICAgICAgICAg" +
-          "ICAgICAgICAgbG9nKCJCdG5DbGljayIsIGYiW3tsYWJlbH1dIENsaWNrZWQgJ3t0eHR9JyIpCiAgICAg" +
-          "ICAgICAgICAgICAgICAgcmV0dXJuIFRydWUKICAgICAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbjoKICAg" +
-          "ICAgICAgICAgICAgIHBhc3MKICAgIHJldHVybiBGYWxzZQoKIyDilZDilZDilZDilZDilZDilZDilZDi" +
-          "lZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDi" +
-          "lZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDi" +
-          "lZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDi" +
-          "lZDilZDilZDilZDilZDilZDilZAKIyBXSU5ET1dTIFBPU1QtSU5TVEFMTCBTRVFVRU5DRVMKIyDilZDi" +
-          "lZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDi" +
-          "lZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDi" +
-          "lZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDi" +
-          "lZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZAKCmRlZiBvcGVyYV9vbmVfcG9zdF9p" +
-          "bnN0YWxsX3dpbihzd193aW4sIHN3X3R5cGUpOgogICAgbG9nKCJQb3N0SW5zdGFsbC1PUDEiLCAiPT09" +
-          "IE9wZXJhIE9uZSBQb3N0LUluc3RhbGwgKFdpbmRvd3MpIFNUQVJUSU5HID09PSIpCiAgICBkZXNrdG9w" +
-          "ID0gRGVza3RvcChiYWNrZW5kPSJ1aWEiKQogICAgbG9nKCJQb3N0SW5zdGFsbC1PUDEiLCAiU1RFUCAx" +
-          "OiBXYWl0aW5nIDUwcyBmb3IgT3BlcmEgT25lIHRvIGluaXRpYWxpemUuLi4iKQogICAgZm9yIHMgaW4g" +
-          "cmFuZ2UoMSwgNTEpOgogICAgICAgIGxvZygiUG9zdEluc3RhbGwtT1AxIiwgZiIgIEluaXQgd2FpdCB7" +
-          "c30vNTBzIikKICAgICAgICB0aW1lLnNsZWVwKDEpCiAgICBsb2coIlBvc3RJbnN0YWxsLU9QMSIsICJT" +
-          "VEVQIDI6IE1heGltaXppbmcgT3BlcmEgd2luZG93Li4uIikKICAgIHRyeToKICAgICAgICBzd193aW4g" +
-          "PSByb2J1c3RfbWF4aW1pemUoZGVza3RvcCwgc3dfd2luLCBzd190eXBlLCAic3RlcDIiKQogICAgZXhj" +
-          "ZXB0IEV4Y2VwdGlvbjoKICAgICAgICBwYXNzCiAgICB0aW1lLnNsZWVwKDUpCiAgICBzdywgc2ggPSBw" +
-          "eWF1dG9ndWkuc2l6ZSgpOyBjeCwgY3kgPSBzdyAvLyAyLCBzaCAvLyAyCiAgICBsb2coIlBvc3RJbnN0" +
-          "YWxsLU9QMSIsIGYiU1RFUCAzOiBDZW50ZXIgY2xpY2sgYXQgKHtjeH0se2N5fSkuLi4iKQogICAgcHlh" +
-          "dXRvZ3VpLmNsaWNrKGN4LCBjeSk7IHRpbWUuc2xlZXAoNSkKICAgIGxvZygiUG9zdEluc3RhbGwtT1Ax" +
-          "IiwgIlNURVAgNDogQ2xpY2tpbmcgTmV4dCB4NiAoMnMgZWFjaCkuLi4iKQogICAgZm9yIGkgaW4gcmFu" +
-          "Z2UoMSwgNyk6CiAgICAgICAgZGVza3RvcCA9IERlc2t0b3AoYmFja2VuZD0idWlhIikKICAgICAgICBz" +
-          "d193aW4gPSByb2J1c3RfbWF4aW1pemUoZGVza3RvcCwgc3dfd2luLCBzd190eXBlLCBmIm5leHQte2l9" +
-          "IikKICAgICAgICBpZiBub3QgY2xpY2tfYnV0dG9uKGRlc2t0b3AsIHN3X3dpbiwgc3dfdHlwZSwgWyJO" +
-          "ZXh0Il0sIGYiTkVYVC17aX0iKToKICAgICAgICAgICAgcHlhdXRvZ3VpLmNsaWNrKGludChzdyAqIDAu" +
-          "OTApLCBpbnQoc2ggKiAwLjkwKSkKICAgICAgICB0aW1lLnNsZWVwKDIpCiAgICBsb2coIlBvc3RJbnN0" +
-          "YWxsLU9QMSIsICJTVEVQIDU6IENsaWNraW5nIERvbmUvRmluaXNoLi4uIikKICAgIGRlc2t0b3AgPSBE" +
-          "ZXNrdG9wKGJhY2tlbmQ9InVpYSIpCiAgICBzd193aW4gPSByb2J1c3RfbWF4aW1pemUoZGVza3RvcCwg" +
-          "c3dfd2luLCBzd190eXBlLCAiZG9uZSIpCiAgICBpZiBub3QgY2xpY2tfYnV0dG9uKGRlc2t0b3AsIHN3" +
-          "X3dpbiwgc3dfdHlwZSwgWyJEb25lIiwgIkZpbmlzaCJdLCAiRE9ORSIpOgogICAgICAgIHB5YXV0b2d1" +
-          "aS5jbGljayhpbnQoc3cgKiAwLjkwKSwgaW50KHNoICogMC45MCkpCiAgICB0aW1lLnNsZWVwKDUpCiAg" +
-          "ICBzZW5kX2tleXMoIntFTlRFUn0iKTsgdGltZS5zbGVlcCg1KQogICAgbG9nKCJQb3N0SW5zdGFsbC1P" +
-          "UDEiLCAiU1RFUCA2OiBDbGlja2luZyBTdWJtaXQuLi4iKQogICAgZGVza3RvcCA9IERlc2t0b3AoYmFj" +
-          "a2VuZD0idWlhIikKICAgIHN3X3dpbiA9IHJvYnVzdF9tYXhpbWl6ZShkZXNrdG9wLCBzd193aW4sIHN3" +
-          "X3R5cGUsICJzdWJtaXQiKQogICAgaWYgbm90IGNsaWNrX2J1dHRvbihkZXNrdG9wLCBzd193aW4sIHN3" +
-          "X3R5cGUsIFsiU3VibWl0Il0sICJTVUJNSVQiKToKICAgICAgICBweWF1dG9ndWkuY2xpY2soc3cgLy8g" +
-          "MiwgaW50KHNoICogMC44NSkpCiAgICB0aW1lLnNsZWVwKDUpCiAgICBsb2coIlBvc3RJbnN0YWxsLU9Q" +
-          "MSIsICJTVEVQIDc6IFRhYiBjeWNsZSA44oaSMTguLi4iKQogICAgZm9yIHRhYl9jb3VudCBpbiByYW5n" +
-          "ZSg4LCAxOSk6CiAgICAgICAgZGVza3RvcCA9IERlc2t0b3AoYmFja2VuZD0idWlhIikKICAgICAgICBz" +
-          "d193aW4gPSByb2J1c3RfbWF4aW1pemUoZGVza3RvcCwgc3dfd2luLCBzd190eXBlLCBmImN0cmxULXt0" +
-          "YWJfY291bnR9IikKICAgICAgICBzZW5kX2tleXMoIl50Iik7IHRpbWUuc2xlZXAoNSkKICAgICAgICBm" +
-          "b3IgaSBpbiByYW5nZSgxLCB0YWJfY291bnQgKyAxKToKICAgICAgICAgICAgZGVza3RvcCA9IERlc2t0" +
-          "b3AoYmFja2VuZD0idWlhIikKICAgICAgICAgICAgc3dfd2luID0gcm9idXN0X21heGltaXplKGRlc2t0" +
-          "b3AsIHN3X3dpbiwgc3dfdHlwZSwgZiJ0YWJ7dGFiX2NvdW50fS17aX0iKQogICAgICAgICAgICBzZW5k" +
-          "X2tleXMoIntUQUJ9Iik7IHRpbWUuc2xlZXAoMSkKICAgICAgICBzZW5kX2tleXMoIntFTlRFUn0iKTsg" +
-          "dGltZS5zbGVlcCg1KQogICAgICAgIGRlc2t0b3AgPSBEZXNrdG9wKGJhY2tlbmQ9InVpYSIpCiAgICAg" +
-          "ICAgc3dfd2luID0gcm9idXN0X21heGltaXplKGRlc2t0b3AsIHN3X3dpbiwgc3dfdHlwZSwgZiJwb3N0" +
-          "LWN0cmxULXt0YWJfY291bnR9IikKICAgICAgICBzZW5kX2tleXMoIl50Iik7IHRpbWUuc2xlZXAoNSkK" +
-          "ICAgIGxvZygiUG9zdEluc3RhbGwtT1AxIiwgIj09PSBPcGVyYSBPbmUgUG9zdC1JbnN0YWxsIENPTVBM" +
-          "RVRFID09PSIpCgpkZWYgb3BlcmFfZ3hfcG9zdF9pbnN0YWxsX3dpbihzd193aW4sIHN3X3R5cGUpOgog" +
-          "ICAgbG9nKCJQb3N0SW5zdGFsbC1PUEdYIiwgIj09PSBPcGVyYSBHWCBQb3N0LUluc3RhbGwgKFdpbmRv" +
-          "d3MpIFNUQVJUSU5HID09PSIpCiAgICBkZXNrdG9wID0gRGVza3RvcChiYWNrZW5kPSJ1aWEiKQogICAg" +
-          "c3dfd2luID0gcm9idXN0X21heGltaXplKGRlc2t0b3AsIHN3X3dpbiwgc3dfdHlwZSwgImluaXQiKQog" +
-          "ICAgdGltZS5zbGVlcCgwLjUpCiAgICBzdywgc2ggPSBweWF1dG9ndWkuc2l6ZSgpOyBjeCwgY3kgPSBz" +
-          "dyAvLyAyLCBzaCAvLyAyCiAgICBweWF1dG9ndWkuY2xpY2soY3gsIGN5KTsgdGltZS5zbGVlcCgwLjE1" +
-          "KTsgcHlhdXRvZ3VpLmNsaWNrKGN4LCBjeSkKICAgIHRpbWUuc2xlZXAocmFuZG9tLnVuaWZvcm0oMi4w" +
-          "LCAzLjApKQogICAgZm9yIGkgaW4gcmFuZ2UoNCk6CiAgICAgICAgc3dfd2luID0gcm9idXN0X21heGlt" +
-          "aXplKERlc2t0b3AoYmFja2VuZD0idWlhIiksIHN3X3dpbiwgc3dfdHlwZSwgZiJ0YWI0LXtpfSIpCiAg" +
-          "ICAgICAgc2VuZF9rZXlzKCJ7VEFCfSIpOyB0aW1lLnNsZWVwKHJhbmRvbS51bmlmb3JtKDEuMCwgMi4w" +
-          "KSkKICAgIGZvciBpIGluIHJhbmdlKDgpOgogICAgICAgIHN3X3dpbiA9IHJvYnVzdF9tYXhpbWl6ZShE" +
-          "ZXNrdG9wKGJhY2tlbmQ9InVpYSIpLCBzd193aW4sIHN3X3R5cGUsIGYiZW50ZXI4LXtpfSIpCiAgICAg" +
-          "ICAgc2VuZF9rZXlzKCJ7RU5URVJ9Iik7IHRpbWUuc2xlZXAocmFuZG9tLnVuaWZvcm0oMS4wLCAyLjAp" +
-          "KQogICAgdGltZS5zbGVlcChyYW5kb20udW5pZm9ybSgyLjAsIDMuMCkpCiAgICBmb3IgaSBpbiByYW5n" +
-          "ZSg2KToKICAgICAgICBzd193aW4gPSByb2J1c3RfbWF4aW1pemUoRGVza3RvcChiYWNrZW5kPSJ1aWEi" +
-          "KSwgc3dfd2luLCBzd190eXBlLCBmInRhYjYte2l9IikKICAgICAgICBzZW5kX2tleXMoIntUQUJ9Iik7" +
-          "IHRpbWUuc2xlZXAocmFuZG9tLnVuaWZvcm0oMS4wLCAyLjApKQogICAgc3dfd2luID0gcm9idXN0X21h" +
-          "eGltaXplKERlc2t0b3AoYmFja2VuZD0idWlhIiksIHN3X3dpbiwgc3dfdHlwZSwgImZpbmFsLWVudGVy" +
-          "IikKICAgIHNlbmRfa2V5cygie0VOVEVSfSIpOyB0aW1lLnNsZWVwKDUpCiAgICBmb3IgdGFiX2NvdW50" +
-          "IGluIHJhbmdlKDcsIDE3KToKICAgICAgICBzd193aW4gPSByb2J1c3RfbWF4aW1pemUoRGVza3RvcChi" +
-          "YWNrZW5kPSJ1aWEiKSwgc3dfd2luLCBzd190eXBlLCBmImN0cmxULXt0YWJfY291bnR9IikKICAgICAg" +
-          "ICBzZW5kX2tleXMoIl50IikKICAgICAgICBmb3IgaSBpbiByYW5nZSgxLCB0YWJfY291bnQgKyAxKToK" +
-          "ICAgICAgICAgICAgc3dfd2luID0gcm9idXN0X21heGltaXplKERlc2t0b3AoYmFja2VuZD0idWlhIiks" +
-          "IHN3X3dpbiwgc3dfdHlwZSwgZiJ0YWJ7dGFiX2NvdW50fS17aX0iKQogICAgICAgICAgICBzZW5kX2tl" +
-          "eXMoIntUQUJ9Iik7IHRpbWUuc2xlZXAocmFuZG9tLnVuaWZvcm0oMS4wLCAyLjApKQogICAgICAgIHN3" +
-          "X3dpbiA9IHJvYnVzdF9tYXhpbWl6ZShEZXNrdG9wKGJhY2tlbmQ9InVpYSIpLCBzd193aW4sIHN3X3R5" +
-          "cGUsIGYiZW50ZXIte3RhYl9jb3VudH0iKQogICAgICAgIHNlbmRfa2V5cygie0VOVEVSfSIpOyB0aW1l" +
-          "LnNsZWVwKDUpCiAgICBsb2coIlBvc3RJbnN0YWxsLU9QR1giLCAiPT09IE9wZXJhIEdYIFBvc3QtSW5z" +
-          "dGFsbCBDT01QTEVURSA9PT0iKQoKZGVmIGF2Z19wb3N0X2luc3RhbGxfd2luKGF2Z193aW4pOgogICAg" +
-          "bG9nKCJQb3N0SW5zdGFsbC1BVkciLCAiPT09IEFWRyBQb3N0LUluc3RhbGwgKFdpbmRvd3MpIFNUQVJU" +
-          "SU5HID09PSIpCiAgICBkZXNrdG9wID0gRGVza3RvcChiYWNrZW5kPSJ1aWEiKQogICAgYXZnX3dpbiA9" +
-          "IHJvYnVzdF9tYXhpbWl6ZShkZXNrdG9wLCBhdmdfd2luLCAiYXZnIiwgImluaXQiKQogICAgdGltZS5z" +
-          "bGVlcCgwLjUpCiAgICBzdywgc2ggPSBweWF1dG9ndWkuc2l6ZSgpOyBjeCwgY3kgPSBzdyAvLyAyLCBz" +
-          "aCAvLyAyCiAgICBweWF1dG9ndWkuY2xpY2soY3gsIGN5KTsgdGltZS5zbGVlcCgwLjE1KTsgcHlhdXRv" +
-          "Z3VpLmNsaWNrKGN4LCBjeSkKICAgIHRpbWUuc2xlZXAoNSkKICAgIHRhYl9jb3VudCA9IDYKICAgIHdo" +
-          "aWxlIHRhYl9jb3VudCA8IDE3OgogICAgICAgIGF2Z193aW4gPSByb2J1c3RfbWF4aW1pemUoRGVza3Rv" +
-          "cChiYWNrZW5kPSJ1aWEiKSwgYXZnX3dpbiwgImF2ZyIsIGYiY3RybFQte3RhYl9jb3VudH0iKQogICAg" +
-          "ICAgIHNlbmRfa2V5cygiXnQiKQogICAgICAgIGZvciBpIGluIHJhbmdlKDEsIHRhYl9jb3VudCArIDEp" +
-          "OgogICAgICAgICAgICBhdmdfd2luID0gcm9idXN0X21heGltaXplKERlc2t0b3AoYmFja2VuZD0idWlh" +
-          "IiksIGF2Z193aW4sICJhdmciLCBmInRhYnt0YWJfY291bnR9LXtpfSIpCiAgICAgICAgICAgIHNlbmRf" +
-          "a2V5cygie1RBQn0iKTsgdGltZS5zbGVlcChyYW5kb20udW5pZm9ybSgxLjAsIDIuMCkpCiAgICAgICAg" +
-          "YXZnX3dpbiA9IHJvYnVzdF9tYXhpbWl6ZShEZXNrdG9wKGJhY2tlbmQ9InVpYSIpLCBhdmdfd2luLCAi" +
-          "YXZnIiwgZiJlbnRlci17dGFiX2NvdW50fSIpCiAgICAgICAgc2VuZF9rZXlzKCJ7RU5URVJ9IikKICAg" +
-          "ICAgICB0YWJfY291bnQgKz0gcmFuZG9tLnJhbmRpbnQoMSwgMikKICAgICAgICBpZiB0YWJfY291bnQg" +
-          "PCAxNzoKICAgICAgICAgICAgdGltZS5zbGVlcCg1KQogICAgbG9nKCJQb3N0SW5zdGFsbC1BVkciLCAi" +
-          "PT09IEFWRyBQb3N0LUluc3RhbGwgQ09NUExFVEUgPT09IikKCiMg4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ" +
-          "4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ" +
-          "4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ" +
-          "4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ" +
-          "4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQCiMgTUFJTiBBVVRPTUFUSU9OIExPT1AgKFdpbmRvd3MpCiMg4pWQ" +
-          "4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ" +
-          "4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ" +
-          "4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ" +
-          "4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQCgpkZWYgaGFuZGxlX2F1dG9tYXRp" +
-          "b25fd2luKHN3X3R5cGUsIGFjdGlvbl9tb2RlLCB0aW1lb3V0PTMzMDApOgogICAgZGVza3RvcCA9IERl" +
-          "c2t0b3AoYmFja2VuZD0idWlhIikKICAgIHN0YXJ0X3QgPSB0aW1lLnRpbWUoKQoKICAgICMgU3RlcCAx" +
-          "OiBOYXZpZ2F0ZSBPcmJpdGEgdG8gdGFyZ2V0IFVSTAogICAgb3JiaXRhX3dpbiA9IG5hdmlnYXRlX29y" +
-          "Yml0YV90b191cmwoZGVza3RvcCwgVEFSR0VUX1VSTCwgbWF4X3dhaXQ9MzAwKQogICAgaWYgbm90IG9y" +
-          "Yml0YV93aW46CiAgICAgICAgbG9nKCJNYWluIiwgIk5vIE9yYml0YSB3aW5kb3cg4oCUIGFib3J0aW5n" +
-          "LiIpCiAgICAgICAgcmV0dXJuCgogICAgbGFzdF9jdHJsX2pfdCAgICA9IHRpbWUudGltZSgpCiAgICBs" +
-          "YXN0X2RsX2NsaWNrX3QgID0gMAogICAgY3RybF9qX2F0dGVtcHRzICA9IDAKICAgIGtlZXBfY2xpY2tl" +
-          "ZCAgICAgPSBGYWxzZQogICAgYXZnX2RsX2NsaWNrZWQgICA9IEZhbHNlCiAgICBzbWFydF9saW5rX2Rv" +
-          "bmUgID0gRmFsc2UKICAgIHNtYXJ0X2xpbmtfdCAgICAgPSAwCiAgICBvcDFfaW5zdGFsbGVyX3QgID0g" +
-          "Tm9uZQogICAgb3AxX2RvbmUgICAgICAgICA9IEZhbHNlCiAgICBvcGd4X2luc3RhbGxlcl90ID0gTm9u" +
-          "ZQogICAgb3BneF9kb25lICAgICAgICA9IEZhbHNlCiAgICBhdmdfaW5zdGFsbGVyX3QgID0gTm9uZQog" +
-          "ICAgYXZnX2RvbmUgICAgICAgICA9IEZhbHNlCiAgICBkbF93aW5kb3dzX2Nsb3NlZCA9IEZhbHNlCiAg" +
-          "ICBwcm94eV9hdXRoX3QgICAgID0gc3RhcnRfdAogICAgbGFzdF9pbnRlcmZlcmVuY2UgPSAwCgogICAg" +
-          "bG9nKCJNYWluIiwgZiJBdXRvbWF0aW9uIGxvb3Agc3RhcnRlZCB8IGFjdGlvbj17YWN0aW9uX21vZGV9" +
-          "IHwgdHlwZT17c3dfdHlwZX0iKQoKICAgIHdoaWxlIHRpbWUudGltZSgpIC0gc3RhcnRfdCA8IHRpbWVv" +
-          "dXQ6CiAgICAgICAgdHJ5OgogICAgICAgICAgICBkZXNrdG9wICAgICA9IERlc2t0b3AoYmFja2VuZD0i" +
-          "dWlhIikKICAgICAgICAgICAgZWRnZV93aW4gICAgPSBOb25lCiAgICAgICAgICAgIG9yYml0YV93aW4y" +
-          "ID0gTm9uZQogICAgICAgICAgICBvcF93aW4gICAgICA9IE5vbmUKICAgICAgICAgICAgYXZnX2FwcF93" +
-          "aW4gPSBOb25lCgogICAgICAgICAgICBmb3IgdyBpbiBkZXNrdG9wLndpbmRvd3ModmlzaWJsZV9vbmx5" +
-          "PVRydWUpOgogICAgICAgICAgICAgICAgd3QgPSB3LndpbmRvd190ZXh0KCkgb3IgIiIKICAgICAgICAg" +
-          "ICAgICAgIHdsID0gd3QubG93ZXIoKQogICAgICAgICAgICAgICAgaWYgIm1pY3Jvc29mdCBlZGdlIiBp" +
-          "biB3bDoKICAgICAgICAgICAgICAgICAgICBlZGdlX3dpbiA9IHcKICAgICAgICAgICAgICAgIGVsaWYg" +
-          "aXNfb3JiaXRhX3dpbmRvdyh3dCk6CiAgICAgICAgICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAg" +
-          "ICAgICAgICAgICBpZiBpc19vcmJpdGFfcHJvY2Vzcyh3LnByb2Nlc3MoKS5uYW1lKCkpOgogICAgICAg" +
-          "ICAgICAgICAgICAgICAgICAgICAgb3JiaXRhX3dpbjIgPSB3CiAgICAgICAgICAgICAgICAgICAgZXhj" +
-          "ZXB0IEV4Y2VwdGlvbjoKICAgICAgICAgICAgICAgICAgICAgICAgb3JiaXRhX3dpbjIgPSB3CiAgICAg" +
-          "ICAgICAgICAgICBlbGlmICJvcGVyYSIgaW4gd2wgYW5kICJlZGdlIiBub3QgaW4gd2wgYW5kICJjaHJv" +
-          "bWUgd2ViIHN0b3JlIiBub3QgaW4gd2w6CiAgICAgICAgICAgICAgICAgICAgb3Bfd2luID0gdwogICAg" +
-          "ICAgICAgICAgICAgZWxpZiAiYXZnIiBpbiB3bDoKICAgICAgICAgICAgICAgICAgICBhdmdfYXBwX3dp" +
-          "biA9IHcKCiAgICAgICAgICAgIG5vdyA9IHRpbWUudGltZSgpCgogICAgICAgICAgICAjIEludGVyZmVy" +
-          "ZW5jZSBzd2VlcCBldmVyeSAycwogICAgICAgICAgICBpZiBub3cgLSBsYXN0X2ludGVyZmVyZW5jZSA+" +
-          "PSAyOgogICAgICAgICAgICAgICAgZGlzbWlzc19pbnRlcmZlcmVuY2UoZGVza3RvcCwgc3dfdHlwZSwg" +
-          "ImNvbnRpbnVvdXMiKQogICAgICAgICAgICAgICAgbGFzdF9pbnRlcmZlcmVuY2UgPSBub3cKCiAgICAg" +
-          "ICAgICAgICMgU2VudGluZWw6IGNsb3NlIGRvd25sb2FkLWRvbmUgd2luZG93cwogICAgICAgICAgICBp" +
-          "ZiBub3QgZGxfd2luZG93c19jbG9zZWQgYW5kIG9zLnBhdGguZXhpc3RzKFNFTlRJTkVMX1BBVEgpOgog" +
-          "ICAgICAgICAgICAgICAgbG9nKCJTZW50aW5lbCIsICJEb3dubG9hZCBzZW50aW5lbCBmb3VuZCDigJQg" +
-          "Y2xlYW5pbmcgZG93bmxvYWQgd2luZG93cy4uLiIpCiAgICAgICAgICAgICAgICBmb3IgXyBpbiByYW5n" +
-          "ZSg3KToKICAgICAgICAgICAgICAgICAgICBjbG9zZV9kb3dubG9hZF93aW5kb3dzKGRlc2t0b3ApOyB0" +
-          "aW1lLnNsZWVwKDIpCiAgICAgICAgICAgICAgICBkbF93aW5kb3dzX2Nsb3NlZCA9IFRydWUKCiAgICAg" +
-          "ICAgICAgICMg4pSA4pSAIE9wZXJhIE9uZSBwb3N0LWluc3RhbGwgdHJpZ2dlciDilIDilIDilIDilIDi" +
-          "lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi" +
-          "lIDilIDilIDilIAKICAgICAgICAgICAgaWYgYWN0aW9uX21vZGUgPT0gImluc3RhbGwiIGFuZCBub3Qg" +
-          "b3AxX2RvbmU6CiAgICAgICAgICAgICAgICBpc190YXJnZXQgPSBzd190eXBlIGluIFsib3BlcmFfb25l" +
-          "IiwiZHluYW1pY19vcGVyYSIsImFkX212biIsIm9wZXJhX3NtYXJ0X2xpbmsiXQogICAgICAgICAgICAg" +
-          "ICAgaWYgaXNfdGFyZ2V0OgogICAgICAgICAgICAgICAgICAgIGlmIG9wMV9pbnN0YWxsZXJfdCBpcyBO" +
-          "b25lIGFuZCBvcy5wYXRoLmV4aXN0cyhJTlNUQUxMRVJfRVhFQ1VURURfUEFUSCk6CiAgICAgICAgICAg" +
-          "ICAgICAgICAgICAgIG9wMV9pbnN0YWxsZXJfdCA9IHRpbWUudGltZSgpCiAgICAgICAgICAgICAgICAg" +
-          "ICAgICAgIGxvZygiUG9zdEluc3RhbGwtT1AxIiwgIkluc3RhbGxlciBzZW50aW5lbCBmb3VuZC4gVHJp" +
-          "Z2dlciBpbiA1MHMuIikKICAgICAgICAgICAgICAgICAgICBpZiBvcDFfaW5zdGFsbGVyX3QgYW5kIChu" +
-          "b3cgLSBvcDFfaW5zdGFsbGVyX3QpID49IDUwOgogICAgICAgICAgICAgICAgICAgICAgICBpZiBvcF93" +
-          "aW4gYW5kICJHWCIgaW4gKG9wX3dpbi53aW5kb3dfdGV4dCgpIG9yICIiKS51cHBlcigpOgogICAgICAg" +
-          "ICAgICAgICAgICAgICAgICAgICAgb3AxX2RvbmUgPSBUcnVlICAjIHJlc29sdmVkIHRvIEdYLCBza2lw" +
-          "IE9uZSBmbG93CiAgICAgICAgICAgICAgICAgICAgICAgIGVsc2U6CiAgICAgICAgICAgICAgICAgICAg" +
-          "ICAgICAgICBvcGVyYV9vbmVfcG9zdF9pbnN0YWxsX3dpbihvcF93aW4sIHN3X3R5cGUpCiAgICAgICAg" +
-          "ICAgICAgICAgICAgICAgICAgICBvcDFfZG9uZSA9IFRydWUKCiAgICAgICAgICAgICMg4pSA4pSAIE9w" +
-          "ZXJhIEdYIHBvc3QtaW5zdGFsbCB0cmlnZ2VyIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU" +
-          "gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgAogICAg" +
-          "ICAgICAgICBpZiBhY3Rpb25fbW9kZSA9PSAiaW5zdGFsbCIgYW5kIG5vdCBvcGd4X2RvbmU6CiAgICAg" +
-          "ICAgICAgICAgICBpc190YXJnZXQgPSBzd190eXBlIGluIFsib3BlcmFfZ3giLCJkeW5hbWljX29wZXJh" +
-          "IiwiYWRfbXZuIiwib3BlcmFfc21hcnRfbGluayJdCiAgICAgICAgICAgICAgICBpZiBpc190YXJnZXQ6" +
-          "CiAgICAgICAgICAgICAgICAgICAgaWYgb3BneF9pbnN0YWxsZXJfdCBpcyBOb25lIGFuZCBvcy5wYXRo" +
-          "LmV4aXN0cyhJTlNUQUxMRVJfRVhFQ1VURURfUEFUSCk6CiAgICAgICAgICAgICAgICAgICAgICAgIG9w" +
-          "Z3hfaW5zdGFsbGVyX3QgPSB0aW1lLnRpbWUoKQogICAgICAgICAgICAgICAgICAgICAgICBsb2coIlBv" +
-          "c3RJbnN0YWxsLU9QR1giLCAiSW5zdGFsbGVyIHNlbnRpbmVsIGZvdW5kLiBUcmlnZ2VyIGluIDQwcy4i" +
-          "KQogICAgICAgICAgICAgICAgICAgIGlmIG9wZ3hfaW5zdGFsbGVyX3QgYW5kIChub3cgLSBvcGd4X2lu" +
-          "c3RhbGxlcl90KSA+PSA0MDoKICAgICAgICAgICAgICAgICAgICAgICAgaWYgb3Bfd2luIGFuZCAiR1gi" +
-          "IG5vdCBpbiAob3Bfd2luLndpbmRvd190ZXh0KCkgb3IgIiIpLnVwcGVyKCk6CiAgICAgICAgICAgICAg" +
-          "ICAgICAgICAgICAgICBvcGd4X2RvbmUgPSBUcnVlICAjIHJlc29sdmVkIHRvIE9uZSwgc2tpcCBHWCBm" +
-          "bG93CiAgICAgICAgICAgICAgICAgICAgICAgIGVsc2U6CiAgICAgICAgICAgICAgICAgICAgICAgICAg" +
-          "ICBvcGVyYV9neF9wb3N0X2luc3RhbGxfd2luKG9wX3dpbiwgc3dfdHlwZSkKICAgICAgICAgICAgICAg" +
-          "ICAgICAgICAgICAgIG9wZ3hfZG9uZSA9IFRydWUKCiAgICAgICAgICAgICMg4pSA4pSAIEFWRyBwb3N0" +
-          "LWluc3RhbGwgdHJpZ2dlciDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi" +
-          "lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAK" +
-          "ICAgICAgICAgICAgaWYgc3dfdHlwZSA9PSAiYXZnIiBhbmQgYWN0aW9uX21vZGUgPT0gImluc3RhbGwi" +
-          "IGFuZCBub3QgYXZnX2RvbmU6CiAgICAgICAgICAgICAgICBpZiBhdmdfaW5zdGFsbGVyX3QgaXMgTm9u" +
-          "ZSBhbmQgb3MucGF0aC5leGlzdHMoSU5TVEFMTEVSX0VYRUNVVEVEX1BBVEgpOgogICAgICAgICAgICAg" +
-          "ICAgICAgIGF2Z19pbnN0YWxsZXJfdCA9IHRpbWUudGltZSgpCiAgICAgICAgICAgICAgICAgICAgbG9n" +
-          "KCJQb3N0SW5zdGFsbC1BVkciLCAiSW5zdGFsbGVyIHNlbnRpbmVsIGZvdW5kLiBUcmlnZ2VyIGluIDYw" +
-          "cy4iKQogICAgICAgICAgICAgICAgaWYgYXZnX2luc3RhbGxlcl90IGFuZCAobm93IC0gYXZnX2luc3Rh" +
-          "bGxlcl90KSA+PSA2MDoKICAgICAgICAgICAgICAgICAgICBhdmdfcG9zdF9pbnN0YWxsX3dpbihhdmdf" +
-          "YXBwX3dpbikKICAgICAgICAgICAgICAgICAgICBhdmdfZG9uZSA9IFRydWUKCiAgICAgICAgICAgICMg" +
-          "4pSA4pSAIFNtYXJ0LWxpbmsgaW50ZXJzdGl0aWFsIChUYWIrRW50ZXIgYWZ0ZXIgMjBzKSDilIDilIDi" +
-          "lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKICAgICAgICAgICAgYWN0aXZlX2Jyb3dzZXIg" +
-          "PSBlZGdlX3dpbiBvciBvcmJpdGFfd2luMgogICAgICAgICAgICBpZiBzd190eXBlIGluIFsib3BlcmFf" +
-          "c21hcnRfbGluayIsImR5bmFtaWNfb3BlcmEiLCJhZF9tdm4iXToKICAgICAgICAgICAgICAgIGlmIG5v" +
-          "dCBzbWFydF9saW5rX2RvbmUgYW5kIGFjdGl2ZV9icm93c2VyIGFuZCAobm93IC0gcHJveHlfYXV0aF90" +
-          "KSA+IDIwOgogICAgICAgICAgICAgICAgICAgIHRyeToKICAgICAgICAgICAgICAgICAgICAgICAgYWN0" +
-          "aXZlX2Jyb3dzZXIuc2V0X2ZvY3VzKCk7IHRpbWUuc2xlZXAoMC41KQogICAgICAgICAgICAgICAgICAg" +
-          "ICAgICBzZW5kX2tleXMoIntUQUJ9Iik7IHRpbWUuc2xlZXAoMC41KTsgc2VuZF9rZXlzKCJ7RU5URVJ9" +
-          "IikKICAgICAgICAgICAgICAgICAgICAgICAgbG9nKCJTbWFydExpbmsiLCAiVGFiK0VudGVyIGludGVy" +
-          "c3RpdGlhbCBieXBhc3Mgc2VudC4iKQogICAgICAgICAgICAgICAgICAgIGV4Y2VwdCBFeGNlcHRpb24g" +
-          "YXMgZToKICAgICAgICAgICAgICAgICAgICAgICAgbG9nKCJTbWFydExpbmsiLCBmIkJ5cGFzcyBlcnJv" +
-          "cjoge2V9IikKICAgICAgICAgICAgICAgICAgICBzbWFydF9saW5rX2RvbmUgPSBUcnVlOyBzbWFydF9s" +
-          "aW5rX3QgPSBub3cKCiAgICAgICAgICAgICMg4pSA4pSAIENMSUNLLU9OTFk6IGV4aXQgYWZ0ZXIgaW50" +
-          "ZXJzdGl0aWFsIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU" +
-          "gOKUgOKUgOKUgOKUgOKUgOKUgAogICAgICAgICAgICBpZiBhY3Rpb25fbW9kZSA9PSAiY2xpY2siOgog" +
-          "ICAgICAgICAgICAgICAgaWYgc3dfdHlwZSBpbiBbIm9wZXJhX3NtYXJ0X2xpbmsiLCJkeW5hbWljX29w" +
-          "ZXJhIiwiYWRfbXZuIl06CiAgICAgICAgICAgICAgICAgICAgaWYgbm90IHNtYXJ0X2xpbmtfZG9uZToK" +
-          "ICAgICAgICAgICAgICAgICAgICAgICAgdGltZS5zbGVlcCgxKTsgY29udGludWUKICAgICAgICAgICAg" +
-          "ICAgICAgICBpZiBub3cgLSBzbWFydF9saW5rX3QgPCAxNToKICAgICAgICAgICAgICAgICAgICAgICAg" +
-          "dGltZS5zbGVlcCgxKTsgY29udGludWUKICAgICAgICAgICAgICAgIHRpbWUuc2xlZXAoMSk7IGNvbnRp" +
-          "bnVlCgogICAgICAgICAgICAjIOKUgOKUgCBFZGdlIGRvd25sb2FkIHByb3RlY3Rpb24gKEtlZXAgLyBL" +
-          "ZWVwIGFueXdheSkg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACiAgICAgICAg" +
-          "ICAgIGlmIGVkZ2Vfd2luIGFuZCBhY3Rpb25fbW9kZSA9PSAiaW5zdGFsbCI6CiAgICAgICAgICAgICAg" +
-          "ICBmb3IgYnRuX25hbWUgaW4gWyJLZWVwIiwgIktlZXAgYW55d2F5Il06CiAgICAgICAgICAgICAgICAg" +
-          "ICAgYnRucyA9IGVkZ2Vfd2luLmRlc2NlbmRhbnRzKGNvbnRyb2xfdHlwZT0iQnV0dG9uIiwgdGl0bGU9" +
-          "YnRuX25hbWUpCiAgICAgICAgICAgICAgICAgICAgaWYgYnRuczoKICAgICAgICAgICAgICAgICAgICAg" +
-          "ICAgdHJ5OiBidG5zWzBdLmNsaWNrX2lucHV0KCk7IGtlZXBfY2xpY2tlZCA9IFRydWU7IHRpbWUuc2xl" +
-          "ZXAoMC41KQogICAgICAgICAgICAgICAgICAgICAgICBleGNlcHQgRXhjZXB0aW9uOiBwYXNzCgogICAg" +
-          "ICAgICAgICAjIOKUgOKUgCBEb3dubG9hZCBidXR0b24gY2xpY2tlciAoT3BlcmEgdHlwZXMpIOKUgOKU" +
-          "gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgAogICAg" +
-          "ICAgICAgICBjYW5fZGwgPSBUcnVlCiAgICAgICAgICAgIGlmIHN3X3R5cGUgaW4gWyJvcGVyYV9zbWFy" +
-          "dF9saW5rIiwiZHluYW1pY19vcGVyYSIsImFkX212biJdOgogICAgICAgICAgICAgICAgaWYgbm90IHNt" +
-          "YXJ0X2xpbmtfZG9uZSBvciAobm93IC0gc21hcnRfbGlua190IDwgMTUpOgogICAgICAgICAgICAgICAg" +
-          "ICAgIGNhbl9kbCA9IEZhbHNlCiAgICAgICAgICAgIGlmIGVkZ2Vfd2luIGFuZCBhY3Rpb25fbW9kZSA9" +
-          "PSAiaW5zdGFsbCIgYW5kIGNhbl9kbCBhbmQgc3dfdHlwZSBub3QgaW4gWyJhdmciXToKICAgICAgICAg" +
-          "ICAgICAgIGlmIG5vdyAtIGxhc3RfZGxfY2xpY2tfdCA+IDU6CiAgICAgICAgICAgICAgICAgICAgZm9y" +
-          "IGJ0biBpbiAoZWRnZV93aW4uZGVzY2VuZGFudHMoY29udHJvbF90eXBlPSJCdXR0b24iKSBvciBbXSk6" +
-          "CiAgICAgICAgICAgICAgICAgICAgICAgIGJ0eHQgPSBidG4ud2luZG93X3RleHQoKSBvciAiIgogICAg" +
-          "ICAgICAgICAgICAgICAgICAgICBpZiBhbnkoayBpbiBidHh0Lmxvd2VyKCkgZm9yIGsgaW4gWyJkb3du" +
-          "bG9hZCBvcGVyYSIsImRvd25sb2FkIG5vdyIsInTDqWzDqWNoYXJnZXIiLCJkZXNjYXJnYXIiLCJkb3du" +
-          "bG9hZCJdKToKICAgICAgICAgICAgICAgICAgICAgICAgICAgIHRyeToKICAgICAgICAgICAgICAgICAg" +
-          "ICAgICAgICAgICAgICBlZGdlX3dpbi5zZXRfZm9jdXMoKTsgdGltZS5zbGVlcCgwLjUpCiAgICAgICAg" +
-          "ICAgICAgICAgICAgICAgICAgICAgICAgYnRuLmNsaWNrX2lucHV0KCk7IGxhc3RfZGxfY2xpY2tfdCA9" +
-          "IG5vdwogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGxvZygiRG93bmxvYWQiLCBmIkNsaWNr" +
-          "ZWQ6ICd7YnR4dH0nIik7IGJyZWFrCiAgICAgICAgICAgICAgICAgICAgICAgICAgICBleGNlcHQgRXhj" +
-          "ZXB0aW9uOiBwYXNzCgogICAgICAgICAgICAjIOKUgOKUgCBBVkcgZG93bmxvYWQgdHJpZ2dlciAoVGFi" +
-          "K0VudGVyIGFmdGVyIDIwcykg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA" +
-          "4pSA4pSACiAgICAgICAgICAgIGlmIGVkZ2Vfd2luIGFuZCBzd190eXBlID09ICJhdmciIGFuZCBhY3Rp" +
-          "b25fbW9kZSA9PSAiaW5zdGFsbCI6CiAgICAgICAgICAgICAgICBpZiBub3QgYXZnX2RsX2NsaWNrZWQg" +
-          "YW5kIChub3cgLSBwcm94eV9hdXRoX3QpID4gMjA6CiAgICAgICAgICAgICAgICAgICAgdHJ5OgogICAg" +
-          "ICAgICAgICAgICAgICAgICAgICBlZGdlX3dpbi5zZXRfZm9jdXMoKTsgdGltZS5zbGVlcCgwLjUpCiAg" +
-          "ICAgICAgICAgICAgICAgICAgICAgIHNlbmRfa2V5cygie1RBQn0iKTsgdGltZS5zbGVlcChyYW5kb20u" +
-          "dW5pZm9ybSgxLCAyKSkKICAgICAgICAgICAgICAgICAgICAgICAgc2VuZF9rZXlzKCJ7RU5URVJ9IikK" +
-          "ICAgICAgICAgICAgICAgICAgICAgICAgbG9nKCJBVkciLCAiRG93bmxvYWQgdHJpZ2dlciBzZW50LiIp" +
-          "CiAgICAgICAgICAgICAgICAgICAgICAgIGZvciB3IGluIHJhbmdlKDEwKToKICAgICAgICAgICAgICAg" +
-          "ICAgICAgICAgICAgIGxvZygiQVZHIiwgZiIgIEluaXQgd2FpdCB7dysxfS8xMHMiKTsgdGltZS5zbGVl" +
-          "cCgxKQogICAgICAgICAgICAgICAgICAgIGV4Y2VwdCBFeGNlcHRpb24gYXMgZToKICAgICAgICAgICAg" +
-          "ICAgICAgICAgICAgbG9nKCJBVkciLCBmIlRyaWdnZXIgZXJyb3I6IHtlfSIpCiAgICAgICAgICAgICAg" +
-          "ICAgICAgYXZnX2RsX2NsaWNrZWQgPSBUcnVlCgogICAgICAgICAgICAjIOKUgOKUgCBDdHJsK0ogdG8g" +
-          "b3BlbiBkb3dubG9hZHMgcGFuZWwg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA" +
-          "4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACiAgICAgICAgICAgIGNhbl9j" +
-          "dHJsaiA9IG5vdCAoc3dfdHlwZSA9PSAiYXZnIiBhbmQgbm90IGF2Z19kbF9jbGlja2VkKQogICAgICAg" +
-          "ICAgICBpZiAoYWN0aW9uX21vZGUgPT0gImluc3RhbGwiIGFuZCBub3Qga2VlcF9jbGlja2VkIGFuZCBl" +
-          "ZGdlX3dpbgogICAgICAgICAgICAgICAgICAgIGFuZCBjYW5fY3RybGogYW5kIChub3cgLSBsYXN0X2N0" +
-          "cmxfal90ID4gMTUpIGFuZCBjdHJsX2pfYXR0ZW1wdHMgPCA0KToKICAgICAgICAgICAgICAgIHRyeToK" +
-          "ICAgICAgICAgICAgICAgICAgICBlZGdlX3dpbi5zZXRfZm9jdXMoKTsgdGltZS5zbGVlcCgwLjUpCiAg" +
-          "ICAgICAgICAgICAgICAgICAgc2VuZF9rZXlzKCJeaiIpCiAgICAgICAgICAgICAgICAgICAgbGFzdF9j" +
-          "dHJsX2pfdCA9IG5vdzsgY3RybF9qX2F0dGVtcHRzICs9IDEKICAgICAgICAgICAgICAgICAgICBsb2co" +
-          "IlV0aWxpdHkiLCBmIkN0cmwrSiBhdHRlbXB0IHtjdHJsX2pfYXR0ZW1wdHN9LzQiKQogICAgICAgICAg" +
-          "ICAgICAgZXhjZXB0IEV4Y2VwdGlvbjogcGFzcwoKICAgICAgICBleGNlcHQgRXhjZXB0aW9uIGFzIGU6" +
-          "CiAgICAgICAgICAgIGxvZygiTWFpbiIsIGYiTG9vcCBleGNlcHRpb246IHtlfSIpCiAgICAgICAgdGlt" +
-          "ZS5zbGVlcCgxKQoKICAgIGxvZygiTWFpbiIsICJBdXRvbWF0aW9uIGxvb3AgY29tcGxldGUuIikKCmhh" +
-          "bmRsZV9hdXRvbWF0aW9uX3dpbihTT0ZUV0FSRV9UWVBFLCBBQ1RJT05fTU9ERSkK"
           $scriptPath = "$env:TEMP\win_handler.py"
-          [System.IO.File]::WriteAllBytes($scriptPath, [System.Convert]::FromBase64String($scriptB64))
-          Write-Host "[*] Script written to $scriptPath ($([System.IO.FileInfo]::new($scriptPath).Length) bytes)" -ForegroundColor Cyan
-
-          # ── Start the background Python automation handler ─────────────
           Write-Host "[*] Starting Python automation handler..." -ForegroundColor Cyan
           $handlerProc = Start-Process -FilePath python `
             -ArgumentList "-u `"$scriptPath`"" `
             -PassThru -WindowStyle Hidden
           Write-Host "[*] Handler PID: $($handlerProc.Id)" -ForegroundColor Cyan
 
-          # ── INSTALL PATH: watch Downloads for the installer EXE ────────
           if ($env:ACTION_MODE -eq "install") {
             Write-Host "[Watcher] INSTALL path active. Watching Downloads..." -ForegroundColor Cyan
             $dlFolder              = "$env:USERPROFILE\Downloads"
@@ -886,7 +959,6 @@ jobs:
                   Write-Output "[$softwareType-WATCHER] Payload found: $($file.Name)"
                   try { Set-Content -Path $sentinelPath -Value "done" -ErrorAction SilentlyContinue } catch {}
 
-                  # Close Edge download tabs
                   $wsh = New-Object -ComObject WScript.Shell
                   for ($ca = 1; $ca -le 4; $ca++) {
                     $edgeProcs = Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
@@ -900,14 +972,12 @@ jobs:
                     Start-Sleep -Milliseconds 800
                   }
 
-                  # Fingerprint actual software type
                   $actualSw = $softwareType
                   if ($softwareType -in @("ad_mvn","dynamic_opera","opera_smart_link")) {
                     if ($file.Name -match "OperaGX") { $actualSw = "opera_gx" }
                     else { $actualSw = "opera_one" }
                   }
 
-                  # Wait for file I/O unlock
                   $locked = $true
                   while ($locked) {
                     Start-Sleep -Seconds 2
@@ -918,16 +988,13 @@ jobs:
                     } catch {}
                   }
 
-                  # Write installer-executed sentinel
                   try { Set-Content -Path $installerSentinel -Value "done" } catch {}
                   Write-Output "[$actualSw-INSTALL] Installer sentinel written."
 
-                  # Execute installer silently
                   Write-Output "[$actualSw-INSTALL] Running: $($file.FullName) /silent"
                   try { Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait }
                   catch { Write-Output "[$actualSw-INSTALL] Installer error: $_" }
 
-                  # Find and launch installed app
                   $appPaths = if ($actualSw -eq "opera_gx") {
                     @("$env:LOCALAPPDATA\Programs\Opera GX\launcher.exe",
                       "C:\Program Files\Opera GX\launcher.exe",
@@ -968,7 +1035,6 @@ jobs:
             }
             Write-Host "[Runtime] Install job concluded." -ForegroundColor Green
           } else {
-            # CLICK-ONLY path
             Write-Host "[Runtime] CLICK-ONLY path. Waiting 90s for page activity..." -ForegroundColor Magenta
             Start-Sleep -Seconds 90
             Write-Host "[Runtime] Click path complete." -ForegroundColor Green
@@ -977,7 +1043,6 @@ jobs:
           Write-Host "[*] Waiting for handler process to finish..."
           $handlerProc.WaitForExit(30000) | Out-Null
 
-      # ── 6-W: Keep Runner Alive ──────────────────────────────────────────
       - name: Keep Runner Alive (Windows)
         if: always() && runner.os == 'Windows'
         shell: pwsh
@@ -989,7 +1054,6 @@ jobs:
       # ── macOS STEPS ────────────────────────────────────────────────────
       # ════════════════════════════════════════════════════════════════════
 
-      # ── 1-M: macOS Security Setup ──────────────────────────────────────
       - name: Setup GUI Auth Credentials & Disable Gatekeeper (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -1003,7 +1067,6 @@ jobs:
           defaults write com.apple.Safari AutoOpenSafeDownloads -bool true || true
           echo "[OK] macOS security configured. admin/admin credentials set."
 
-      # ── 2-M: Pre-Grant TCC Permissions ────────────────────────────────
       - name: Pre-Grant TCC Permissions (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -1031,7 +1094,6 @@ jobs:
           grant_tcc kTCCServiceLocalNetwork  com.getscreen.agent        0
           echo "[OK] TCC permissions pre-granted."
 
-      # ── 3-M: Install Python venv + cliclick ───────────────────────────
       - name: Install Python Dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -1060,7 +1122,6 @@ jobs:
           echo "CLICLICK_BIN=$(command -v cliclick || echo not_found)" >> "$GITHUB_ENV"
           echo "[OK] Python venv and cliclick ready."
 
-      # ── 4-M: Install & Start Getscreen.me ─────────────────────────────
       - name: Install, Bypass Security, and Start Getscreen.me (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -1101,7 +1162,6 @@ jobs:
           sudo "$EXEC_PATH" -start 2>/dev/null || true
           echo "[OK] Getscreen.me registered as '$DEVICE_NAME' and started."
 
-      # ── 5-M: Download & Open GoLogin ──────────────────────────────────
       - name: Download, Install, and Open GoLogin (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -1122,7 +1182,6 @@ jobs:
           open /Applications/GoLogin.app
           echo "[OK] GoLogin installed and opened."
 
-      # ── 6-M: Automate GoLogin Login ───────────────────────────────────
       - name: Automate GoLogin Login (macOS)
         if: runner.os == 'macOS'
         env:
@@ -1160,7 +1219,6 @@ jobs:
           EOF
           echo "[OK] GoLogin login automation complete."
 
-      # ── 7-M: Wait for GoLogin Orbita Profile & Run Software ───────────
       - name: Wait for GoLogin Orbita Profile & Run Software (macOS)
         if: runner.os == 'macOS'
         env:
@@ -1179,368 +1237,491 @@ jobs:
           INSTALLER_SENTINEL="/tmp/installer_executed.flag"
           TIMEOUT_SECS=3300
 
-          # ── Write macOS Python handler ─────────────────────────────────
-          MAC_B64=""
-          MAC_B64="CmltcG9ydCB0aW1lLCBzeXMsIG9zLCBzdWJwcm9jZXNzLCByYW5kb20KClRBUkdFVF9VUkwgICAgPSBv"
-          MAC_B64="${MAC_B64}cy5lbnZpcm9uLmdldCgiVEFSR0VUX1VSTCIsICIiKQpTT0ZUV0FSRV9UWVBFID0gb3MuZW52aXJvbi5n"
-          MAC_B64="${MAC_B64}ZXQoIlNPRlRXQVJFX1RZUEUiLCAiZHluYW1pY19vcGVyYSIpCkRNR19GSUxURVIgICAgPSBvcy5lbnZp"
-          MAC_B64="${MAC_B64}cm9uLmdldCgiRE1HX0ZJTFRFUiIsICIqT3BlcmEqIikKQUNUSU9OX01PREUgICA9IG9zLmVudmlyb24u"
-          MAC_B64="${MAC_B64}Z2V0KCJBQ1RJT05fTU9ERSIsICJpbnN0YWxsIikKCmRlZiBsb2cobXNnKToKICAgIHByaW50KGYiW3t0"
-          MAC_B64="${MAC_B64}aW1lLnN0cmZ0aW1lKCclSDolTTolUycpfV0ge21zZ30iLCBmbHVzaD1UcnVlKQoKQ0hST01FX1dBUk1V"
-          MAC_B64="${MAC_B64}UF9TRUNTID0gMjAKRExfV0FJVF9QT1NUX05BViAgID0gMzAKCmRlZiBydW5fYXMoc2NyaXB0LCBzaWxl"
-          MAC_B64="${MAC_B64}bnQ9RmFsc2UsIHRpbWVvdXQ9MjApOgogICAgdHJ5OgogICAgICAgIHIgPSBzdWJwcm9jZXNzLnJ1bihb"
-          MAC_B64="${MAC_B64}Im9zYXNjcmlwdCIsICItZSIsIHNjcmlwdF0sCiAgICAgICAgICAgIGNhcHR1cmVfb3V0cHV0PVRydWUs"
-          MAC_B64="${MAC_B64}IHRleHQ9VHJ1ZSwgdGltZW91dD10aW1lb3V0KQogICAgICAgIGlmIHIucmV0dXJuY29kZSAhPSAwIGFu"
-          MAC_B64="${MAC_B64}ZCBub3Qgc2lsZW50OgogICAgICAgICAgICBsb2coZiJbQXBwbGVTY3JpcHRdIHN0ZGVycjoge3Iuc3Rk"
-          MAC_B64="${MAC_B64}ZXJyLnN0cmlwKClbOjEyMF19IikKICAgICAgICByZXR1cm4gci5zdGRvdXQuc3RyaXAoKQogICAgZXhj"
-          MAC_B64="${MAC_B64}ZXB0IHN1YnByb2Nlc3MuVGltZW91dEV4cGlyZWQ6CiAgICAgICAgaWYgbm90IHNpbGVudDogbG9nKCJb"
-          MAC_B64="${MAC_B64}QXBwbGVTY3JpcHRdIFRpbWVkIG91dCIpCiAgICAgICAgcmV0dXJuICIiCiAgICBleGNlcHQgRXhjZXB0"
-          MAC_B64="${MAC_B64}aW9uIGFzIGU6CiAgICAgICAgaWYgbm90IHNpbGVudDogbG9nKGYiW0FwcGxlU2NyaXB0XSBFeGNlcHRp"
-          MAC_B64="${MAC_B64}b246IHtlfSIpCiAgICAgICAgcmV0dXJuICIiCgpkZWYgY2xpcGJvYXJkX3NldCh0ZXh0KToKICAgIHRy"
-          MAC_B64="${MAC_B64}eToKICAgICAgICBwID0gc3VicHJvY2Vzcy5Qb3BlbihbInBiY29weSJdLCBzdGRpbj1zdWJwcm9jZXNz"
-          MAC_B64="${MAC_B64}LlBJUEUsCiAgICAgICAgICAgIHN0ZG91dD1zdWJwcm9jZXNzLkRFVk5VTEwsIHN0ZGVycj1zdWJwcm9j"
-          MAC_B64="${MAC_B64}ZXNzLkRFVk5VTEwpCiAgICAgICAgcC5jb21tdW5pY2F0ZShpbnB1dD10ZXh0LmVuY29kZSgidXRmLTgi"
-          MAC_B64="${MAC_B64}KSwgdGltZW91dD01KQogICAgICAgIHRpbWUuc2xlZXAoMC4xNSkKICAgIGV4Y2VwdCBFeGNlcHRpb24g"
-          MAC_B64="${MAC_B64}YXMgZToKICAgICAgICBsb2coZiJbQ2xpcGJvYXJkXSBwYmNvcHkgZXJyb3I6IHtlfSIpCgpkZWYgcHJl"
-          MAC_B64="${MAC_B64}c3Moa2V5X25hbWUpOgogICAga2V5X21hcCA9IHsidGFiIjo0OCwicmV0dXJuIjozNiwic3BhY2UiOjQ5"
-          MAC_B64="${MAC_B64}LCJyaWdodCI6MTI0LCJsZWZ0IjoxMjMsCiAgICAgICAgICAgICAgICJ1cCI6MTI2LCJkb3duIjoxMjUs"
-          MAC_B64="${MAC_B64}ImVzY2FwZSI6NTMsImY1Ijo5Nn0KICAgIGNvZGUgPSBrZXlfbWFwLmdldChrZXlfbmFtZS5sb3dlcigp"
-          MAC_B64="${MAC_B64}KQogICAgaWYgY29kZToKICAgICAgICBydW5fYXMoZid0ZWxsIGFwcGxpY2F0aW9uICJTeXN0ZW0gRXZl"
-          MAC_B64="${MAC_B64}bnRzIiB0byBrZXkgY29kZSB7Y29kZX0nLCBzaWxlbnQ9VHJ1ZSkKCmRlZiBydW5uaW5nX2FwcHMoKToK"
-          MAC_B64="${MAC_B64}ICAgIHIgPSBydW5fYXMoJ3RlbGwgYXBwbGljYXRpb24gIlN5c3RlbSBFdmVudHMiIHRvIGdldCBuYW1l"
-          MAC_B64="${MAC_B64}IG9mIGV2ZXJ5IHByb2Nlc3Mgd2hvc2UgdmlzaWJsZSBpcyB0cnVlJywKICAgICAgICAgICAgICAgc2ls"
-          MAC_B64="${MAC_B64}ZW50PVRydWUpCiAgICByZXR1cm4gW24uc3RyaXAoKSBmb3IgbiBpbiByLnNwbGl0KCIsIikgaWYgbi5z"
-          MAC_B64="${MAC_B64}dHJpcCgpXQoKIyDilIDilIAgT3JiaXRhIC8gR29Mb2dpbiBkZXRlY3Rpb24g4pSA4pSA4pSA4pSA4pSA"
-          MAC_B64="${MAC_B64}4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA"
-          MAC_B64="${MAC_B64}4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACk9S"
-          MAC_B64="${MAC_B64}QklUQV9GUkFHTUVOVFMgPSBbIm9yYml0YSIsICJnb2xvZ2luIGJyb3dzZXIiLCAiZ2wgYnJvd3NlciIs"
-          MAC_B64="${MAC_B64}ICJnbC1icm93c2VyIl0KCmRlZiBpc19vcmJpdGFfYXBwKGFwcF9uYW1lKToKICAgIGFsID0gKGFwcF9u"
-          MAC_B64="${MAC_B64}YW1lIG9yICIiKS5sb3dlcigpCiAgICByZXR1cm4gYW55KGYgaW4gYWwgZm9yIGYgaW4gT1JCSVRBX0ZS"
-          MAC_B64="${MAC_B64}QUdNRU5UUykKCmRlZiBmaW5kX29yYml0YV9hcHAoKToKICAgICIiIlJldHVybiBuYW1lIG9mIHJ1bm5p"
-          MAC_B64="${MAC_B64}bmcgT3JiaXRhL0dvTG9naW4gYnJvd3NlciBwcm9jZXNzIG9yIE5vbmUuIiIiCiAgICBhcHBzID0gcnVu"
-          MAC_B64="${MAC_B64}bmluZ19hcHBzKCkKICAgIGZvciBhIGluIGFwcHM6CiAgICAgICAgaWYgaXNfb3JiaXRhX2FwcChhKToK"
-          MAC_B64="${MAC_B64}ICAgICAgICAgICAgcmV0dXJuIGEKICAgICMgQWxzbyB0cnkgY2hlY2tpbmcgcHJvY2VzcyBsaXN0IHZp"
-          MAC_B64="${MAC_B64}YSBwcwogICAgdHJ5OgogICAgICAgIHIgPSBzdWJwcm9jZXNzLnJ1bihbInBzIiwgImF1eCJdLCBjYXB0"
-          MAC_B64="${MAC_B64}dXJlX291dHB1dD1UcnVlLCB0ZXh0PVRydWUsIHRpbWVvdXQ9NSkKICAgICAgICBmb3IgbGluZSBpbiBy"
-          MAC_B64="${MAC_B64}LnN0ZG91dC5zcGxpdGxpbmVzKCk6CiAgICAgICAgICAgIGxsID0gbGluZS5sb3dlcigpCiAgICAgICAg"
-          MAC_B64="${MAC_B64}ICAgIGlmIGFueShmIGluIGxsIGZvciBmIGluIE9SQklUQV9GUkFHTUVOVFMpOgogICAgICAgICAgICAg"
-          MAC_B64="${MAC_B64}ICAgIyBFeHRyYWN0IHByb2Nlc3MgbmFtZQogICAgICAgICAgICAgICAgcGFydHMgPSBsaW5lLnNwbGl0"
-          MAC_B64="${MAC_B64}KCkKICAgICAgICAgICAgICAgIGlmIGxlbihwYXJ0cykgPiAxMDoKICAgICAgICAgICAgICAgICAgICBw"
-          MAC_B64="${MAC_B64}bmFtZSA9IG9zLnBhdGguYmFzZW5hbWUocGFydHNbMTBdKQogICAgICAgICAgICAgICAgICAgIHJldHVy"
-          MAC_B64="${MAC_B64}biBwbmFtZQogICAgZXhjZXB0IEV4Y2VwdGlvbjoKICAgICAgICBwYXNzCiAgICByZXR1cm4gTm9uZQoK"
-          MAC_B64="${MAC_B64}ZGVmIHdhaXRfZm9yX29yYml0YShtYXhfd2FpdD0zMDApOgogICAgIiIiV2FpdCBmb3IgR29Mb2dpbiBP"
-          MAC_B64="${MAC_B64}cmJpdGEgYnJvd3NlciBwcm9maWxlIHRvIG9wZW4uIiIiCiAgICBsb2coZiJbT3JiaXRhV2FpdF0gV2Fp"
-          MAC_B64="${MAC_B64}dGluZyB1cCB0byB7bWF4X3dhaXR9cyBmb3IgR29Mb2dpbiBPcmJpdGEgcHJvZmlsZSB3aW5kb3cuLi4i"
-          MAC_B64="${MAC_B64}KQogICAgZGVhZGxpbmUgPSB0aW1lLnRpbWUoKSArIG1heF93YWl0CiAgICB3aGlsZSB0aW1lLnRpbWUo"
-          MAC_B64="${MAC_B64}KSA8IGRlYWRsaW5lOgogICAgICAgIG9yYml0YSA9IGZpbmRfb3JiaXRhX2FwcCgpCiAgICAgICAgaWYg"
-          MAC_B64="${MAC_B64}b3JiaXRhOgogICAgICAgICAgICBsb2coZiJbT3JiaXRhV2FpdF0gT3JiaXRhIGRldGVjdGVkOiAne29y"
-          MAC_B64="${MAC_B64}Yml0YX0nIikKICAgICAgICAgICAgcmV0dXJuIG9yYml0YQogICAgICAgIGVsYXBzZWQgPSBpbnQoZGVh"
-          MAC_B64="${MAC_B64}ZGxpbmUgLSB0aW1lLnRpbWUoKSkKICAgICAgICBpZiBlbGFwc2VkICUgMzAgPT0gMCBhbmQgZWxhcHNl"
-          MAC_B64="${MAC_B64}ZCA+IDA6CiAgICAgICAgICAgIGxvZyhmIltPcmJpdGFXYWl0XSBTdGlsbCB3YWl0aW5nLi4uIHtlbGFw"
-          MAC_B64="${MAC_B64}c2VkfXMgcmVtYWluaW5nIikKICAgICAgICB0aW1lLnNsZWVwKDIpCiAgICBsb2coIltPcmJpdGFXYWl0"
-          MAC_B64="${MAC_B64}XSBPcmJpdGEgZGlkIG5vdCBhcHBlYXIgd2l0aGluIHRpbWVvdXQuIikKICAgIHJldHVybiBOb25lCgpk"
-          MAC_B64="${MAC_B64}ZWYgbmF2aWdhdGVfb3JiaXRhX3RvX3VybChvcmJpdGFfYXBwX25hbWUsIHVybCwgcmV0cmllcz0zKToK"
-          MAC_B64="${MAC_B64}ICAgICIiIkZvY3VzIE9yYml0YSB3aW5kb3cgYW5kIG5hdmlnYXRlIHRvIFVSTCB1c2luZyBDdHJsK0wg"
-          MAC_B64="${MAC_B64}dGhlbiB0eXBlIFVSTC4iIiIKICAgIGxvZyhmIltPcmJpdGFOYXZdIE5hdmlnYXRpbmcgJ3tvcmJpdGFf"
-          MAC_B64="${MAC_B64}YXBwX25hbWV9JyB0bzoge3VybH0iKQogICAgZm9yIGF0dGVtcHQgaW4gcmFuZ2UoMSwgcmV0cmllcyAr"
-          MAC_B64="${MAC_B64}IDEpOgogICAgICAgICMgQWN0aXZhdGUgdGhlIE9yYml0YSBhcHAKICAgICAgICByZXN1bHQgPSBydW5f"
-          MAC_B64="${MAC_B64}YXMoZid0ZWxsIGFwcGxpY2F0aW9uICJ7b3JiaXRhX2FwcF9uYW1lfSIgdG8gYWN0aXZhdGUnLCBzaWxl"
-          MAC_B64="${MAC_B64}bnQ9VHJ1ZSkKICAgICAgICB0aW1lLnNsZWVwKDEuNSkKICAgICAgICAjIEN0cmwrTCB0byBmb2N1cyBh"
-          MAC_B64="${MAC_B64}ZGRyZXNzIGJhcgogICAgICAgIHJ1bl9hcyhmJ3RlbGwgYXBwbGljYXRpb24gIlN5c3RlbSBFdmVudHMi"
-          MAC_B64="${MAC_B64}IHRvIHRlbGwgcHJvY2VzcyAie29yYml0YV9hcHBfbmFtZX0iIHRvIGtleXN0cm9rZSAibCIgdXNpbmcg"
-          MAC_B64="${MAC_B64}Y29tbWFuZCBkb3duJywKICAgICAgICAgICAgICAgc2lsZW50PVRydWUpCiAgICAgICAgdGltZS5zbGVl"
-          MAC_B64="${MAC_B64}cCgwLjgpCiAgICAgICAgIyBTZWxlY3QgYWxsIGV4aXN0aW5nIHRleHQgaW4gYWRkcmVzcyBiYXIKICAg"
-          MAC_B64="${MAC_B64}ICAgICBydW5fYXMoJ3RlbGwgYXBwbGljYXRpb24gIlN5c3RlbSBFdmVudHMiIHRvIGtleXN0cm9rZSAi"
-          MAC_B64="${MAC_B64}YSIgdXNpbmcgY29tbWFuZCBkb3duJywgc2lsZW50PVRydWUpCiAgICAgICAgdGltZS5zbGVlcCgwLjIp"
-          MAC_B64="${MAC_B64}CiAgICAgICAgIyBQYXN0ZSBVUkwgdmlhIGNsaXBib2FyZCBmb3IgcmVsaWFiaWxpdHkKICAgICAgICBj"
-          MAC_B64="${MAC_B64}bGlwYm9hcmRfc2V0KHVybCkKICAgICAgICB0aW1lLnNsZWVwKDAuMikKICAgICAgICBydW5fYXMoJ3Rl"
-          MAC_B64="${MAC_B64}bGwgYXBwbGljYXRpb24gIlN5c3RlbSBFdmVudHMiIHRvIGtleXN0cm9rZSAidiIgdXNpbmcgY29tbWFu"
-          MAC_B64="${MAC_B64}ZCBkb3duJywgc2lsZW50PVRydWUpCiAgICAgICAgdGltZS5zbGVlcCgwLjUpCiAgICAgICAgcHJlc3Mo"
-          MAC_B64="${MAC_B64}InJldHVybiIpCiAgICAgICAgbG9nKGYiW09yYml0YU5hdl0gVVJMIGVudGVyZWQgKGF0dGVtcHQge2F0"
-          MAC_B64="${MAC_B64}dGVtcHR9L3tyZXRyaWVzfSkuIikKICAgICAgICB0aW1lLnNsZWVwKDIpCiAgICAgICAgcmV0dXJuIFRy"
-          MAC_B64="${MAC_B64}dWUgICMgYXNzdW1lIHN1Y2Nlc3MKICAgIHJldHVybiBGYWxzZQoKZGVmIGRpc21pc3NfcG9wdXBzKCk6"
-          MAC_B64="${MAC_B64}CiAgICBydW5fYXMocicnJwp0ZWxsIGFwcGxpY2F0aW9uICJTeXN0ZW0gRXZlbnRzIgogIHRyeQogICAg"
-          MAC_B64="${MAC_B64}dGVsbCBwcm9jZXNzICJDb3JlU2VydmljZXNVSUFnZW50IgogICAgICByZXBlYXQgd2l0aCB3aW4gaW4g"
-          MAC_B64="${MAC_B64}KGV2ZXJ5IHdpbmRvdykKICAgICAgICB0cnkKICAgICAgICAgIGlmIGV4aXN0cyBidXR0b24gIkFsbG93"
-          MAC_B64="${MAC_B64}IiBvZiB3aW4gdGhlbiBjbGljayBidXR0b24gIkFsbG93IiBvZiB3aW4KICAgICAgICBlbmQgdHJ5CiAg"
-          MAC_B64="${MAC_B64}ICAgIGVuZCByZXBlYXQKICAgIGVuZCB0ZWxsCiAgZW5kIHRyeQogIHJlcGVhdCB3aXRoIHByb2MgaW4g"
-          MAC_B64="${MAC_B64}KGV2ZXJ5IHByb2Nlc3Mgd2hvc2UgdmlzaWJsZSBpcyB0cnVlKQogICAgc2V0IHBOYW1lIHRvIG5hbWUg"
-          MAC_B64="${MAC_B64}b2YgcHJvYyBhcyBzdHJpbmcKICAgIGlmIHBOYW1lIGlzIG5vdCBpbiB7Ikdvb2dsZSBDaHJvbWUiLCAi"
-          MAC_B64="${MAC_B64}T3JiaXRhIiwgIkdvTG9naW4ifSB0aGVuCiAgICAgIHRyeQogICAgICAgIHJlcGVhdCB3aXRoIHdpbiBp"
-          MAC_B64="${MAC_B64}biAoZXZlcnkgd2luZG93IG9mIHByb2MpCiAgICAgICAgICB0cnkKICAgICAgICAgICAgaWYgKGV4aXN0"
-          MAC_B64="${MAC_B64}cyBidXR0b24gIkFsbG93IiBvZiB3aW4pIGFuZCAoZXhpc3RzIGJ1dHRvbiAiRG9uJ3QgQWxsb3ciIG9m"
-          MAC_B64="${MAC_B64}IHdpbikgdGhlbgogICAgICAgICAgICAgIGNsaWNrIGJ1dHRvbiAiQWxsb3ciIG9mIHdpbgogICAgICAg"
-          MAC_B64="${MAC_B64}ICAgICBlbmQgaWYKICAgICAgICAgIGVuZCB0cnkKICAgICAgICBlbmQgcmVwZWF0CiAgICAgIGVuZCB0"
-          MAC_B64="${MAC_B64}cnkKICAgIGVuZCBpZgogIGVuZCByZXBlYXQKZW5kIHRlbGwKJycnLCBzaWxlbnQ9VHJ1ZSkKCmRlZiBh"
-          MAC_B64="${MAC_B64}Y2NlcHRfY29va2llKCk6CiAgICBmb3IgYiBpbiBbIkFjY2VwdCBhbGwiLCJBY2NlcHQgQWxsIiwiQWNj"
-          MAC_B64="${MAC_B64}ZXB0IENvb2tpZXMiLCJBbGxvdyBhbGwiLCJJIGFncmVlIiwiR290IGl0Il06CiAgICAgICAgciA9IHJ1"
-          MAC_B64="${MAC_B64}bl9hcyhmJycnCnRlbGwgYXBwbGljYXRpb24gIlN5c3RlbSBFdmVudHMiCiAgcmVwZWF0IHdpdGggcHJv"
-          MAC_B64="${MAC_B64}YyBpbiAoZXZlcnkgcHJvY2VzcyB3aG9zZSB2aXNpYmxlIGlzIHRydWUpCiAgICB0cnkKICAgICAgaWYg"
-          MAC_B64="${MAC_B64}ZXhpc3RzIGJ1dHRvbiAie2J9IiBvZiB3aW5kb3cgMSBvZiBwcm9jIHRoZW4KICAgICAgICBjbGljayBi"
-          MAC_B64="${MAC_B64}dXR0b24gIntifSIgb2Ygd2luZG93IDEgb2YgcHJvYwogICAgICAgIHJldHVybiAiY2xpY2tlZCIKICAg"
-          MAC_B64="${MAC_B64}ICAgZW5kIGlmCiAgICBlbmQgdHJ5CiAgZW5kIHJlcGVhdAogIHJldHVybiAibm90X2ZvdW5kIgplbmQg"
-          MAC_B64="${MAC_B64}dGVsbCcnJywgc2lsZW50PVRydWUpCiAgICAgICAgaWYgciA9PSAiY2xpY2tlZCI6CiAgICAgICAgICAg"
-          MAC_B64="${MAC_B64}IGxvZyhmIltDb29raWVdIEFjY2VwdGVkOiAne2J9JyIpOyByZXR1cm4gVHJ1ZQogICAgcmV0dXJuIEZh"
-          MAC_B64="${MAC_B64}bHNlCgpkZWYgY2xpY2tfYnV0dG9uX29yYml0YShvcmJpdGFfYXBwLCBidXR0b25fbmFtZXMsIHRpbWVv"
-          MAC_B64="${MAC_B64}dXQ9NSk6CiAgICBmb3IgbmFtZSBpbiBidXR0b25fbmFtZXM6CiAgICAgICAgciA9IHJ1bl9hcyhmJycn"
-          MAC_B64="${MAC_B64}CnRlbGwgYXBwbGljYXRpb24gIlN5c3RlbSBFdmVudHMiCiAgdGVsbCBwcm9jZXNzICJ7b3JiaXRhX2Fw"
-          MAC_B64="${MAC_B64}cH0iCiAgICByZXBlYXQgd2l0aCB3aW4gaW4gKGV2ZXJ5IHdpbmRvdykKICAgICAgdHJ5CiAgICAgICAg"
-          MAC_B64="${MAC_B64}aWYgZXhpc3RzIGJ1dHRvbiAie25hbWV9IiBvZiB3aW4gdGhlbgogICAgICAgICAgY2xpY2sgYnV0dG9u"
-          MAC_B64="${MAC_B64}ICJ7bmFtZX0iIG9mIHdpbgogICAgICAgICAgcmV0dXJuICJjbGlja2VkIgogICAgICAgIGVuZCBpZgog"
-          MAC_B64="${MAC_B64}ICAgICBlbmQgdHJ5CiAgICBlbmQgcmVwZWF0CiAgZW5kIHRlbGwKICByZXR1cm4gIm5vdF9mb3VuZCIK"
-          MAC_B64="${MAC_B64}ZW5kIHRlbGwnJycsIHNpbGVudD1UcnVlLCB0aW1lb3V0PXRpbWVvdXQpCiAgICAgICAgaWYgciA9PSAi"
-          MAC_B64="${MAC_B64}Y2xpY2tlZCI6CiAgICAgICAgICAgIGxvZyhmIltCdG5DbGlja10gQ2xpY2tlZCAne25hbWV9JyBpbiAn"
-          MAC_B64="${MAC_B64}e29yYml0YV9hcHB9JyIpOyByZXR1cm4gVHJ1ZQogICAgcmV0dXJuIEZhbHNlCgpkZWYgd2FpdF9mb3Jf"
-          MAC_B64="${MAC_B64}YXBwX2xhdW5jaChhcHBfbmFtZSwgdGltZW91dD0xMjApOgogICAgbG9nKGYiW0xhdW5jaERldGVjdF0g"
-          MAC_B64="${MAC_B64}V2FpdGluZyBmb3IgJ3thcHBfbmFtZX0nICh1cCB0byB7dGltZW91dH1zKS4uLiIpCiAgICBzdGFydCA9"
-          MAC_B64="${MAC_B64}IHRpbWUudGltZSgpCiAgICB3aGlsZSB0aW1lLnRpbWUoKSAtIHN0YXJ0IDwgdGltZW91dDoKICAgICAg"
-          MAC_B64="${MAC_B64}ICBhcHBzID0gcnVubmluZ19hcHBzKCkKICAgICAgICBpZiBhbnkoYXBwX25hbWUubG93ZXIoKSBpbiBh"
-          MAC_B64="${MAC_B64}Lmxvd2VyKCkgZm9yIGEgaW4gYXBwcyk6CiAgICAgICAgICAgIGxvZyhmIltMYXVuY2hEZXRlY3RdICd7"
-          MAC_B64="${MAC_B64}YXBwX25hbWV9JyBpcyBydW5uaW5nISIpCiAgICAgICAgICAgIHRpbWUuc2xlZXAoMik7IHJldHVybiBU"
-          MAC_B64="${MAC_B64}cnVlCiAgICAgICAgdGltZS5zbGVlcCgxKQogICAgbG9nKGYiW0xhdW5jaERldGVjdF0gJ3thcHBfbmFt"
-          MAC_B64="${MAC_B64}ZX0nIGRpZCBub3QgbGF1bmNoIHdpdGhpbiB7dGltZW91dH1zLiIpCiAgICByZXR1cm4gRmFsc2UKCmRl"
-          MAC_B64="${MAC_B64}ZiBzbWFydF9saW5rX2J5cGFzcyhvcmJpdGFfYXBwKToKICAgIGxvZygiW1NtYXJ0TGlua10gRXhlY3V0"
-          MAC_B64="${MAC_B64}aW5nIFRhYitFbnRlciBpbnRlcnN0aXRpYWwgYnlwYXNzLi4uIikKICAgIHJ1bl9hcyhmJ3RlbGwgYXBw"
-          MAC_B64="${MAC_B64}bGljYXRpb24gIntvcmJpdGFfYXBwfSIgdG8gYWN0aXZhdGUnLCBzaWxlbnQ9VHJ1ZSkKICAgIHRpbWUu"
-          MAC_B64="${MAC_B64}c2xlZXAoMSkKICAgIHByZXNzKCJ0YWIiKTsgdGltZS5zbGVlcCgwLjUpCiAgICBwcmVzcygicmV0dXJu"
-          MAC_B64="${MAC_B64}IikKICAgIGxvZygiW1NtYXJ0TGlua10gQnlwYXNzIGNvbXBsZXRlLiIpCgpkZWYgY2xpY2tfZGxfYnV0"
-          MAC_B64="${MAC_B64}dG9uKG9yYml0YV9hcHApOgogICAgbG9nKCJbRExCdXR0b25dIEFjdGl2YXRpbmcgYnJvd3NlciBhbmQg"
-          MAC_B64="${MAC_B64}cHJlc3NpbmcgMyBUYWJzIHRoZW4gRW50ZXIuLi4iKQogICAgcnVuX2FzKGYndGVsbCBhcHBsaWNhdGlv"
-          MAC_B64="${MAC_B64}biAie29yYml0YV9hcHB9IiB0byBhY3RpdmF0ZScsIHNpbGVudD1UcnVlKQogICAgdGltZS5zbGVlcCg1"
-          MAC_B64="${MAC_B64}KQogICAgZm9yIGkgaW4gcmFuZ2UoMyk6CiAgICAgICAgcHJlc3MoInRhYiIpCiAgICAgICAgbG9nKGYi"
-          MAC_B64="${MAC_B64}W0RMQnV0dG9uXSBUYWIge2krMX0vMyDigJQgd2FpdGluZyA1cy4uLiIpCiAgICAgICAgdGltZS5zbGVl"
-          MAC_B64="${MAC_B64}cCg1KQogICAgcHJlc3MoInJldHVybiIpCiAgICBsb2coIltETEJ1dHRvbl0gRW50ZXIgcHJlc3NlZCBh"
-          MAC_B64="${MAC_B64}ZnRlciAzIFRhYnMuIikKICAgIHRpbWUuc2xlZXAoMSkKCmRlZiBjbG9zZV9icm93c2VyKG9yYml0YV9h"
-          MAC_B64="${MAC_B64}cHApOgogICAgcnVuX2FzKGYndGVsbCBhcHBsaWNhdGlvbiAie29yYml0YV9hcHB9IiB0byBxdWl0Jywg"
-          MAC_B64="${MAC_B64}c2lsZW50PVRydWUpCiAgICBsb2coZiJbQnJvd3Nlcl0gUXVpdCBzaWduYWwgc2VudCB0byAne29yYml0"
-          MAC_B64="${MAC_B64}YV9hcHB9Jy4iKQoKIyDilIDilIAgbWFjT1MgUG9zdC1JbnN0YWxsOiBPcGVyYSBHWCDilIDilIDilIDi"
-          MAC_B64="${MAC_B64}lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi"
-          MAC_B64="${MAC_B64}lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKZGVmIG9w"
-          MAC_B64="${MAC_B64}ZXJhX2d4X2Zsb3dfbWFjKG9yYml0YV9hcHApOgogICAgbG9nKCJbUG9zdEluc3RhbGwtR1hdID09PSBP"
-          MAC_B64="${MAC_B64}cGVyYSBHWCBQb3N0LUluc3RhbGwgKG1hY09TKSBTVEFSVElORyA9PT0iKQogICAgaWYgbm90IHdhaXRf"
-          MAC_B64="${MAC_B64}Zm9yX2FwcF9sYXVuY2goIk9wZXJhIEdYIiwgdGltZW91dD0xMjApOgogICAgICAgIGxvZygiW1Bvc3RJ"
-          MAC_B64="${MAC_B64}bnN0YWxsLUdYXSBPcGVyYSBHWCBub3QgZm91bmQuIEFib3J0aW5nLiIpOyByZXR1cm4KICAgIHJ1bl9h"
-          MAC_B64="${MAC_B64}cygndGVsbCBhcHBsaWNhdGlvbiAiT3BlcmEgR1giIHRvIGFjdGl2YXRlJywgc2lsZW50PVRydWUpCiAg"
-          MAC_B64="${MAC_B64}ICB0aW1lLnNsZWVwKDIpCiAgICB0MCA9IHRpbWUudGltZSgpOyBwb3B1cF9jb3VudCA9IDAKICAgIHdo"
-          MAC_B64="${MAC_B64}aWxlIHRpbWUudGltZSgpIC0gdDAgPCAxMDoKICAgICAgICBkaXNtaXNzX3BvcHVwcygpOyBwb3B1cF9j"
-          MAC_B64="${MAC_B64}b3VudCArPSAxOyB0aW1lLnNsZWVwKDAuNSkKICAgIGxvZyhmIltQb3N0SW5zdGFsbC1HWF0gRGlzbWlz"
-          MAC_B64="${MAC_B64}c2VkIHBvcHVwcyAoe3BvcHVwX2NvdW50fSBzd2VlcHMpLiIpCiAgICAjIEFjY2VwdCBhbmQgaW5zdGFs"
-          MAC_B64="${MAC_B64}bCBidXR0b24KICAgIHIgPSBydW5fYXMocicnJwp0ZWxsIGFwcGxpY2F0aW9uICJTeXN0ZW0gRXZlbnRz"
-          MAC_B64="${MAC_B64}IgogIHJlcGVhdCB3aXRoIHByb2MgaW4gKGV2ZXJ5IHByb2Nlc3Mgd2hvc2UgdmlzaWJsZSBpcyB0cnVl"
-          MAC_B64="${MAC_B64}KQogICAgc2V0IHBOYW1lIHRvIG5hbWUgb2YgcHJvYyBhcyBzdHJpbmcKICAgIGlmIHBOYW1lIGNvbnRh"
-          MAC_B64="${MAC_B64}aW5zICJPcGVyYSBHWCIgdGhlbgogICAgICB0cnkKICAgICAgICByZXBlYXQgd2l0aCB3aW4gaW4gKGV2"
-          MAC_B64="${MAC_B64}ZXJ5IHdpbmRvdyBvZiBwcm9jKQogICAgICAgICAgdHJ5CiAgICAgICAgICAgIGlmIGV4aXN0cyBidXR0"
-          MAC_B64="${MAC_B64}b24gIkFjY2VwdCBhbmQgSW5zdGFsbCIgb2Ygd2luIHRoZW4KICAgICAgICAgICAgICBjbGljayBidXR0"
-          MAC_B64="${MAC_B64}b24gIkFjY2VwdCBhbmQgSW5zdGFsbCIgb2Ygd2luCiAgICAgICAgICAgICAgcmV0dXJuICJjbGlja2Vk"
-          MAC_B64="${MAC_B64}IgogICAgICAgICAgICBlbmQgaWYKICAgICAgICAgIGVuZCB0cnkKICAgICAgICBlbmQgcmVwZWF0CiAg"
-          MAC_B64="${MAC_B64}ICAgIGVuZCB0cnkKICAgIGVuZCBpZgogIGVuZCByZXBlYXQKICByZXR1cm4gIm5vdF9mb3VuZCIKZW5k"
-          MAC_B64="${MAC_B64}IHRlbGwnJycsIHNpbGVudD1UcnVlKQogICAgaWYgciA9PSAibm90X2ZvdW5kIjoKICAgICAgICBsb2co"
-          MAC_B64="${MAC_B64}IltQb3N0SW5zdGFsbC1HWF0gQnV0dG9uIG5vdCBmb3VuZCDigJQgVGFiIHgzICsgRW50ZXIgZmFsbGJh"
-          MAC_B64="${MAC_B64}Y2suLi4iKQogICAgICAgIGZvciBfIGluIHJhbmdlKDMpOiBwcmVzcygidGFiIik7IHRpbWUuc2xlZXAo"
-          MAC_B64="${MAC_B64}MC41KQogICAgICAgIHByZXNzKCJyZXR1cm4iKQogICAgZWxzZToKICAgICAgICBsb2coZiJbUG9zdElu"
-          MAC_B64="${MAC_B64}c3RhbGwtR1hdIEJ1dHRvbiByZXN1bHQ6IHtyfSIpCiAgICBsb2coIltQb3N0SW5zdGFsbC1HWF0gV2Fp"
-          MAC_B64="${MAC_B64}dGluZyAzMHMgZm9yIGluc3RhbGwuLi4iKQogICAgZm9yIHMgaW4gcmFuZ2UoMzApOgogICAgICAgIGRp"
-          MAC_B64="${MAC_B64}c21pc3NfcG9wdXBzKCkKICAgICAgICBpZiBzICUgMTAgPT0gMCBhbmQgcyA+IDA6IGxvZyhmIltQb3N0"
-          MAC_B64="${MAC_B64}SW5zdGFsbC1HWF0gICB7c30vMzBzIGVsYXBzZWQiKQogICAgICAgIHRpbWUuc2xlZXAoMSkKICAgIGxv"
-          MAC_B64="${MAC_B64}ZygiW1Bvc3RJbnN0YWxsLUdYXSBUYWIgeDQg4oaSIEVudGVyIHg4Li4uIikKICAgIGZvciBfIGluIHJh"
-          MAC_B64="${MAC_B64}bmdlKDQpOiBwcmVzcygidGFiIik7IHRpbWUuc2xlZXAoMC41KQogICAgZm9yIGkgaW4gcmFuZ2UoOCk6"
-          MAC_B64="${MAC_B64}CiAgICAgICAgZCA9IHJhbmRvbS51bmlmb3JtKDEuMCwgMi4wKQogICAgICAgIHByZXNzKCJyZXR1cm4i"
-          MAC_B64="${MAC_B64}KTsgdGltZS5zbGVlcChkKTsgZGlzbWlzc19wb3B1cHMoKQogICAgdGltZS5zbGVlcCg1KQogICAgdGFi"
-          MAC_B64="${MAC_B64}X2NvdW50ID0gcmFuZG9tLnJhbmRpbnQoNiwgMTQpCiAgICBsb2coZiJbUG9zdEluc3RhbGwtR1hdIENt"
-          MAC_B64="${MAC_B64}ZCtOIHRoZW4gVGFiIHh7dGFiX2NvdW50fS4uLiIpCiAgICBydW5fYXMoJ3RlbGwgYXBwbGljYXRpb24g"
-          MAC_B64="${MAC_B64}IlN5c3RlbSBFdmVudHMiIHRvIGtleXN0cm9rZSAibiIgdXNpbmcgY29tbWFuZCBkb3duJywgc2lsZW50"
-          MAC_B64="${MAC_B64}PVRydWUpCiAgICB0aW1lLnNsZWVwKHJhbmRvbS51bmlmb3JtKDEsIDIpKQogICAgZm9yIGkgaW4gcmFu"
-          MAC_B64="${MAC_B64}Z2UodGFiX2NvdW50KToKICAgICAgICBwcmVzcygidGFiIik7IHRpbWUuc2xlZXAocmFuZG9tLnVuaWZv"
-          MAC_B64="${MAC_B64}cm0oMS4wLCAyLjApKTsgZGlzbWlzc19wb3B1cHMoKQogICAgcHJlc3MoInJldHVybiIpCiAgICBsb2co"
-          MAC_B64="${MAC_B64}IltQb3N0SW5zdGFsbC1HWF0gPT09IE9wZXJhIEdYIFBvc3QtSW5zdGFsbCBDT01QTEVURSA9PT0iKQoK"
-          MAC_B64="${MAC_B64}IyDilIDilIAgbWFjT1MgUG9zdC1JbnN0YWxsOiBPcGVyYSBPbmUg4pSA4pSA4pSA4pSA4pSA4pSA4pSA"
-          MAC_B64="${MAC_B64}4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA"
-          MAC_B64="${MAC_B64}4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACmRlZiBvcGVyYV9vbmVfZmxvd19t"
-          MAC_B64="${MAC_B64}YWMob3JiaXRhX2FwcCk6CiAgICBsb2coIltQb3N0SW5zdGFsbC1PUDFdID09PSBPcGVyYSBPbmUgUG9z"
-          MAC_B64="${MAC_B64}dC1JbnN0YWxsIChtYWNPUykgU1RBUlRJTkcgPT09IikKICAgIGlmIG5vdCB3YWl0X2Zvcl9hcHBfbGF1"
-          MAC_B64="${MAC_B64}bmNoKCJPcGVyYSBJbnN0YWxsZXIiLCB0aW1lb3V0PTEyMCk6CiAgICAgICAgaWYgbm90IHdhaXRfZm9y"
-          MAC_B64="${MAC_B64}X2FwcF9sYXVuY2goIk9wZXJhIiwgdGltZW91dD02MCk6CiAgICAgICAgICAgIGxvZygiW1Bvc3RJbnN0"
-          MAC_B64="${MAC_B64}YWxsLU9QMV0gT3BlcmEgbm90IGZvdW5kLiBBYm9ydGluZy4iKTsgcmV0dXJuCiAgICBydW5fYXMoJ3Rl"
-          MAC_B64="${MAC_B64}bGwgYXBwbGljYXRpb24gIlN5c3RlbSBFdmVudHMiIHRvIHRlbGwgcHJvY2VzcyAiT3BlcmEgSW5zdGFs"
-          MAC_B64="${MAC_B64}bGVyIiB0byBzZXQgZnJvbnRtb3N0IHRvIHRydWUnLAogICAgICAgICAgIHNpbGVudD1UcnVlKQogICAg"
-          MAC_B64="${MAC_B64}dGltZS5zbGVlcCgyKQogICAgdDAgPSB0aW1lLnRpbWUoKQogICAgd2hpbGUgdGltZS50aW1lKCkgLSB0"
-          MAC_B64="${MAC_B64}MCA8IDEwOgogICAgICAgIGRpc21pc3NfcG9wdXBzKCk7IHRpbWUuc2xlZXAoMC41KQogICAgIyBBY2Nl"
-          MAC_B64="${MAC_B64}cHQgYW5kIGluc3RhbGwKICAgIHIgPSBydW5fYXMocicnJwp0ZWxsIGFwcGxpY2F0aW9uICJTeXN0ZW0g"
-          MAC_B64="${MAC_B64}RXZlbnRzIgogIHJlcGVhdCB3aXRoIHByb2MgaW4gKGV2ZXJ5IHByb2Nlc3Mgd2hvc2UgdmlzaWJsZSBp"
-          MAC_B64="${MAC_B64}cyB0cnVlKQogICAgc2V0IHBOYW1lIHRvIG5hbWUgb2YgcHJvYyBhcyBzdHJpbmcKICAgIGlmIHBOYW1l"
-          MAC_B64="${MAC_B64}IGNvbnRhaW5zICJPcGVyYSIgdGhlbgogICAgICB0cnkKICAgICAgICByZXBlYXQgd2l0aCB3aW4gaW4g"
-          MAC_B64="${MAC_B64}KGV2ZXJ5IHdpbmRvdyBvZiBwcm9jKQogICAgICAgICAgdHJ5CiAgICAgICAgICAgIGlmIGV4aXN0cyBi"
-          MAC_B64="${MAC_B64}dXR0b24gIkFjY2VwdCBhbmQgSW5zdGFsbCIgb2Ygd2luIHRoZW4KICAgICAgICAgICAgICBjbGljayBi"
-          MAC_B64="${MAC_B64}dXR0b24gIkFjY2VwdCBhbmQgSW5zdGFsbCIgb2Ygd2luCiAgICAgICAgICAgICAgcmV0dXJuICJjbGlj"
-          MAC_B64="${MAC_B64}a2VkIgogICAgICAgICAgICBlbmQgaWYKICAgICAgICAgIGVuZCB0cnkKICAgICAgICBlbmQgcmVwZWF0"
-          MAC_B64="${MAC_B64}CiAgICAgIGVuZCB0cnkKICAgIGVuZCBpZgogIGVuZCByZXBlYXQKICByZXR1cm4gIm5vdF9mb3VuZCIK"
-          MAC_B64="${MAC_B64}ZW5kIHRlbGwnJycsIHNpbGVudD1UcnVlKQogICAgaWYgciA9PSAibm90X2ZvdW5kIjoKICAgICAgICBm"
-          MAC_B64="${MAC_B64}b3IgXyBpbiByYW5nZSgzKTogcHJlc3MoInRhYiIpOyB0aW1lLnNsZWVwKDAuNSkKICAgICAgICBwcmVz"
-          MAC_B64="${MAC_B64}cygicmV0dXJuIikKICAgIGxvZygiW1Bvc3RJbnN0YWxsLU9QMV0gV2FpdGluZyAzMHMgZm9yIE9wZXJh"
-          MAC_B64="${MAC_B64}IGluc3RhbGwuLi4iKQogICAgZm9yIHMgaW4gcmFuZ2UoMzApOgogICAgICAgIGRpc21pc3NfcG9wdXBz"
-          MAC_B64="${MAC_B64}KCkKICAgICAgICBpZiBzICUgMTAgPT0gMCBhbmQgcyA+IDA6IGxvZyhmIltQb3N0SW5zdGFsbC1PUDFd"
-          MAC_B64="${MAC_B64}ICAge3N9LzMwcyBlbGFwc2VkIikKICAgICAgICB0aW1lLnNsZWVwKDEpCiAgICBsb2coIltQb3N0SW5z"
-          MAC_B64="${MAC_B64}dGFsbC1PUDFdIENsaWNraW5nIE5leHQgeDcgKDNzIGVhY2gpLi4uIikKICAgIGZvciBpIGluIHJhbmdl"
-          MAC_B64="${MAC_B64}KDEsIDgpOgogICAgICAgIGNsaWNrZWQgPSBjbGlja19idXR0b25fb3JiaXRhKCJPcGVyYSBJbnN0YWxs"
-          MAC_B64="${MAC_B64}ZXIiLCBbIk5leHQiXSkKICAgICAgICBpZiBub3QgY2xpY2tlZDogcHJlc3MoInRhYiIpOyB0aW1lLnNs"
-          MAC_B64="${MAC_B64}ZWVwKDAuMyk7IHByZXNzKCJyZXR1cm4iKQogICAgICAgIGRpc21pc3NfcG9wdXBzKCk7IHRpbWUuc2xl"
-          MAC_B64="${MAC_B64}ZXAoMykKICAgIGNsaWNrX2J1dHRvbl9vcmJpdGEoIk9wZXJhIEluc3RhbGxlciIsIFsiR2V0IFN0YXJ0"
-          MAC_B64="${MAC_B64}ZWQiXSk7IHRpbWUuc2xlZXAoMikKICAgIGlmIG5vdCBjbGlja19idXR0b25fb3JiaXRhKCJPcGVyYSBJ"
-          MAC_B64="${MAC_B64}bnN0YWxsZXIiLCBbIlN1Ym1pdCJdKToKICAgICAgICBwcmVzcygicmV0dXJuIikKICAgIHRpbWUuc2xl"
-          MAC_B64="${MAC_B64}ZXAoMikKICAgIHJ1bl9hcygndGVsbCBhcHBsaWNhdGlvbiAiU3lzdGVtIEV2ZW50cyIgdG8ga2V5c3Ry"
-          MAC_B64="${MAC_B64}b2tlICJuIiB1c2luZyBjb21tYW5kIGRvd24nLCBzaWxlbnQ9VHJ1ZSkKICAgIHRpbWUuc2xlZXAocmFu"
-          MAC_B64="${MAC_B64}ZG9tLnVuaWZvcm0oMSwgMikpCiAgICB0YWJfY291bnQgPSByYW5kb20ucmFuZGludCg2LCAxMikKICAg"
-          MAC_B64="${MAC_B64}IGxvZyhmIltQb3N0SW5zdGFsbC1PUDFdIFRhYiB4e3RhYl9jb3VudH0uLi4iKQogICAgZm9yIF8gaW4g"
-          MAC_B64="${MAC_B64}cmFuZ2UodGFiX2NvdW50KToKICAgICAgICBwcmVzcygidGFiIik7IHRpbWUuc2xlZXAocmFuZG9tLnVu"
-          MAC_B64="${MAC_B64}aWZvcm0oMSwgMikpOyBkaXNtaXNzX3BvcHVwcygpCiAgICBwcmVzcygicmV0dXJuIikKICAgIGxvZygi"
-          MAC_B64="${MAC_B64}W1Bvc3RJbnN0YWxsLU9QMV0gPT09IE9wZXJhIE9uZSBQb3N0LUluc3RhbGwgQ09NUExFVEUgPT09IikK"
-          MAC_B64="${MAC_B64}CiMg4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ"
-          MAC_B64="${MAC_B64}4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ"
-          MAC_B64="${MAC_B64}4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ"
-          MAC_B64="${MAC_B64}4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQCiMgTUFJTiBIQU5ETEVS"
-          MAC_B64="${MAC_B64}IChtYWNPUykKIyDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDi"
-          MAC_B64="${MAC_B64}lZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDi"
-          MAC_B64="${MAC_B64}lZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDi"
-          MAC_B64="${MAC_B64}lZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZAKCmRlZiBo"
-          MAC_B64="${MAC_B64}YW5kbGUoc3dfdHlwZSwgYWN0aW9uX21vZGUsIHRpbWVvdXQ9MzMwMCk6CiAgICB0MCAgICAgICAgICAg"
-          MAC_B64="${MAC_B64}ICAgICAgID0gdGltZS50aW1lKCkKICAgIHNlbnRpbmVsICAgICAgICAgICAgPSAiL3RtcC9kb3dubG9h"
-          MAC_B64="${MAC_B64}ZF9kb25lLmZsYWciCiAgICBpbnN0YWxsZXJfc2VudGluZWwgID0gIi90bXAvaW5zdGFsbGVyX2V4ZWN1"
-          MAC_B64="${MAC_B64}dGVkLmZsYWciCgogICAgb3JiaXRhX2FwcF9maXJzdF9zZWVuID0gTm9uZQogICAgbmF2X2RvbmUgICAg"
-          MAC_B64="${MAC_B64}ICAgICAgICAgID0gRmFsc2UKICAgIGRsX2NsaWNrZWQgICAgICAgICAgICA9IEZhbHNlCiAgICBicm93"
-          MAC_B64="${MAC_B64}c2VyX2Nsb3NlZCAgICAgICAgPSBGYWxzZQogICAgc2V0dXBfZG9uZSAgICAgICAgICAgID0gRmFsc2UK"
-          MAC_B64="${MAC_B64}ICAgIG9wX2xhdW5jaF90ICAgICAgICAgICA9IE5vbmUKICAgIHNtYXJ0X2xpbmtfZG9uZSAgICAgICA9"
-          MAC_B64="${MAC_B64}IEZhbHNlCiAgICBzbWFydF9saW5rX3QgICAgICAgICAgPSAwCiAgICBuYXZfZG9uZV90ICAgICAgICAg"
-          MAC_B64="${MAC_B64}ICAgPSBOb25lCiAgICBsYXN0X3BvcHVwX3QgICAgICAgICAgPSAwCiAgICBsYXN0X2Nvb2tpZV90ICAg"
-          MAC_B64="${MAC_B64}ICAgICAgPSAwCiAgICBsYXN0X2RsX3QgICAgICAgICAgICAgPSAwCgogICAgbG9nKGYiW0hhbmRsZXJd"
-          MAC_B64="${MAC_B64}IFN0YXJ0ZWQgfCB0eXBlPXtzd190eXBlfSB8IGFjdGlvbj17YWN0aW9uX21vZGV9IikKCiAgICAjIOKU"
-          MAC_B64="${MAC_B64}gOKUgCBTdGVwIDE6IFdhaXQgZm9yIE9yYml0YSB0byBvcGVuIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU"
-          MAC_B64="${MAC_B64}gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU"
-          MAC_B64="${MAC_B64}gOKUgOKUgOKUgOKUgOKUgOKUgAogICAgb3JiaXRhX2FwcCA9IHdhaXRfZm9yX29yYml0YShtYXhfd2Fp"
-          MAC_B64="${MAC_B64}dD0zMDApCiAgICBpZiBub3Qgb3JiaXRhX2FwcDoKICAgICAgICBsb2coIltIYW5kbGVyXSBPcmJpdGEg"
-          MAC_B64="${MAC_B64}bmV2ZXIgb3BlbmVkLiBFeGl0aW5nLiIpCiAgICAgICAgcmV0dXJuCgogICAgb3JiaXRhX2FwcF9maXJz"
-          MAC_B64="${MAC_B64}dF9zZWVuID0gdGltZS50aW1lKCkKICAgIGxvZyhmIltIYW5kbGVyXSBPcmJpdGEgYXBwOiAne29yYml0"
-          MAC_B64="${MAC_B64}YV9hcHB9JyB8IHdhcm1pbmcgdXAgezIwfXMgYmVmb3JlIG5hdmlnYXRpb24uLi4iKQogICAgdGltZS5z"
-          MAC_B64="${MAC_B64}bGVlcCgyMCkgICMgbGV0IEdvTG9naW4gcHJvZmlsZSBmdWxseSBsb2FkCgogICAgIyDilIDilIAgU3Rl"
-          MAC_B64="${MAC_B64}cCAyOiBOYXZpZ2F0ZSB0byB0YXJnZXQgVVJMIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU"
-          MAC_B64="${MAC_B64}gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU"
-          MAC_B64="${MAC_B64}gOKUgOKUgOKUgOKUgAogICAgbmF2aWdhdGVfb3JiaXRhX3RvX3VybChvcmJpdGFfYXBwLCBUQVJHRVRf"
-          MAC_B64="${MAC_B64}VVJMKQogICAgbmF2X2RvbmUgICA9IFRydWUKICAgIG5hdl9kb25lX3QgPSB0aW1lLnRpbWUoKQogICAg"
-          MAC_B64="${MAC_B64}bG9nKGYiW0hhbmRsZXJdIE5hdmlnYXRpb24gY29tcGxldGUuIFdpbGwgbW9uaXRvciBmb3Ige3RpbWVv"
-          MAC_B64="${MAC_B64}dXR9cyB0b3RhbC4iKQoKICAgIHdoaWxlIHRpbWUudGltZSgpIC0gdDAgPCB0aW1lb3V0OgogICAgICAg"
-          MAC_B64="${MAC_B64}IHRyeToKICAgICAgICAgICAgZWxhcHNlZCA9IGludCh0aW1lLnRpbWUoKSAtIHQwKQogICAgICAgICAg"
-          MAC_B64="${MAC_B64}ICBhcHBzICAgID0gcnVubmluZ19hcHBzKCkKICAgICAgICAgICAgaGFzX29yYml0YSA9IGFueShpc19v"
-          MAC_B64="${MAC_B64}cmJpdGFfYXBwKGEpIGZvciBhIGluIGFwcHMpCiAgICAgICAgICAgIG9wX2d4ICA9IGFueSgiT3BlcmEg"
-          MAC_B64="${MAC_B64}R1giIGluIGEgZm9yIGEgaW4gYXBwcykKICAgICAgICAgICAgb3Bfb25lID0gYW55KCgiT3BlcmEiIGlu"
-          MAC_B64="${MAC_B64}IGEgYW5kICJPcGVyYSBHWCIgbm90IGluIGEpIG9yCiAgICAgICAgICAgICAgICAgICAgICAgICAiT3Bl"
-          MAC_B64="${MAC_B64}cmEgSW5zdGFsbGVyIiBpbiBhIGZvciBhIGluIGFwcHMpCgogICAgICAgICAgICBub3cgPSB0aW1lLnRp"
-          MAC_B64="${MAC_B64}bWUoKQoKICAgICAgICAgICAgIyBQb3B1cCBkaXNtaXNzYWwKICAgICAgICAgICAgaWYgbm93IC0gbGFz"
-          MAC_B64="${MAC_B64}dF9wb3B1cF90ID4gMzoKICAgICAgICAgICAgICAgIGRpc21pc3NfcG9wdXBzKCk7IGxhc3RfcG9wdXBf"
-          MAC_B64="${MAC_B64}dCA9IG5vdwoKICAgICAgICAgICAgIyBDb29raWUgYWNjZXB0YW5jZQogICAgICAgICAgICBpZiBoYXNf"
-          MAC_B64="${MAC_B64}b3JiaXRhIGFuZCBub3cgLSBsYXN0X2Nvb2tpZV90ID4gMTI6CiAgICAgICAgICAgICAgICBhY2NlcHRf"
-          MAC_B64="${MAC_B64}Y29va2llKCk7IGxhc3RfY29va2llX3QgPSBub3cKCiAgICAgICAgICAgICMg4pSA4pSAIFNtYXJ0LWxp"
-          MAC_B64="${MAC_B64}bmsgaW50ZXJzdGl0aWFsIChUYWIrRW50ZXIgMjBzIGFmdGVyIG5hdikg4pSA4pSA4pSA4pSA4pSA4pSA"
-          MAC_B64="${MAC_B64}4pSA4pSA4pSACiAgICAgICAgICAgIGlmIHN3X3R5cGUgaW4gWyJvcGVyYV9zbWFydF9saW5rIiwiZHlu"
-          MAC_B64="${MAC_B64}YW1pY19vcGVyYSIsImFkX212biJdOgogICAgICAgICAgICAgICAgaWYgbm90IHNtYXJ0X2xpbmtfZG9u"
-          MAC_B64="${MAC_B64}ZSBhbmQgbmF2X2RvbmUgYW5kIG5hdl9kb25lX3Q6CiAgICAgICAgICAgICAgICAgICAgaWYgbm93IC0g"
-          MAC_B64="${MAC_B64}bmF2X2RvbmVfdCA+PSAyMDoKICAgICAgICAgICAgICAgICAgICAgICAgbG9nKCJbSGFuZGxlcl0gMjBz"
-          MAC_B64="${MAC_B64}IHNpbmNlIG5hdiDigJQgZXhlY3V0aW5nIHNtYXJ0LWxpbmsgYnlwYXNzLi4uIikKICAgICAgICAgICAg"
-          MAC_B64="${MAC_B64}ICAgICAgICAgICAgc21hcnRfbGlua19ieXBhc3Mob3JiaXRhX2FwcCkKICAgICAgICAgICAgICAgICAg"
-          MAC_B64="${MAC_B64}ICAgICAgc21hcnRfbGlua19kb25lID0gVHJ1ZTsgc21hcnRfbGlua190ID0gbm93CgogICAgICAgICAg"
-          MAC_B64="${MAC_B64}ICAjIOKUgOKUgCBDTElDSy1PTkxZOiBleGl0IGFmdGVyIHNtYXJ0LWxpbmsgYnlwYXNzIOKUgOKUgOKU"
-          MAC_B64="${MAC_B64}gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgAogICAgICAgICAgICBp"
-          MAC_B64="${MAC_B64}ZiBhY3Rpb25fbW9kZSA9PSAiY2xpY2siOgogICAgICAgICAgICAgICAgaWYgc3dfdHlwZSBpbiBbIm9w"
-          MAC_B64="${MAC_B64}ZXJhX3NtYXJ0X2xpbmsiLCJkeW5hbWljX29wZXJhIiwiYWRfbXZuIl06CiAgICAgICAgICAgICAgICAg"
-          MAC_B64="${MAC_B64}ICAgaWYgbm90IHNtYXJ0X2xpbmtfZG9uZToKICAgICAgICAgICAgICAgICAgICAgICAgdGltZS5zbGVl"
-          MAC_B64="${MAC_B64}cCgxKTsgY29udGludWUKICAgICAgICAgICAgICAgICAgICBpZiBub3cgLSBzbWFydF9saW5rX3QgPCAx"
-          MAC_B64="${MAC_B64}NToKICAgICAgICAgICAgICAgICAgICAgICAgdGltZS5zbGVlcCgxKTsgY29udGludWUKICAgICAgICAg"
-          MAC_B64="${MAC_B64}ICAgICAgICAgICBsb2coIltIYW5kbGVyXSBDTElDSy1PTkxZOiBpbnRlcnN0aXRpYWwgZG9uZS4gV2Fp"
-          MAC_B64="${MAC_B64}dGluZyAxNXMgdGhlbiBjbG9zaW5nLiIpCiAgICAgICAgICAgICAgICAgICAgdGltZS5zbGVlcCgxNSk7"
-          MAC_B64="${MAC_B64}IGNsb3NlX2Jyb3dzZXIob3JiaXRhX2FwcCkKICAgICAgICAgICAgICAgICAgICBsb2coIltIYW5kbGVy"
-          MAC_B64="${MAC_B64}XSBDTElDSy1PTkxZIHBhdGh3YXkgY29tcGxldGUuIik7IHJldHVybgogICAgICAgICAgICAgICAgZWxz"
-          MAC_B64="${MAC_B64}ZToKICAgICAgICAgICAgICAgICAgICBpZiBuYXZfZG9uZSBhbmQgZWxhcHNlZCA+ICgyMCArIDMwKToK"
-          MAC_B64="${MAC_B64}ICAgICAgICAgICAgICAgICAgICAgICAgbG9nKCJbSGFuZGxlcl0gQ0xJQ0stT05MWTogbm9uLXNtYXJ0"
-          MAC_B64="${MAC_B64}LWxpbmssIHBhZ2UgbG9hZGVkLiBDbG9zaW5nLiIpCiAgICAgICAgICAgICAgICAgICAgICAgIGNsb3Nl"
-          MAC_B64="${MAC_B64}X2Jyb3dzZXIob3JiaXRhX2FwcCkKICAgICAgICAgICAgICAgICAgICAgICAgbG9nKCJbSGFuZGxlcl0g"
-          MAC_B64="${MAC_B64}Q0xJQ0stT05MWSBwYXRod2F5IGNvbXBsZXRlLiIpOyByZXR1cm4KICAgICAgICAgICAgICAgIHRpbWUu"
-          MAC_B64="${MAC_B64}c2xlZXAoMSk7IGNvbnRpbnVlCgogICAgICAgICAgICAjIOKUgOKUgCBJTlNUQUxMOiBkb3dubG9hZCBi"
-          MAC_B64="${MAC_B64}dXR0b24gY2xpY2sg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA"
-          MAC_B64="${MAC_B64}4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACiAgICAgICAgICAgIGlmIGhhc19vcmJp"
-          MAC_B64="${MAC_B64}dGEgYW5kIG5vdCBkbF9jbGlja2VkOgogICAgICAgICAgICAgICAgcmVhZHkgPSBUcnVlCiAgICAgICAg"
-          MAC_B64="${MAC_B64}ICAgICAgICBpZiBzd190eXBlIGluIFsib3BlcmFfc21hcnRfbGluayIsImR5bmFtaWNfb3BlcmEiLCJh"
-          MAC_B64="${MAC_B64}ZF9tdm4iXToKICAgICAgICAgICAgICAgICAgICByZWFkeSA9IHNtYXJ0X2xpbmtfZG9uZSBhbmQgKG5v"
-          MAC_B64="${MAC_B64}dyAtIHNtYXJ0X2xpbmtfdCA+PSAxMCkKICAgICAgICAgICAgICAgIGlmIHJlYWR5IGFuZCBuYXZfZG9u"
-          MAC_B64="${MAC_B64}ZV90IGFuZCAobm93IC0gbmF2X2RvbmVfdCkgPiBETF9XQUlUX1BPU1RfTkFWOgogICAgICAgICAgICAg"
-          MAC_B64="${MAC_B64}ICAgICAgIGlmIG5vdyAtIGxhc3RfZGxfdCA+IDEwOgogICAgICAgICAgICAgICAgICAgICAgICBsYXN0"
-          MAC_B64="${MAC_B64}X2RsX3QgPSBub3cKICAgICAgICAgICAgICAgICAgICAgICAgbG9nKGYiW0hhbmRsZXJdIEF0dGVtcHRp"
-          MAC_B64="${MAC_B64}bmcgZG93bmxvYWQgYnV0dG9uIGNsaWNrICh0PXtlbGFwc2VkfXMpLi4uIikKICAgICAgICAgICAgICAg"
-          MAC_B64="${MAC_B64}ICAgICAgICAgY2xpY2tfZGxfYnV0dG9uKG9yYml0YV9hcHApCiAgICAgICAgICAgICAgICAgICAgICAg"
-          MAC_B64="${MAC_B64}IGRsX2NsaWNrZWQgPSBUcnVlCgogICAgICAgICAgICAjIOKUgOKUgCBDbG9zZSBicm93c2VyIG9uY2Ug"
-          MAC_B64="${MAC_B64}ZG93bmxvYWQgZGV0ZWN0ZWQg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA"
-          MAC_B64="${MAC_B64}4pSA4pSA4pSA4pSA4pSA4pSA4pSACiAgICAgICAgICAgIGlmIG5vdCBicm93c2VyX2Nsb3NlZCBhbmQg"
-          MAC_B64="${MAC_B64}b3MucGF0aC5leGlzdHMoc2VudGluZWwpOgogICAgICAgICAgICAgICAgbG9nKCJbSGFuZGxlcl0gRG93"
-          MAC_B64="${MAC_B64}bmxvYWQgc2VudGluZWwgZm91bmQg4oCUIGNsb3NpbmcgYnJvd3Nlci4uLiIpCiAgICAgICAgICAgICAg"
-          MAC_B64="${MAC_B64}ICBjbG9zZV9icm93c2VyKG9yYml0YV9hcHApOyB0aW1lLnNsZWVwKDIpOyBicm93c2VyX2Nsb3NlZCA9"
-          MAC_B64="${MAC_B64}IFRydWUKCiAgICAgICAgICAgICMg4pSA4pSAIE9wZXJhIEdYIHBvc3QtaW5zdGFsbCDilIDilIDilIDi"
-          MAC_B64="${MAC_B64}lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi"
-          MAC_B64="${MAC_B64}lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKICAgICAgICAgICAgaWYgc3df"
-          MAC_B64="${MAC_B64}dHlwZSBpbiBbIm9wZXJhX2d4IiwiZHluYW1pY19vcGVyYSIsIm9wZXJhX3NtYXJ0X2xpbmsiLCJhZF9t"
-          MAC_B64="${MAC_B64}dm4iXToKICAgICAgICAgICAgICAgIGlmIG9wX2d4IGFuZCBub3Qgc2V0dXBfZG9uZToKICAgICAgICAg"
-          MAC_B64="${MAC_B64}ICAgICAgICAgICBpZiBub3Qgb3BfbGF1bmNoX3Q6CiAgICAgICAgICAgICAgICAgICAgICAgIG9wX2xh"
-          MAC_B64="${MAC_B64}dW5jaF90ID0gbm93CiAgICAgICAgICAgICAgICAgICAgICAgIGxvZygiW0hhbmRsZXJdIE9wZXJhIEdY"
-          MAC_B64="${MAC_B64}IGRldGVjdGVkIOKAlCBzdGFydGluZyBpbiA1cy4uLiIpCiAgICAgICAgICAgICAgICAgICAgICAgIHJ1"
-          MAC_B64="${MAC_B64}bl9hcygndGVsbCBhcHBsaWNhdGlvbiAiT3BlcmEgR1giIHRvIGFjdGl2YXRlJywgc2lsZW50PVRydWUp"
-          MAC_B64="${MAC_B64}CiAgICAgICAgICAgICAgICAgICAgaWYgbm93IC0gb3BfbGF1bmNoX3QgPiA1OgogICAgICAgICAgICAg"
-          MAC_B64="${MAC_B64}ICAgICAgICAgICBvcGVyYV9neF9mbG93X21hYyhvcmJpdGFfYXBwKTsgc2V0dXBfZG9uZSA9IFRydWU7"
-          MAC_B64="${MAC_B64}IGJyZWFrCgogICAgICAgICAgICAjIOKUgOKUgCBPcGVyYSBPbmUgcG9zdC1pbnN0YWxsIOKUgOKUgOKU"
-          MAC_B64="${MAC_B64}gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU"
-          MAC_B64="${MAC_B64}gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgAogICAgICAgICAgICBpZiBzd190"
-          MAC_B64="${MAC_B64}eXBlIGluIFsib3BlcmFfb25lIiwiZHluYW1pY19vcGVyYSIsIm9wZXJhX3NtYXJ0X2xpbmsiLCJhZF9t"
-          MAC_B64="${MAC_B64}dm4iXToKICAgICAgICAgICAgICAgIGlmIG9wX29uZSBhbmQgbm90IG9wX2d4IGFuZCBub3Qgc2V0dXBf"
-          MAC_B64="${MAC_B64}ZG9uZToKICAgICAgICAgICAgICAgICAgICBpZiBub3Qgb3BfbGF1bmNoX3Q6CiAgICAgICAgICAgICAg"
-          MAC_B64="${MAC_B64}ICAgICAgICAgIG9wX2xhdW5jaF90ID0gbm93CiAgICAgICAgICAgICAgICAgICAgICAgIGxvZygiW0hh"
-          MAC_B64="${MAC_B64}bmRsZXJdIE9wZXJhIE9uZSBkZXRlY3RlZCDigJQgc3RhcnRpbmcgaW4gNXMuLi4iKQogICAgICAgICAg"
-          MAC_B64="${MAC_B64}ICAgICAgICAgICAgICBydW5fYXMoJ3RlbGwgYXBwbGljYXRpb24gIlN5c3RlbSBFdmVudHMiIHRvIHRl"
-          MAC_B64="${MAC_B64}bGwgcHJvY2VzcyAiT3BlcmEgSW5zdGFsbGVyIiB0byBzZXQgZnJvbnRtb3N0IHRvIHRydWUnLAogICAg"
-          MAC_B64="${MAC_B64}ICAgICAgICAgICAgICAgICAgICAgICAgICAgc2lsZW50PVRydWUpCiAgICAgICAgICAgICAgICAgICAg"
-          MAC_B64="${MAC_B64}aWYgbm93IC0gb3BfbGF1bmNoX3QgPiA1OgogICAgICAgICAgICAgICAgICAgICAgICBvcGVyYV9vbmVf"
-          MAC_B64="${MAC_B64}Zmxvd19tYWMob3JiaXRhX2FwcCk7IHNldHVwX2RvbmUgPSBUcnVlOyBicmVhawoKICAgICAgICAgICAg"
-          MAC_B64="${MAC_B64}aWYgZWxhcHNlZCAlIDMwID09IDAgYW5kIGVsYXBzZWQgPiAwOgogICAgICAgICAgICAgICAgbG9nKGYi"
-          MAC_B64="${MAC_B64}W0hhbmRsZXJdIFN0YXR1cyB0PXtlbGFwc2VkfXMgfCBuYXY9e25hdl9kb25lfSB8IHNsPXtzbWFydF9s"
-          MAC_B64="${MAC_B64}aW5rX2RvbmV9IHwgZGw9e2RsX2NsaWNrZWR9IHwgc2VudGluZWw9e29zLnBhdGguZXhpc3RzKHNlbnRp"
-          MAC_B64="${MAC_B64}bmVsKX0iKQoKICAgICAgICBleGNlcHQgRXhjZXB0aW9uIGFzIGU6CiAgICAgICAgICAgIGxvZyhmIltI"
-          MAC_B64="${MAC_B64}YW5kbGVyXSBMb29wIGV4Y2VwdGlvbjoge2V9IikKICAgICAgICB0aW1lLnNsZWVwKDEpCgogICAgaWYg"
-          MAC_B64="${MAC_B64}c2V0dXBfZG9uZToKICAgICAgICBsb2coIltIYW5kbGVyXSA9PT0gSEFORExFUiBGSU5JU0hFRCBTVUND"
-          MAC_B64="${MAC_B64}RVNTRlVMTFkgPT09IikKICAgIGVsc2U6CiAgICAgICAgbG9nKGYiW0hhbmRsZXJdID09PSBUSU1FT1VU"
-          MAC_B64="${MAC_B64}IGFmdGVyIHtpbnQodGltZS50aW1lKCktdDApfXMgPT09IikKCmlmIF9fbmFtZV9fID09ICJfX21haW5f"
-          MAC_B64="${MAC_B64}XyI6CiAgICBoYW5kbGUoU09GVFdBUkVfVFlQRSwgQUNUSU9OX01PREUpCg=="
-          echo "$MAC_B64" | base64 -d > /tmp/macos_handler.py
-          echo "[*] macOS handler written."
-          # ── Background popup dismisser ─────────────────────────────────
-          POPUP_B64=""
-          POPUP_B64="CiMhL2Jpbi9iYXNoCndoaWxlIHRydWU7IGRvCiAgb3Nhc2NyaXB0IDw8ICdBU0VPRicgMj4vZGV2L251"
-          POPUP_B64="${POPUP_B64}bGwgfHwgdHJ1ZQp0ZWxsIGFwcGxpY2F0aW9uICJTeXN0ZW0gRXZlbnRzIgogIHRyeQogICAgdGVsbCBw"
-          POPUP_B64="${POPUP_B64}cm9jZXNzICJDb3JlU2VydmljZXNVSUFnZW50IgogICAgICByZXBlYXQgd2l0aCB3aW4gaW4gKGV2ZXJ5"
-          POPUP_B64="${POPUP_B64}IHdpbmRvdykKICAgICAgICB0cnkKICAgICAgICAgIGlmIGV4aXN0cyBidXR0b24gIkFsbG93IiBvZiB3"
-          POPUP_B64="${POPUP_B64}aW4gdGhlbiBjbGljayBidXR0b24gIkFsbG93IiBvZiB3aW4KICAgICAgICBlbmQgdHJ5CiAgICAgIGVu"
-          POPUP_B64="${POPUP_B64}ZCByZXBlYXQKICAgIGVuZCB0ZWxsCiAgZW5kIHRyeQogIHJlcGVhdCB3aXRoIHByb2MgaW4gKGV2ZXJ5"
-          POPUP_B64="${POPUP_B64}IHByb2Nlc3Mgd2hvc2UgdmlzaWJsZSBpcyB0cnVlKQogICAgc2V0IHBOYW1lIHRvIG5hbWUgb2YgcHJv"
-          POPUP_B64="${POPUP_B64}YyBhcyBzdHJpbmcKICAgIGlmIHBOYW1lIGlzIG5vdCBpbiB7IkdvTG9naW4iLCAiT3JiaXRhIn0gdGhl"
-          POPUP_B64="${POPUP_B64}bgogICAgICB0cnkKICAgICAgICByZXBlYXQgd2l0aCB3aW4gaW4gKGV2ZXJ5IHdpbmRvdyBvZiBwcm9j"
-          POPUP_B64="${POPUP_B64}KQogICAgICAgICAgc2V0IHdUIHRvICIiCiAgICAgICAgICB0cnk7IHNldCB3VCB0byAodGl0bGUgb2Yg"
-          POPUP_B64="${POPUP_B64}d2luKSBhcyBzdHJpbmc7IGVuZCB0cnkKICAgICAgICAgIGlmIHdUIGNvbnRhaW5zICJsb2NhbCBuZXR3"
-          POPUP_B64="${POPUP_B64}b3JrIiBvciB3VCBjb250YWlucyAiaG9zdGVkLWNvbXB1dGUiIG9yIHdUIGNvbnRhaW5zICJBbGxvdyIg"
-          POPUP_B64="${POPUP_B64}dGhlbgogICAgICAgICAgICB0cnkKICAgICAgICAgICAgICBpZiAoZXhpc3RzIGJ1dHRvbiAiQWxsb3ci"
-          POPUP_B64="${POPUP_B64}IG9mIHdpbikgdGhlbiBjbGljayBidXR0b24gIkFsbG93IiBvZiB3aW4KICAgICAgICAgICAgZW5kIHRy"
-          POPUP_B64="${POPUP_B64}eQogICAgICAgICAgZW5kIGlmCiAgICAgICAgZW5kIHJlcGVhdAogICAgICBlbmQgdHJ5CiAgICBlbmQg"
-          POPUP_B64="${POPUP_B64}aWYKICBlbmQgcmVwZWF0CmVuZCB0ZWxsCkFTRU9GCiAgc2xlZXAgMgpkb25lCg=="
-          echo "$POPUP_B64" | base64 -d > /tmp/popup_dismisser.sh
+          cat > /tmp/macos_handler.py << 'PYEOF'
+import time, sys, os, subprocess, random
+
+TARGET_URL    = os.environ.get("TARGET_URL", "")
+SOFTWARE_TYPE = os.environ.get("SOFTWARE_TYPE", "dynamic_opera")
+DMG_FILTER    = os.environ.get("DMG_FILTER", "*Opera*")
+ACTION_MODE   = os.environ.get("ACTION_MODE", "install")
+
+def log(msg):
+    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+
+CHROME_WARMUP_SECS = 20
+DL_WAIT_POST_NAV   = 30
+
+def run_as(script, silent=False, timeout=20):
+    try:
+        r = subprocess.run(["osascript", "-e", script],
+            capture_output=True, text=True, timeout=timeout)
+        if r.returncode != 0 and not silent:
+            log(f"[AppleScript] stderr: {r.stderr.strip()[:120]}")
+        return r.stdout.strip()
+    except subprocess.TimeoutExpired:
+        if not silent: log("[AppleScript] Timed out")
+        return ""
+    except Exception as e:
+        if not silent: log(f"[AppleScript] Exception: {e}")
+        return ""
+
+def clipboard_set(text):
+    try:
+        p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        p.communicate(input=text.encode("utf-8"), timeout=5)
+        time.sleep(0.15)
+    except Exception as e:
+        log(f"[Clipboard] pbcopy error: {e}")
+
+def press(key_name):
+    key_map = {"tab":48,"return":36,"space":49,"right":124,"left":123,
+               "up":126,"down":125,"escape":53,"f5":96}
+    code = key_map.get(key_name.lower())
+    if code:
+        run_as(f'tell application "System Events" to key code {code}', silent=True)
+
+def running_apps():
+    r = run_as('tell application "System Events" to get name of every process whose visible is true',
+               silent=True)
+    return [n.strip() for n in r.split(",") if n.strip()]
+
+ORBITA_FRAGMENTS = ["orbita", "orbita-browser", "gologin browser", "gl browser", "gl-browser"]
+
+def is_orbita_app(app_name):
+    al = (app_name or "").lower()
+    return any(f in al for f in ORBITA_FRAGMENTS)
+
+def find_orbita_app():
+    apps = running_apps()
+    for a in apps:
+        if is_orbita_app(a):
+            return a
+    try:
+        r = subprocess.run(["ps", "aux"], capture_output=True, text=True, timeout=5)
+        for line in r.stdout.splitlines():
+            ll = line.lower()
+            if any(f in ll for f in ORBITA_FRAGMENTS):
+                parts = line.split()
+                if len(parts) > 10:
+                    return os.path.basename(parts[10])
+    except Exception:
+        pass
+    return None
+
+def wait_for_orbita(max_wait=300):
+    log(f"[OrbitaWait] Waiting up to {max_wait}s for GoLogin Orbita profile window...")
+    deadline = time.time() + max_wait
+    while time.time() < deadline:
+        orbita = find_orbita_app()
+        if orbita:
+            log(f"[OrbitaWait] Orbita detected: '{orbita}'")
+            return orbita
+        elapsed = int(deadline - time.time())
+        if elapsed % 30 == 0 and elapsed > 0:
+            log(f"[OrbitaWait] Still waiting... {elapsed}s remaining")
+        time.sleep(2)
+    log("[OrbitaWait] Orbita did not appear within timeout.")
+    return None
+
+def navigate_orbita_to_url(orbita_app_name, url, retries=3):
+    log(f"[OrbitaNav] Navigating '{orbita_app_name}' to: {url}")
+    for attempt in range(1, retries + 1):
+        run_as(f'tell application "{orbita_app_name}" to activate', silent=True)
+        time.sleep(1.5)
+        run_as(f'tell application "System Events" to tell process "{orbita_app_name}" to keystroke "l" using command down',
+               silent=True)
+        time.sleep(0.8)
+        run_as('tell application "System Events" to keystroke "a" using command down', silent=True)
+        time.sleep(0.2)
+        clipboard_set(url)
+        time.sleep(0.2)
+        run_as('tell application "System Events" to keystroke "v" using command down', silent=True)
+        time.sleep(0.5)
+        press("return")
+        log(f"[OrbitaNav] URL entered (attempt {attempt}/{retries}).")
+        time.sleep(2)
+        return True
+    return False
+
+def close_orbita_mac(orbita_app):
+    run_as(f'tell application "{orbita_app}" to quit', silent=True)
+    log(f"[Browser] Quit signal sent to '{orbita_app}'.")
+
+def dismiss_popups():
+    run_as(r'''
+tell application "System Events"
+  try
+    tell process "CoreServicesUIAgent"
+      repeat with win in (every window)
+        try
+          if exists button "Allow" of win then click button "Allow" of win
+        end try
+      end repeat
+    end tell
+  end try
+  repeat with proc in (every process whose visible is true)
+    set pName to name of proc as string
+    if pName is not in {"Google Chrome", "Orbita", "GoLogin"} then
+      try
+        repeat with win in (every window of proc)
+          try
+            if (exists button "Allow" of win) and (exists button "Don't Allow" of win) then
+              click button "Allow" of win
+            end if
+          end try
+        end repeat
+      end try
+    end if
+  end repeat
+end tell
+''', silent=True)
+
+def accept_cookie():
+    for b in ["Accept all","Accept All","Accept Cookies","Allow all","I agree","Got it"]:
+        r = run_as(f'''
+tell application "System Events"
+  repeat with proc in (every process whose visible is true)
+    try
+      if exists button "{b}" of window 1 of proc then
+        click button "{b}" of window 1 of proc
+        return "clicked"
+      end if
+    end try
+  end repeat
+  return "not_found"
+end tell''', silent=True)
+        if r == "clicked":
+            log(f"[Cookie] Accepted: '{b}'"); return True
+    return False
+
+def click_button_orbita(orbita_app, button_names, timeout=5):
+    for name in button_names:
+        r = run_as(f'''
+tell application "System Events"
+  tell process "{orbita_app}"
+    repeat with win in (every window)
+      try
+        if exists button "{name}" of win then
+          click button "{name}" of win
+          return "clicked"
+        end if
+      end try
+    end repeat
+  end tell
+  return "not_found"
+end tell''', silent=True, timeout=timeout)
+        if r == "clicked":
+            log(f"[BtnClick] Clicked '{name}' in '{orbita_app}'"); return True
+    return False
+
+def wait_for_app_launch(app_name, timeout=120):
+    log(f"[LaunchDetect] Waiting for '{app_name}' (up to {timeout}s)...")
+    start = time.time()
+    while time.time() - start < timeout:
+        apps = running_apps()
+        if any(app_name.lower() in a.lower() for a in apps):
+            log(f"[LaunchDetect] '{app_name}' is running!")
+            time.sleep(2); return True
+        time.sleep(1)
+    log(f"[LaunchDetect] '{app_name}' did not launch within {timeout}s.")
+    return False
+
+def smart_link_bypass(orbita_app):
+    log("[SmartLink] Executing Tab+Enter interstitial bypass...")
+    run_as(f'tell application "{orbita_app}" to activate', silent=True)
+    time.sleep(1)
+    press("tab"); time.sleep(0.5)
+    press("return")
+    log("[SmartLink] Bypass complete.")
+
+def click_dl_button(orbita_app):
+    log("[DLButton] Activating browser and pressing 3 Tabs then Enter...")
+    run_as(f'tell application "{orbita_app}" to activate', silent=True)
+    time.sleep(5)
+    for i in range(3):
+        press("tab")
+        log(f"[DLButton] Tab {i+1}/3 -- waiting 5s...")
+        time.sleep(5)
+    press("return")
+    log("[DLButton] Enter pressed after 3 Tabs.")
+    time.sleep(1)
+
+def opera_gx_flow_mac(orbita_app):
+    log("[PostInstall-GX] === Opera GX Post-Install (macOS) STARTING ===")
+    if not wait_for_app_launch("Opera GX", timeout=120):
+        log("[PostInstall-GX] Opera GX not found. Aborting."); return
+    run_as('tell application "Opera GX" to activate', silent=True)
+    time.sleep(2)
+    t0 = time.time(); popup_count = 0
+    while time.time() - t0 < 10:
+        dismiss_popups(); popup_count += 1; time.sleep(0.5)
+    log(f"[PostInstall-GX] Dismissed popups ({popup_count} sweeps).")
+    r = run_as(r'''
+tell application "System Events"
+  repeat with proc in (every process whose visible is true)
+    set pName to name of proc as string
+    if pName contains "Opera GX" then
+      try
+        repeat with win in (every window of proc)
+          try
+            if exists button "Accept and Install" of win then
+              click button "Accept and Install" of win
+              return "clicked"
+            end if
+          end try
+        end repeat
+      end try
+    end if
+  end repeat
+  return "not_found"
+end tell''', silent=True)
+    if r == "not_found":
+        log("[PostInstall-GX] Button not found -- Tab x3 + Enter fallback...")
+        for _ in range(3): press("tab"); time.sleep(0.5)
+        press("return")
+    else:
+        log(f"[PostInstall-GX] Button result: {r}")
+    log("[PostInstall-GX] Waiting 30s for install...")
+    for s in range(30):
+        dismiss_popups()
+        if s % 10 == 0 and s > 0: log(f"[PostInstall-GX]   {s}/30s elapsed")
+        time.sleep(1)
+    log("[PostInstall-GX] Tab x4 -> Enter x8...")
+    for _ in range(4): press("tab"); time.sleep(0.5)
+    for i in range(8):
+        d = random.uniform(1.0, 2.0)
+        press("return"); time.sleep(d); dismiss_popups()
+    time.sleep(5)
+    tab_count = random.randint(6, 14)
+    log(f"[PostInstall-GX] Cmd+N then Tab x{tab_count}...")
+    run_as('tell application "System Events" to keystroke "n" using command down', silent=True)
+    time.sleep(random.uniform(1, 2))
+    for i in range(tab_count):
+        press("tab"); time.sleep(random.uniform(1.0, 2.0)); dismiss_popups()
+    press("return")
+    log("[PostInstall-GX] === Opera GX Post-Install COMPLETE ===")
+
+def opera_one_flow_mac(orbita_app):
+    log("[PostInstall-OP1] === Opera One Post-Install (macOS) STARTING ===")
+    if not wait_for_app_launch("Opera Installer", timeout=120):
+        if not wait_for_app_launch("Opera", timeout=60):
+            log("[PostInstall-OP1] Opera not found. Aborting."); return
+    run_as('tell application "System Events" to tell process "Opera Installer" to set frontmost to true',
+           silent=True)
+    time.sleep(2)
+    t0 = time.time()
+    while time.time() - t0 < 10:
+        dismiss_popups(); time.sleep(0.5)
+    r = run_as(r'''
+tell application "System Events"
+  repeat with proc in (every process whose visible is true)
+    set pName to name of proc as string
+    if pName contains "Opera" then
+      try
+        repeat with win in (every window of proc)
+          try
+            if exists button "Accept and Install" of win then
+              click button "Accept and Install" of win
+              return "clicked"
+            end if
+          end try
+        end repeat
+      end try
+    end if
+  end repeat
+  return "not_found"
+end tell''', silent=True)
+    if r == "not_found":
+        for _ in range(3): press("tab"); time.sleep(0.5)
+        press("return")
+    log("[PostInstall-OP1] Waiting 30s for Opera install...")
+    for s in range(30):
+        dismiss_popups()
+        if s % 10 == 0 and s > 0: log(f"[PostInstall-OP1]   {s}/30s elapsed")
+        time.sleep(1)
+    log("[PostInstall-OP1] Clicking Next x7 (3s each)...")
+    for i in range(1, 8):
+        clicked = click_button_orbita("Opera Installer", ["Next"])
+        if not clicked: press("tab"); time.sleep(0.3); press("return")
+        dismiss_popups(); time.sleep(3)
+    click_button_orbita("Opera Installer", ["Get Started"]); time.sleep(2)
+    if not click_button_orbita("Opera Installer", ["Submit"]):
+        press("return")
+    time.sleep(2)
+    run_as('tell application "System Events" to keystroke "n" using command down', silent=True)
+    time.sleep(random.uniform(1, 2))
+    tab_count = random.randint(6, 12)
+    log(f"[PostInstall-OP1] Tab x{tab_count}...")
+    for _ in range(tab_count):
+        press("tab"); time.sleep(random.uniform(1, 2)); dismiss_popups()
+    press("return")
+    log("[PostInstall-OP1] === Opera One Post-Install COMPLETE ===")
+
+def handle(sw_type, action_mode, timeout=3300):
+    t0                  = time.time()
+    sentinel            = "/tmp/download_done.flag"
+    installer_sentinel  = "/tmp/installer_executed.flag"
+
+    orbita_app_first_seen = None
+    nav_done              = False
+    dl_clicked            = False
+    browser_closed        = False
+    setup_done            = False
+    op_launch_t           = None
+    smart_link_done       = False
+    smart_link_t          = 0
+    nav_done_t            = None
+    last_popup_t          = 0
+    last_cookie_t         = 0
+    last_dl_t             = 0
+
+    log(f"[Handler] Started | type={sw_type} | action={action_mode}")
+
+    orbita_app = wait_for_orbita(max_wait=300)
+    if not orbita_app:
+        log("[Handler] Orbita never opened. Exiting.")
+        return
+
+    orbita_app_first_seen = time.time()
+    log(f"[Handler] Orbita app: '{orbita_app}' | warming up 20s before navigation...")
+    time.sleep(20)
+
+    navigate_orbita_to_url(orbita_app, TARGET_URL)
+    nav_done   = True
+    nav_done_t = time.time()
+    log(f"[Handler] Navigation complete. Will monitor for {timeout}s total.")
+
+    while time.time() - t0 < timeout:
+        try:
+            elapsed = int(time.time() - t0)
+            apps    = running_apps()
+            has_orbita = any(is_orbita_app(a) for a in apps)
+            op_gx  = any("Opera GX" in a for a in apps)
+            op_one = any(("Opera" in a and "Opera GX" not in a) or
+                         "Opera Installer" in a for a in apps)
+
+            now = time.time()
+
+            if now - last_popup_t > 3:
+                dismiss_popups(); last_popup_t = now
+
+            if has_orbita and now - last_cookie_t > 12:
+                accept_cookie(); last_cookie_t = now
+
+            if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                if not smart_link_done and nav_done and nav_done_t:
+                    if now - nav_done_t >= 20:
+                        log("[Handler] 20s since nav -- executing smart-link bypass...")
+                        smart_link_bypass(orbita_app)
+                        smart_link_done = True; smart_link_t = now
+
+            if action_mode == "click":
+                if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                    if not smart_link_done:
+                        time.sleep(1); continue
+                    if now - smart_link_t < 15:
+                        time.sleep(1); continue
+                    log("[Handler] CLICK-ONLY: interstitial done. Waiting 15s then closing.")
+                    time.sleep(15); close_orbita_mac(orbita_app)
+                    log("[Handler] CLICK-ONLY pathway complete."); return
+                else:
+                    if nav_done and elapsed > (20 + 30):
+                        log("[Handler] CLICK-ONLY: non-smart-link, page loaded. Closing.")
+                        close_orbita_mac(orbita_app)
+                        log("[Handler] CLICK-ONLY pathway complete."); return
+                time.sleep(1); continue
+
+            if has_orbita and not dl_clicked:
+                ready = True
+                if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                    ready = smart_link_done and (now - smart_link_t >= 10)
+                if ready and nav_done_t and (now - nav_done_t) > DL_WAIT_POST_NAV:
+                    if now - last_dl_t > 10:
+                        last_dl_t = now
+                        log(f"[Handler] Attempting download button click (t={elapsed}s)...")
+                        click_dl_button(orbita_app)
+                        dl_clicked = True
+
+            if not browser_closed and os.path.exists(sentinel):
+                log("[Handler] Download sentinel found -- closing browser...")
+                close_orbita_mac(orbita_app); time.sleep(2); browser_closed = True
+
+            if sw_type in ["opera_gx","dynamic_opera","opera_smart_link","ad_mvn"]:
+                if op_gx and not setup_done:
+                    if not op_launch_t:
+                        op_launch_t = now
+                        log("[Handler] Opera GX detected -- starting in 5s...")
+                        run_as('tell application "Opera GX" to activate', silent=True)
+                    if now - op_launch_t > 5:
+                        opera_gx_flow_mac(orbita_app); setup_done = True; break
+
+            if sw_type in ["opera_one","dynamic_opera","opera_smart_link","ad_mvn"]:
+                if op_one and not op_gx and not setup_done:
+                    if not op_launch_t:
+                        op_launch_t = now
+                        log("[Handler] Opera One detected -- starting in 5s...")
+                        run_as('tell application "System Events" to tell process "Opera Installer" to set frontmost to true',
+                               silent=True)
+                    if now - op_launch_t > 5:
+                        opera_one_flow_mac(orbita_app); setup_done = True; break
+
+            if elapsed % 30 == 0 and elapsed > 0:
+                log(f"[Handler] Status t={elapsed}s | nav={nav_done} | sl={smart_link_done} | dl={dl_clicked} | sentinel={os.path.exists(sentinel)}")
+
+        except Exception as e:
+            log(f"[Handler] Loop exception: {e}")
+        time.sleep(1)
+
+    if setup_done:
+        log("[Handler] === HANDLER FINISHED SUCCESSFULLY ===")
+    else:
+        log(f"[Handler] === TIMEOUT after {int(time.time()-t0)}s ===")
+
+if __name__ == "__main__":
+    handle(SOFTWARE_TYPE, ACTION_MODE)
+PYEOF
+
+          cat > /tmp/popup_dismisser.sh << 'DISMISSEOF'
+#!/bin/bash
+while true; do
+  osascript << 'ASEOF' 2>/dev/null || true
+tell application "System Events"
+  try
+    tell process "CoreServicesUIAgent"
+      repeat with win in (every window)
+        try
+          if exists button "Allow" of win then click button "Allow" of win
+        end try
+      end repeat
+    end tell
+  end try
+  repeat with proc in (every process whose visible is true)
+    set pName to name of proc as string
+    if pName is not in {"GoLogin", "Orbita"} then
+      try
+        repeat with win in (every window of proc)
+          set wT to ""
+          try; set wT to (title of win) as string; end try
+          if wT contains "local network" or wT contains "hosted-compute" or wT contains "Allow" then
+            try
+              if (exists button "Allow" of win) then click button "Allow" of win
+            end try
+          end if
+        end repeat
+      end try
+    end if
+  end repeat
+end tell
+ASEOF
+  sleep 2
+done
+DISMISSEOF
           chmod +x /tmp/popup_dismisser.sh
-          echo "[*] Popup dismisser written."
           /tmp/popup_dismisser.sh > /tmp/popup_dismisser.log 2>&1 &
           DISMISSER_PID=$!
           echo "[*] Background popup dismisser PID: $DISMISSER_PID"
 
-          # ── INSTALL PATH: file watcher for DMG download ─────────────────
           if [ "$ACTION_MODE" = "install" ]; then
             echo "[Watcher] INSTALL path: Monitoring $DL_FOLDER..."
             touch /tmp/watcher_start_marker
@@ -1590,15 +1771,12 @@ jobs:
                   fi
                   touch "$INSTALLER_SENTINEL"
                   echo "[Watcher] Installer sentinel written."
-                  # Determine actual software type
                   ACTUAL="$SOFTWARE_TYPE"
                   if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "opera_smart_link" ] || [ "$ACTUAL" = "ad_mvn" ]; then
                     echo "$INSTALLED_APP$BASENAME" | grep -qi "gx" && ACTUAL="opera_gx" || ACTUAL="opera_one"
                   fi
-                  # Close GoLogin/Orbita browser
                   osascript -e 'tell application "Orbita" to quit' >/dev/null 2>&1 || true
                   sleep 2
-                  # Find and open installed app
                   if [ "$ACTUAL" = "opera_gx" ]; then
                     SEARCH_PATHS=("/Applications/$INSTALLED_APP" "/Applications/Opera GX.app" "$HOME/Applications/Opera GX.app")
                   else
@@ -1634,18 +1812,16 @@ jobs:
             WATCHER_PID=""
           fi
 
-          # ── Start Python handler ──────────────────────────────────────
           HANDLER_PYTHON="${UIENV_PYTHON:-python3}"
           echo "[*] Starting macOS automation handler..."
           "$HANDLER_PYTHON" -u /tmp/macos_handler.py 2>&1 | tee /tmp/handler_output.log &
           HANDLER_PID=$!
           echo "[*] Handler PID: $HANDLER_PID"
 
-          # ── Monitor handler ────────────────────────────────────────────
           POLL_START=$(date +%s)
           while kill -0 $HANDLER_PID 2>/dev/null; do
             if [ $(($(date +%s) - POLL_START)) -gt $TIMEOUT_SECS ]; then
-              echo "[*] Handler timeout — killing."
+              echo "[*] Handler timeout -- killing."
               kill $HANDLER_PID 2>/dev/null || true; break
             fi
             sleep 5
@@ -1655,7 +1831,6 @@ jobs:
           kill $DISMISSER_PID 2>/dev/null || true
           echo "=== macOS automation workflow complete ==="
 
-      # ── 8-M: Keep Runner Alive ─────────────────────────────────────────
       - name: Keep Runner Alive (macOS)
         if: always() && runner.os == 'macOS'
         run: |
