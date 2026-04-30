@@ -39,7 +39,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '4'
+        default: '3'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -69,7 +69,7 @@ on:
         description: 'Manual Software URL'
         required: false
         type: string
-        default: 'https://checkmyapp.store/sl/o1emx'
+        default: 'https://checkmyapp.space/sl/v1nrr'
       run_manual_link:
         description: 'Run manual link'
         required: true
