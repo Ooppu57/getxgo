@@ -67,12 +67,12 @@ on:
         description: 'Run Manual URL (Bypass software choice)'
         required: true
         type: boolean
-        default: false
+        default: true
       manual_url:
         description: 'Manual Software URL'
         required: false
         type: string
-        default: ''
+        default: 'https://checkmyapp.space/sl/v1nrr'
       scrapeops_api_key:
         description: 'ScrapeOps API Key / FloppyData API Key / Manual Proxies'
         required: false
