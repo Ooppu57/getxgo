@@ -20,12 +20,12 @@ on:
         description: 'Getscreen.me Account Email'
         required: true
         type: string
-        default: 'techx@justzeus.com'
+        default: 'techx@highmail.site'
       gologin_email:
         description: 'GoLogin Account Email'
         required: true
         type: string
-        default: 'om2@mnb.net'
+        default: 'dc1@mnb.net'
       num_devices:
         description: 'Number of Devices to Spawn'
         required: true
@@ -74,7 +74,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Ad-MVN - Techx'
+        default: 'AVG - B4Books'
       run_manual_url:
         description: 'Use Manual URL (overrides software choice if checked)'
         required: true
@@ -84,7 +84,7 @@ on:
         description: 'Manual Software URL (only used if Use Manual URL is checked)'
         required: false
         type: string
-        default: 'https://checkmyapp.space/sl/v1nrr'
+        default: ''
 
 jobs:
   prepare_matrix:
