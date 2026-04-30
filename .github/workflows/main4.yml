@@ -122,7 +122,6 @@ jobs:
           run_manual     = os.environ.get("RUN_MANUAL", "false").lower() == "true"
           manual_url_in  = os.environ.get("MANUAL_URL", "").strip()
 
-          # ── All affiliate URL maps ──────────────────────────────────────────
           avg_urls = {
               "AVG - TechxTrader": "https://u.to/a-trdr/GoeNIg",
               "AVG - B4Books":     "https://u.to/a-b4b/O4eNIg",
@@ -153,7 +152,6 @@ jobs:
           }
           all_urls = {**avg_urls, **opera_urls, **opera_one_urls, **ad_mvn_urls}
 
-          # ── Determine target URL and software type ─────────────────────────
           if run_manual and manual_url_in:
               target_url    = manual_url_in
               software_type = "dynamic_opera"
@@ -179,18 +177,15 @@ jobs:
                   exe_filter    = "*Opera*Setup*.exe"
                   dmg_filter    = "*Opera*"
               else:
-                  # Opera - * (smart links)
                   software_type = "opera_smart_link"
                   exe_filter    = "*Opera*Setup*.exe"
                   dmg_filter    = "*Opera*"
               print(f"[Target] Software: {software_choice} | Type: {software_type} | URL: {target_url}")
 
-          # ── Build action list: install then click, shuffled ────────────────
           action_list = ["install"] * num_installs + ["click"] * num_clicks
           random.shuffle(action_list)
           print(f"[Actions] install={num_installs} click={num_clicks} order={action_list}")
 
-          # ── Short name helpers ─────────────────────────────────────────────
           def short_os(v):
               m = {"windows-2025":"W25","windows-2022":"W22","windows-11-arm":"W11A",
                    "macos-14":"M14","macos-15":"M15","macos-26":"M26","macos-26-intel":"M26I"}
@@ -293,9 +288,6 @@ jobs:
           git diff --quiet && git diff --staged --quiet || \
             (git commit -m "Update last used inputs [skip ci]" && git push)
 
-  # ═══════════════════════════════════════════════════════════════════════════
-  # REMOTE SESSION JOB — runs in parallel on each matrix device
-  # ═══════════════════════════════════════════════════════════════════════════
   remote_session:
     name: Session ${{ matrix.device }}
     needs: prepare_matrix
@@ -307,8 +299,7 @@ jobs:
       matrix: ${{ fromJson(needs.prepare_matrix.outputs.matrix) }}
 
     steps:
-
-      # ═════════════ WINDOWS ═════════════════════════════════════════════════
+      # ═════════════ WINDOWS STEPS ═══════════════════════════════════════════
       - name: Disable Windows Defender & Edge SmartScreen
         if: runner.os == 'Windows'
         shell: pwsh
@@ -429,426 +420,410 @@ jobs:
           Write-Host "Action Mode : $($env:ACTION_MODE.ToUpper())"
           Write-Host "Software    : $env:SOFTWARE_TYPE"
 
-          pip install pywinauto pyautogui pygetwindow keyboard psutil --quiet
+          pip install pywinauto pyautogui pygetwindow keyboard psutil pyperclip --quiet
 
-          # ── Inline Python: detect Orbita, navigate to URL, handle download + post-install ─
-          $script = @'
-import time, sys, os, tempfile, random, subprocess, ctypes, psutil
-from pywinauto import Desktop, Application
-import pyautogui
-from pywinauto.keyboard import send_keys
+          # Write the Python automation script to a temp file
+          $pyScript = @'
+          import time, sys, os, tempfile, random, subprocess, ctypes, psutil
+          from pywinauto import Desktop, Application
+          import pyautogui
+          from pywinauto.keyboard import send_keys
+          import pyperclip
 
-TARGET_URL    = os.environ.get("TARGET_URL", "")
-SOFTWARE_TYPE = os.environ.get("SOFTWARE_TYPE", "dynamic_opera")
-EXE_FILTER    = os.environ.get("EXE_FILTER", "*.exe")
-ACTION_MODE   = os.environ.get("ACTION_MODE", "install")
+          TARGET_URL    = os.environ.get("TARGET_URL", "")
+          SOFTWARE_TYPE = os.environ.get("SOFTWARE_TYPE", "dynamic_opera")
+          EXE_FILTER    = os.environ.get("EXE_FILTER", "*.exe")
+          ACTION_MODE   = os.environ.get("ACTION_MODE", "install")
 
-DL_FOLDER               = os.path.join(os.environ.get("USERPROFILE",""), "Downloads")
-SENTINEL_PATH           = os.path.join(tempfile.gettempdir(), "download_done.flag")
-INSTALLER_EXECUTED_PATH = os.path.join(tempfile.gettempdir(), "installer_executed.flag")
+          DL_FOLDER               = os.path.join(os.environ.get("USERPROFILE",""), "Downloads")
+          SENTINEL_PATH           = os.path.join(tempfile.gettempdir(), "download_done.flag")
+          INSTALLER_EXECUTED_PATH = os.path.join(tempfile.gettempdir(), "installer_executed.flag")
 
-def log(tag, msg):
-    print(f"[{time.strftime('%H:%M:%S')}][{tag}] {msg}", flush=True)
+          def log(tag, msg):
+              print(f"[{time.strftime('%H:%M:%S')}][{tag}] {msg}", flush=True)
 
-# ── Orbita / GoLogin browser detection ────────────────────────────────────
-ORBITA_TITLE_FRAGMENTS = ["orbita", "gologin browser", "gl browser"]
-ORBITA_EXE_FRAGMENTS   = ["orbita", "gologin", "gl-browser", "gl_browser"]
+          # ── Orbita / GoLogin browser detection ──────────────────────────
+          ORBITA_TITLE_FRAGMENTS = ["orbita", "gologin browser", "gl browser"]
+          ORBITA_EXE_FRAGMENTS   = ["orbita", "gologin", "gl-browser", "gl_browser"]
 
-def is_orbita_window(wt, proc_name=""):
-    if not wt: return False
-    tl = wt.lower()
-    if any(f in tl for f in ORBITA_TITLE_FRAGMENTS):
-        return True
-    if proc_name and any(f in proc_name.lower() for f in ORBITA_EXE_FRAGMENTS):
-        return True
-    return False
+          def is_orbita_window(wt, proc_name=""):
+              if not wt: return False
+              tl = wt.lower()
+              if any(f in tl for f in ORBITA_TITLE_FRAGMENTS):
+                  return True
+              if proc_name and any(f in proc_name.lower() for f in ORBITA_EXE_FRAGMENTS):
+                  return True
+              return False
 
-def find_orbita_window():
-    desktop = Desktop(backend="uia")
-    # Try window title first
-    for w in desktop.windows(visible_only=True):
-        wt = w.window_text() or ""
-        try: pn = w.process().name()
-        except: pn = ""
-        if is_orbita_window(wt, pn): return w
-    # Then fallback: scan all processes
-    for proc in psutil.process_iter(["name", "pid"]):
-        pname = (proc.info.get("name") or "").lower()
-        if any(f in pname for f in ORBITA_EXE_FRAGMENTS):
-            pid = proc.info["pid"]
-            # Convert PID to window handle via pywinauto
-            try:
-                app = Application().connect(process=pid)
-                for win in app.windows():
-                    if win.is_visible(): return win
-            except: pass
-    return None
+          def find_orbita_window():
+              desktop = Desktop(backend="uia")
+              for w in desktop.windows(visible_only=True):
+                  wt = w.window_text() or ""
+                  try: pn = w.process().name()
+                  except: pn = ""
+                  if is_orbita_window(wt, pn): return w
+              for proc in psutil.process_iter(["name", "pid"]):
+                  pname = (proc.info.get("name") or "").lower()
+                  if any(f in pname for f in ORBITA_EXE_FRAGMENTS):
+                      pid = proc.info["pid"]
+                      try:
+                          app = Application().connect(process=pid)
+                          for win in app.windows():
+                              if win.is_visible(): return win
+                      except: pass
+              return None
 
-def navigate_orbita_to_url(url, max_wait=300):
-    log("OrbitaNav", f"Waiting up to {max_wait}s for Orbita window...")
-    deadline = time.time() + max_wait
-    orbita_win = None
-    while time.time() < deadline:
-        orbita_win = find_orbita_window()
-        if orbita_win:
-            log("OrbitaNav", f"Orbita window found: '{orbita_win.window_text()}'")
-            break
-        time.sleep(2)
-    if not orbita_win:
-        log("OrbitaNav", "ERROR: Orbita window never appeared."); return None
+          def navigate_orbita_to_url(url, max_wait=300):
+              log("OrbitaNav", f"Waiting up to {max_wait}s for Orbita window...")
+              deadline = time.time() + max_wait
+              orbita_win = None
+              while time.time() < deadline:
+                  orbita_win = find_orbita_window()
+                  if orbita_win:
+                      log("OrbitaNav", f"Orbita window found: '{orbita_win.window_text()}'")
+                      break
+                  time.sleep(2)
+              if not orbita_win:
+                  log("OrbitaNav", "ERROR: Orbita window never appeared."); return None
 
-    # Focus & maximize
-    try:
-        orbita_win.set_focus()
-        orbita_win.maximize()
-        time.sleep(1.5)
-    except Exception as e:
-        log("OrbitaNav", f"Focus error: {e}")
+              try:
+                  orbita_win.set_focus()
+                  orbita_win.maximize()
+                  time.sleep(1.5)
+              except Exception as e:
+                  log("OrbitaNav", f"Focus error: {e}")
 
-    # Navigate to URL (Ctrl+L → paste → Enter)
-    log("OrbitaNav", f"Navigating to: {url}")
-    strategies = [("^l", "Ctrl+L"), ("{F6}", "F6")]
-    for shortcut, desc in strategies:
-        try:
-            orbita_win.set_focus(); time.sleep(0.5)
-            send_keys(shortcut)
-            time.sleep(0.8)
-            send_keys("^a"); time.sleep(0.2)
-            # Use clipboard to paste for reliability
-            pyautogui.hotkey("ctrl", "a")
-            import pyperclip
-            pyperclip.copy(url)
-            time.sleep(0.2)
-            send_keys("^v")
-            time.sleep(0.5)
-            send_keys("{ENTER}")
-            log("OrbitaNav", f"URL entered via {desc}.")
-            return orbita_win
-        except Exception as e:
-            log("OrbitaNav", f"{desc} failed: {e}")
-    log("OrbitaNav", "Navigation failed.")
-    return orbita_win
+              log("OrbitaNav", f"Navigating to: {url}")
+              strategies = [("^l", "Ctrl+L"), ("{F6}", "F6")]
+              for shortcut, desc in strategies:
+                  try:
+                      orbita_win.set_focus(); time.sleep(0.5)
+                      send_keys(shortcut)
+                      time.sleep(0.8)
+                      send_keys("^a"); time.sleep(0.2)
+                      pyperclip.copy(url)
+                      time.sleep(0.2)
+                      send_keys("^v")
+                      time.sleep(0.5)
+                      send_keys("{ENTER}")
+                      log("OrbitaNav", f"URL entered via {desc}.")
+                      return orbita_win
+                  except Exception as e:
+                      log("OrbitaNav", f"{desc} failed: {e}")
+              log("OrbitaNav", "Navigation failed.")
+              return orbita_win
 
-def close_orbita_tab(orbita_win):
-    """Close the GoLogin profile tab without quitting the app."""
-    try:
-        orbita_win.set_focus()
-        time.sleep(0.5)
-        send_keys("^w")      # Ctrl+W closes the tab in Chromium browsers
-        log("CloseTab", "Sent Ctrl+W to close GoLogin profile tab.")
-    except Exception as e:
-        log("CloseTab", f"Failed to close tab: {e}")
+          def close_orbita_tab(orbita_win):
+              try:
+                  orbita_win.set_focus()
+                  time.sleep(0.5)
+                  send_keys("^w")      # Ctrl+W closes the tab
+                  log("CloseTab", "Sent Ctrl+W to close GoLogin profile tab.")
+              except Exception as e:
+                  log("CloseTab", f"Failed to close tab: {e}")
 
-# ── Interference / download window helpers ────────────────────────────────
-DOWNLOAD_DONE_TITLES = ["Thanks for downloading","Thanks for downloadin","Download | Thanks"]
-INTERFERENCE_TITLES  = ["Settings","Windows Settings","Default apps","System Settings",
-                        "Choose an app","How do you want to open","Open with",
-                        "Windows PowerShell","Administrator: Windows PowerShell",
-                        "Command Prompt","User Account Control"]
-INTERFERENCE_SUBS    = ["default apps","choose a default","set as default","open with"]
+          # ── Interference / download windows helpers ──────────────────────
+          DOWNLOAD_DONE_TITLES = ["Thanks for downloading","Thanks for downloadin","Download | Thanks"]
+          INTERFERENCE_TITLES  = ["Settings","Windows Settings","Default apps","System Settings",
+                                  "Choose an app","How do you want to open","Open with",
+                                  "Windows PowerShell","Administrator: Windows PowerShell",
+                                  "Command Prompt","User Account Control"]
+          INTERFERENCE_SUBS    = ["default apps","choose a default","set as default","open with"]
 
-def _is_download_done(wt):
-    return any(f.lower() in wt.lower() for f in DOWNLOAD_DONE_TITLES) if wt else False
+          def _is_download_done(wt):
+              return any(f.lower() in wt.lower() for f in DOWNLOAD_DONE_TITLES) if wt else False
 
-def _is_interference(wt):
-    if not wt: return False
-    for ex in INTERFERENCE_TITLES:
-        if wt.strip().lower() == ex.strip().lower(): return True
-    return any(s in wt.lower() for s in INTERFERENCE_SUBS)
+          def _is_interference(wt):
+              if not wt: return False
+              for ex in INTERFERENCE_TITLES:
+                  if wt.strip().lower() == ex.strip().lower(): return True
+              return any(s in wt.lower() for s in INTERFERENCE_SUBS)
 
-def dismiss_interference(desktop):
-    for w in desktop.windows(visible_only=True):
-        wt = w.window_text() or ""
-        if not _is_interference(wt): continue
-        log("WinGuard", f"Closing interference: '{wt}'")
-        try:
-            w.set_focus(); time.sleep(0.2); send_keys("%{F4}")
-        except:
-            try: w.close()
-            except: pass
+          def dismiss_interference(desktop):
+              for w in desktop.windows(visible_only=True):
+                  wt = w.window_text() or ""
+                  if not _is_interference(wt): continue
+                  log("WinGuard", f"Closing interference: '{wt}'")
+                  try:
+                      w.set_focus(); time.sleep(0.2); send_keys("%{F4}")
+                  except:
+                      try: w.close()
+                      except: pass
 
-def close_download_windows(desktop):
-    for w in desktop.windows(visible_only=True):
-        wt = w.window_text() or ""
-        if not _is_download_done(wt): continue
-        log("EdgeClose", f"Closing download window: '{wt}'")
-        try:
-            w.set_focus(); time.sleep(0.3); send_keys("^w")
-        except: pass
+          def close_download_windows(desktop):
+              for w in desktop.windows(visible_only=True):
+                  wt = w.window_text() or ""
+                  if not _is_download_done(wt): continue
+                  log("EdgeClose", f"Closing download window: '{wt}'")
+                  try:
+                      w.set_focus(); time.sleep(0.3); send_keys("^w")
+                  except: pass
 
-# ── Post‑install flows (unchanged) ────────────────────────────────────────
-def opera_one_post_install_win(sw_win, sw_type):
-    log("PostInstall-OP1", "=== Opera One Post-Install (Windows) STARTING ===")
-    desktop = Desktop(backend="uia")
-    for s in range(1, 51):
-        log("PostInstall-OP1", f"  Init wait {s}/50s"); time.sleep(1)
-    try: sw_win = robust_maximize(desktop, sw_win, sw_type, "step2")
-    except Exception: pass
-    time.sleep(5)
-    sw, sh = pyautogui.size(); cx, cy = sw // 2, sh // 2
-    pyautogui.click(cx, cy); time.sleep(5)
-    for i in range(1, 7):
-        desktop = Desktop(backend="uia")
-        sw_win = robust_maximize(desktop, sw_win, sw_type, f"next-{i}")
-        if not click_button(desktop, sw_win, sw_type, ["Next"], f"NEXT-{i}"):
-            pyautogui.click(int(sw * 0.90), int(sh * 0.90))
-        time.sleep(2)
-    desktop = Desktop(backend="uia")
-    sw_win = robust_maximize(desktop, sw_win, sw_type, "done")
-    if not click_button(desktop, sw_win, sw_type, ["Done", "Finish"], "DONE"):
-        pyautogui.click(int(sw * 0.90), int(sh * 0.90))
-    time.sleep(5)
-    send_keys("{ENTER}"); time.sleep(5)
-    desktop = Desktop(backend="uia")
-    sw_win = robust_maximize(desktop, sw_win, sw_type, "submit")
-    if not click_button(desktop, sw_win, sw_type, ["Submit"], "SUBMIT"):
-        pyautogui.click(sw // 2, int(sh * 0.85))
-    time.sleep(5)
-    for tab_count in range(8, 19):
-        send_keys("^t"); time.sleep(5)
-        for i in range(1, tab_count + 1):
-            send_keys("{TAB}"); time.sleep(1)
-        send_keys("{ENTER}"); time.sleep(5)
-    log("PostInstall-OP1", "=== Opera One Post-Install COMPLETE ===")
+          # ── Post‑install flows (Windows) ─────────────────────────────────
+          def robust_maximize(desktop, win, sw_type, label=""):
+              dismiss_interference(desktop)
+              if win:
+                  try: win.set_focus(); time.sleep(0.2); win.maximize(); time.sleep(0.3)
+                  except Exception: pass
+              return win
 
-def opera_gx_post_install_win(sw_win, sw_type):
-    log("PostInstall-OPGX", "=== Opera GX Post-Install (Windows) STARTING ===")
-    desktop = Desktop(backend="uia")
-    sw_win = robust_maximize(desktop, sw_win, sw_type, "init")
-    time.sleep(0.5)
-    sw, sh = pyautogui.size(); cx, cy = sw // 2, sh // 2
-    pyautogui.click(cx, cy); time.sleep(0.15); pyautogui.click(cx, cy)
-    time.sleep(random.uniform(2.0, 3.0))
-    for _ in range(4): send_keys("{TAB}"); time.sleep(random.uniform(1.0, 2.0))
-    for _ in range(8): send_keys("{ENTER}"); time.sleep(random.uniform(1.0, 2.0))
-    time.sleep(random.uniform(2.0, 3.0))
-    for _ in range(6): send_keys("{TAB}"); time.sleep(random.uniform(1.0, 2.0))
-    send_keys("{ENTER}"); time.sleep(5)
-    for tab_count in range(7, 17):
-        send_keys("^t")
-        for _ in range(tab_count): send_keys("{TAB}"); time.sleep(random.uniform(1.0, 2.0))
-        send_keys("{ENTER}"); time.sleep(5)
-    log("PostInstall-OPGX", "=== Opera GX Post-Install COMPLETE ===")
+          def click_button(desktop, win, sw_type, button_names, label=""):
+              if not win: return False
+              for name in button_names:
+                  for btn in win.descendants(control_type="Button"):
+                      try:
+                          if name.lower() in btn.window_text().lower():
+                              btn.click_input()
+                              log("BtnClick", f"[{label}] Clicked '{btn.window_text()}'")
+                              return True
+                      except Exception: pass
+              return False
 
-def avg_post_install_win(avg_win):
-    log("PostInstall-AVG", "=== AVG Post-Install (Windows) STARTING ===")
-    desktop = Desktop(backend="uia")
-    avg_win = robust_maximize(desktop, avg_win, "avg", "init")
-    time.sleep(0.5)
-    sw, sh = pyautogui.size(); cx, cy = sw // 2, sh // 2
-    pyautogui.click(cx, cy); time.sleep(0.15); pyautogui.click(cx, cy)
-    time.sleep(5)
-    tab_count = 6
-    while tab_count < 17:
-        send_keys("^t")
-        for _ in range(tab_count): send_keys("{TAB}"); time.sleep(random.uniform(1.0, 2.0))
-        send_keys("{ENTER}")
-        tab_count += random.randint(1, 2)
-        if tab_count < 17: time.sleep(5)
-    log("PostInstall-AVG", "=== AVG Post-Install COMPLETE ===")
+          def opera_one_post_install_win(sw_win, sw_type):
+              log("PostInstall-OP1", "=== Opera One Post-Install (Windows) STARTING ===")
+              desktop = Desktop(backend="uia")
+              for s in range(1, 51):
+                  log("PostInstall-OP1", f"  Init wait {s}/50s"); time.sleep(1)
+              try: sw_win = robust_maximize(desktop, sw_win, sw_type, "step2")
+              except Exception: pass
+              time.sleep(5)
+              sw, sh = pyautogui.size(); cx, cy = sw // 2, sh // 2
+              pyautogui.click(cx, cy); time.sleep(5)
+              for i in range(1, 7):
+                  desktop = Desktop(backend="uia")
+                  sw_win = robust_maximize(desktop, sw_win, sw_type, f"next-{i}")
+                  if not click_button(desktop, sw_win, sw_type, ["Next"], f"NEXT-{i}"):
+                      pyautogui.click(int(sw * 0.90), int(sh * 0.90))
+                  time.sleep(2)
+              desktop = Desktop(backend="uia")
+              sw_win = robust_maximize(desktop, sw_win, sw_type, "done")
+              if not click_button(desktop, sw_win, sw_type, ["Done", "Finish"], "DONE"):
+                  pyautogui.click(int(sw * 0.90), int(sh * 0.90))
+              time.sleep(5)
+              send_keys("{ENTER}"); time.sleep(5)
+              desktop = Desktop(backend="uia")
+              sw_win = robust_maximize(desktop, sw_win, sw_type, "submit")
+              if not click_button(desktop, sw_win, sw_type, ["Submit"], "SUBMIT"):
+                  pyautogui.click(sw // 2, int(sh * 0.85))
+              time.sleep(5)
+              for tab_count in range(8, 19):
+                  send_keys("^t"); time.sleep(5)
+                  for i in range(1, tab_count + 1):
+                      send_keys("{TAB}"); time.sleep(1)
+                  send_keys("{ENTER}"); time.sleep(5)
+              log("PostInstall-OP1", "=== Opera One Post-Install COMPLETE ===")
 
-def robust_maximize(desktop, win, sw_type, label=""):
-    dismiss_interference(desktop)
-    if win:
-        try: win.set_focus(); time.sleep(0.2); win.maximize(); time.sleep(0.3)
-        except Exception: pass
-    return win
+          def opera_gx_post_install_win(sw_win, sw_type):
+              log("PostInstall-OPGX", "=== Opera GX Post-Install (Windows) STARTING ===")
+              desktop = Desktop(backend="uia")
+              sw_win = robust_maximize(desktop, sw_win, sw_type, "init")
+              time.sleep(0.5)
+              sw, sh = pyautogui.size(); cx, cy = sw // 2, sh // 2
+              pyautogui.click(cx, cy); time.sleep(0.15); pyautogui.click(cx, cy)
+              time.sleep(random.uniform(2.0, 3.0))
+              for _ in range(4): send_keys("{TAB}"); time.sleep(random.uniform(1.0, 2.0))
+              for _ in range(8): send_keys("{ENTER}"); time.sleep(random.uniform(1.0, 2.0))
+              time.sleep(random.uniform(2.0, 3.0))
+              for _ in range(6): send_keys("{TAB}"); time.sleep(random.uniform(1.0, 2.0))
+              send_keys("{ENTER}"); time.sleep(5)
+              for tab_count in range(7, 17):
+                  send_keys("^t")
+                  for _ in range(tab_count): send_keys("{TAB}"); time.sleep(random.uniform(1.0, 2.0))
+                  send_keys("{ENTER}"); time.sleep(5)
+              log("PostInstall-OPGX", "=== Opera GX Post-Install COMPLETE ===")
 
-def click_button(desktop, win, sw_type, button_names, label=""):
-    if not win: return False
-    for name in button_names:
-        for btn in win.descendants(control_type="Button"):
-            try:
-                if name.lower() in btn.window_text().lower():
-                    btn.click_input()
-                    log("BtnClick", f"[{label}] Clicked '{btn.window_text()}'")
-                    return True
-            except Exception: pass
-    return False
+          def avg_post_install_win(avg_win):
+              log("PostInstall-AVG", "=== AVG Post-Install (Windows) STARTING ===")
+              desktop = Desktop(backend="uia")
+              avg_win = robust_maximize(desktop, avg_win, "avg", "init")
+              time.sleep(0.5)
+              sw, sh = pyautogui.size(); cx, cy = sw // 2, sh // 2
+              pyautogui.click(cx, cy); time.sleep(0.15); pyautogui.click(cx, cy)
+              time.sleep(5)
+              tab_count = 6
+              while tab_count < 17:
+                  send_keys("^t")
+                  for _ in range(tab_count): send_keys("{TAB}"); time.sleep(random.uniform(1.0, 2.0))
+                  send_keys("{ENTER}")
+                  tab_count += random.randint(1, 2)
+                  if tab_count < 17: time.sleep(5)
+              log("PostInstall-AVG", "=== AVG Post-Install COMPLETE ===")
 
-# ══════════════════════════════════════════════════════════════════════════
-# MAIN AUTOMATION LOOP (Windows)
-# ══════════════════════════════════════════════════════════════════════════
-def handle_automation_win(sw_type, action_mode, timeout=3300):
-    start_t = time.time()
+          # ── Main automation loop (Windows) ────────────────────────────────
+          def handle_automation_win(sw_type, action_mode, timeout=3300):
+              start_t = time.time()
 
-    # Step 1: Navigate Orbita to target URL
-    orbita_win = navigate_orbita_to_url(TARGET_URL, max_wait=300)
-    if not orbita_win:
-        log("Main", "No Orbita window — aborting."); return
+              orbita_win = navigate_orbita_to_url(TARGET_URL, max_wait=300)
+              if not orbita_win:
+                  log("Main", "No Orbita window — aborting."); return
 
-    last_ctrl_j_t    = time.time()
-    last_dl_click_t  = 0
-    ctrl_j_attempts  = 0
-    keep_clicked     = False
-    avg_dl_clicked   = False
-    smart_link_done  = False
-    smart_link_t     = 0
-    op1_installer_t  = None; op1_done = False
-    opgx_installer_t = None; opgx_done = False
-    avg_installer_t  = None; avg_done = False
-    dl_windows_closed = False
-    proxy_auth_t     = start_t
-    last_interference = 0
+              last_ctrl_j_t    = time.time()
+              last_dl_click_t  = 0
+              ctrl_j_attempts  = 0
+              keep_clicked     = False
+              avg_dl_clicked   = False
+              smart_link_done  = False
+              smart_link_t     = 0
+              op1_installer_t  = None; op1_done = False
+              opgx_installer_t = None; opgx_done = False
+              avg_installer_t  = None; avg_done = False
+              dl_windows_closed = False
+              proxy_auth_t     = start_t
+              last_interference = 0
 
-    log("Main", f"Automation loop started | action={action_mode} | type={sw_type}")
+              log("Main", f"Automation loop started | action={action_mode} | type={sw_type}")
 
-    while time.time() - start_t < timeout:
-        try:
-            desktop     = Desktop(backend="uia")
-            edge_win    = None
-            orbita_win2 = None
-            op_win      = None
-            avg_app_win = None
+              while time.time() - start_t < timeout:
+                  try:
+                      desktop     = Desktop(backend="uia")
+                      edge_win    = None
+                      orbita_win2 = None
+                      op_win      = None
+                      avg_app_win = None
 
-            # Identify visible windows
-            for w in desktop.windows(visible_only=True):
-                wt = w.window_text() or ""
-                wl = wt.lower()
-                if "microsoft edge" in wl: edge_win = w
-                elif is_orbita_window(wt, w.process().name() if w.process() else ""):
-                    orbita_win2 = w
-                elif "opera" in wl and "edge" not in wl: op_win = w
-                elif "avg" in wl: avg_app_win = w
+                      for w in desktop.windows(visible_only=True):
+                          wt = w.window_text() or ""
+                          wl = wt.lower()
+                          if "microsoft edge" in wl: edge_win = w
+                          elif is_orbita_window(wt, w.process().name() if w.process() else ""):
+                              orbita_win2 = w
+                          elif "opera" in wl and "edge" not in wl: op_win = w
+                          elif "avg" in wl: avg_app_win = w
 
-            now = time.time()
+                      now = time.time()
 
-            # Interference sweep
-            if now - last_interference >= 2:
-                dismiss_interference(desktop); last_interference = now
+                      if now - last_interference >= 2:
+                          dismiss_interference(desktop); last_interference = now
 
-            # When download sentinel appears, close the GoLogin profile tab
-            if not dl_windows_closed and os.path.exists(SENTINEL_PATH):
-                log("Sentinel", "Download sentinel found — closing GoLogin profile tab...")
-                close_orbita_tab(orbita_win)   # <-- NEW: close the profile tab
-                for _ in range(5):
-                    close_download_windows(desktop); time.sleep(2)
-                dl_windows_closed = True
+                      if not dl_windows_closed and os.path.exists(SENTINEL_PATH):
+                          log("Sentinel", "Download sentinel found — closing GoLogin profile tab...")
+                          close_orbita_tab(orbita_win)
+                          for _ in range(5):
+                              close_download_windows(desktop); time.sleep(2)
+                          dl_windows_closed = True
 
-            # Post-install triggers (only activate after installer sentinel + delay)
-            if action_mode == "install" and not op1_done:
-                if sw_type in ["opera_one","dynamic_opera","ad_mvn","opera_smart_link"]:
-                    if op1_installer_t is None and os.path.exists(INSTALLER_EXECUTED_PATH):
-                        op1_installer_t = time.time()
-                    if op1_installer_t and (now - op1_installer_t) >= 50:
-                        if op_win and "GX" in (op_win.window_text() or "").upper():
-                            op1_done = True  # resolved to GX
-                        else:
-                            opera_one_post_install_win(op_win, sw_type)
-                            op1_done = True
+                      # Post-install triggers
+                      if action_mode == "install" and not op1_done:
+                          if sw_type in ["opera_one","dynamic_opera","ad_mvn","opera_smart_link"]:
+                              if op1_installer_t is None and os.path.exists(INSTALLER_EXECUTED_PATH):
+                                  op1_installer_t = time.time()
+                              if op1_installer_t and (now - op1_installer_t) >= 50:
+                                  if op_win and "GX" in (op_win.window_text() or "").upper():
+                                      op1_done = True
+                                  else:
+                                      opera_one_post_install_win(op_win, sw_type)
+                                      op1_done = True
 
-            if action_mode == "install" and not opgx_done:
-                if sw_type in ["opera_gx","dynamic_opera","ad_mvn","opera_smart_link"]:
-                    if opgx_installer_t is None and os.path.exists(INSTALLER_EXECUTED_PATH):
-                        opgx_installer_t = time.time()
-                    if opgx_installer_t and (now - opgx_installer_t) >= 40:
-                        if op_win and "GX" not in (op_win.window_text() or "").upper():
-                            opgx_done = True
-                        else:
-                            opera_gx_post_install_win(op_win, sw_type)
-                            opgx_done = True
+                      if action_mode == "install" and not opgx_done:
+                          if sw_type in ["opera_gx","dynamic_opera","ad_mvn","opera_smart_link"]:
+                              if opgx_installer_t is None and os.path.exists(INSTALLER_EXECUTED_PATH):
+                                  opgx_installer_t = time.time()
+                              if opgx_installer_t and (now - opgx_installer_t) >= 40:
+                                  if op_win and "GX" not in (op_win.window_text() or "").upper():
+                                      opgx_done = True
+                                  else:
+                                      opera_gx_post_install_win(op_win, sw_type)
+                                      opgx_done = True
 
-            if sw_type == "avg" and action_mode == "install" and not avg_done:
-                if avg_installer_t is None and os.path.exists(INSTALLER_EXECUTED_PATH):
-                    avg_installer_t = time.time()
-                if avg_installer_t and (now - avg_installer_t) >= 60:
-                    avg_post_install_win(avg_app_win)
-                    avg_done = True
+                      if sw_type == "avg" and action_mode == "install" and not avg_done:
+                          if avg_installer_t is None and os.path.exists(INSTALLER_EXECUTED_PATH):
+                              avg_installer_t = time.time()
+                          if avg_installer_t and (now - avg_installer_t) >= 60:
+                              avg_post_install_win(avg_app_win)
+                              avg_done = True
 
-            # Smart-link interstitial bypass (Tab+Enter after 20s)
-            active_browser = edge_win or orbita_win2
-            if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
-                if not smart_link_done and active_browser and (now - proxy_auth_t) > 20:
-                    try:
-                        active_browser.set_focus(); time.sleep(0.5)
-                        send_keys("{TAB}"); time.sleep(0.5); send_keys("{ENTER}")
-                        log("SmartLink", "Tab+Enter interstitial bypass sent.")
-                    except Exception as e: log("SmartLink", f"Bypass error: {e}")
-                    smart_link_done = True; smart_link_t = now
+                      # Smart‑link bypass (Tab+Enter after 20s)
+                      active_browser = edge_win or orbita_win2
+                      if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                          if not smart_link_done and active_browser and (now - proxy_auth_t) > 20:
+                              try:
+                                  active_browser.set_focus(); time.sleep(0.5)
+                                  send_keys("{TAB}"); time.sleep(0.5); send_keys("{ENTER}")
+                                  log("SmartLink", "Tab+Enter interstitial bypass sent.")
+                              except Exception as e: log("SmartLink", f"Bypass error: {e}")
+                              smart_link_done = True; smart_link_t = now
 
-            # Click-only mode: exit after interstitial
-            if action_mode == "click":
-                if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
-                    if not smart_link_done: time.sleep(1); continue
-                    if now - smart_link_t < 15: time.sleep(1); continue
-                time.sleep(1); continue
+                      # Click‑only mode
+                      if action_mode == "click":
+                          if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                              if not smart_link_done: time.sleep(1); continue
+                              if now - smart_link_t < 15: time.sleep(1); continue
+                          time.sleep(1); continue
 
-            # Edge download protection (Keep / Keep anyway)
-            if edge_win and action_mode == "install":
-                for btn_name in ["Keep", "Keep anyway"]:
-                    for btn in edge_win.descendants(control_type="Button", title=btn_name):
-                        try:
-                            btn.click_input(); keep_clicked = True; time.sleep(0.5)
-                        except Exception: pass
+                      # Edge download protection (Keep / Keep anyway)
+                      if edge_win and action_mode == "install":
+                          for btn_name in ["Keep", "Keep anyway"]:
+                              for btn in edge_win.descendants(control_type="Button", title=btn_name):
+                                  try:
+                                      btn.click_input(); keep_clicked = True; time.sleep(0.5)
+                                  except Exception: pass
 
-            # Download button clicker (Opera types)
-            can_dl = True
-            if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
-                if not smart_link_done or (now - smart_link_t < 15):
-                    can_dl = False
-            if edge_win and action_mode == "install" and can_dl and sw_type not in ["avg"]:
-                if now - last_dl_click_t > 5:
-                    for btn in (edge_win.descendants(control_type="Button") or []):
-                        btxt = btn.window_text() or ""
-                        if any(k in btxt.lower() for k in ["download opera","download now","télécharger"]):
-                            try:
-                                edge_win.set_focus(); time.sleep(0.5)
-                                btn.click_input(); last_dl_click_t = now
-                                log("Download", f"Clicked: '{btxt}'"); break
-                            except Exception: pass
+                      # Download button clicker (Opera types)
+                      can_dl = True
+                      if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                          if not smart_link_done or (now - smart_link_t < 15):
+                              can_dl = False
+                      if edge_win and action_mode == "install" and can_dl and sw_type not in ["avg"]:
+                          if now - last_dl_click_t > 5:
+                              for btn in (edge_win.descendants(control_type="Button") or []):
+                                  btxt = btn.window_text() or ""
+                                  if any(k in btxt.lower() for k in ["download opera","download now","télécharger"]):
+                                      try:
+                                          edge_win.set_focus(); time.sleep(0.5)
+                                          btn.click_input(); last_dl_click_t = now
+                                          log("Download", f"Clicked: '{btxt}'"); break
+                                      except Exception: pass
 
-            # AVG download trigger (Tab+Enter after 20s)
-            if edge_win and sw_type == "avg" and action_mode == "install":
-                if not avg_dl_clicked and (now - proxy_auth_t) > 20:
-                    try:
-                        edge_win.set_focus(); time.sleep(0.5)
-                        send_keys("{TAB}"); time.sleep(random.uniform(1, 2))
-                        send_keys("{ENTER}")
-                        log("AVG", "Download trigger sent.")
-                        for w in range(10):
-                            log("AVG", f"  Init wait {w+1}/10s"); time.sleep(1)
-                    except Exception as e: log("AVG", f"Trigger error: {e}")
-                    avg_dl_clicked = True
+                      # AVG download trigger
+                      if edge_win and sw_type == "avg" and action_mode == "install":
+                          if not avg_dl_clicked and (now - proxy_auth_t) > 20:
+                              try:
+                                  edge_win.set_focus(); time.sleep(0.5)
+                                  send_keys("{TAB}"); time.sleep(random.uniform(1, 2))
+                                  send_keys("{ENTER}")
+                                  log("AVG", "Download trigger sent.")
+                                  for w in range(10):
+                                      log("AVG", f"  Init wait {w+1}/10s"); time.sleep(1)
+                              except Exception as e: log("AVG", f"Trigger error: {e}")
+                              avg_dl_clicked = True
 
-            # Ctrl+J download panel
-            can_ctrlj = not (sw_type == "avg" and not avg_dl_clicked)
-            if (action_mode == "install" and not keep_clicked and edge_win
-                    and can_ctrlj and (now - last_ctrl_j_t > 15) and ctrl_j_attempts < 4):
-                try:
-                    edge_win.set_focus(); time.sleep(0.5)
-                    send_keys("^j")
-                    last_ctrl_j_t = now; ctrl_j_attempts += 1
-                    log("Utility", f"Ctrl+J attempt {ctrl_j_attempts}/4")
-                except Exception: pass
+                      # Ctrl+J downloads panel
+                      can_ctrlj = not (sw_type == "avg" and not avg_dl_clicked)
+                      if (action_mode == "install" and not keep_clicked and edge_win
+                              and can_ctrlj and (now - last_ctrl_j_t > 15) and ctrl_j_attempts < 4):
+                          try:
+                              edge_win.set_focus(); time.sleep(0.5)
+                              send_keys("^j")
+                              last_ctrl_j_t = now; ctrl_j_attempts += 1
+                              log("Utility", f"Ctrl+J attempt {ctrl_j_attempts}/4")
+                          except Exception: pass
 
-        except Exception as e:
-            log("Main", f"Loop exception: {e}")
-        time.sleep(1)
+                  except Exception as e:
+                      log("Main", f"Loop exception: {e}")
+                  time.sleep(1)
 
-    log("Main", "Automation loop complete.")
+              log("Main", "Automation loop complete.")
 
-handle_automation_win(SOFTWARE_TYPE, ACTION_MODE)
-'@
-          # Write the Python script to disk
-          $scriptPath = "$env:TEMP\win_handler.py"
-          $script | Out-File -FilePath $scriptPath -Encoding utf8
+          handle_automation_win(SOFTWARE_TYPE, ACTION_MODE)
+          '@
 
-          # ── Start background Python automation handler ─────────────────
+          $pyScriptPath = "$env:TEMP\win_handler.py"
+          $pyScript | Out-File -FilePath $pyScriptPath -Encoding utf8
+
+          # Start the Python handler in background
           Write-Host "[*] Starting Python automation handler..." -ForegroundColor Cyan
-          $handlerProc = Start-Process -FilePath python `
-            -ArgumentList "-u `"$scriptPath`"" `
-            -PassThru -WindowStyle Hidden
+          $handlerProc = Start-Process -FilePath python -ArgumentList "-u `"$pyScriptPath`"" -PassThru -WindowStyle Hidden
           Write-Host "[*] Handler PID: $($handlerProc.Id)" -ForegroundColor Cyan
 
-          # ── INSTALL PATH: file watcher for the downloaded EXE ──────────
+          # Windows install watcher
           if ($env:ACTION_MODE -eq "install") {
             Write-Host "[Watcher] INSTALL path active. Watching Downloads..." -ForegroundColor Cyan
-            $dlFolder              = "$env:USERPROFILE\Downloads"
-            $timeoutSecs           = 3300
-            $softwareType          = $env:SOFTWARE_TYPE
-            $exeFilter             = $env:EXE_FILTER
-            $sentinelPath          = "$env:TEMP\download_done.flag"
-            $installerSentinel     = "$env:TEMP\installer_executed.flag"
+            $dlFolder          = "$env:USERPROFILE\Downloads"
+            $timeoutSecs       = 3300
+            $softwareType      = $env:SOFTWARE_TYPE
+            $exeFilter         = $env:EXE_FILTER
+            $sentinelPath      = "$env:TEMP\download_done.flag"
+            $installerSentinel = "$env:TEMP\installer_executed.flag"
 
             $installJob = Start-Job -ScriptBlock {
               param($dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath, $installerSentinel)
@@ -863,7 +838,6 @@ handle_automation_win(SOFTWARE_TYPE, ACTION_MODE)
                   $file = $candidates[0]
                   Write-Output "[$softwareType-WATCHER] Payload found: $($file.Name)"
                   try { Set-Content -Path $sentinelPath -Value "done" -ErrorAction SilentlyContinue } catch {}
-
                   # Close Edge download tabs
                   $wsh = New-Object -ComObject WScript.Shell
                   for ($ca = 1; $ca -le 4; $ca++) {
@@ -877,15 +851,12 @@ handle_automation_win(SOFTWARE_TYPE, ACTION_MODE)
                     }
                     Start-Sleep -Milliseconds 800
                   }
-
-                  # Fingerprint actual software type
                   $actualSw = $softwareType
                   if ($softwareType -in @("ad_mvn","dynamic_opera","opera_smart_link")) {
                     if ($file.Name -match "OperaGX") { $actualSw = "opera_gx" }
                     else { $actualSw = "opera_one" }
                   }
-
-                  # Wait for file I/O unlock
+                  # Wait for file unlock
                   $locked = $true
                   while ($locked) {
                     Start-Sleep -Seconds 2
@@ -895,17 +866,12 @@ handle_automation_win(SOFTWARE_TYPE, ACTION_MODE)
                       Write-Output "[$actualSw-INSTALL] File unlocked."
                     } catch {}
                   }
-
-                  # Write installer-executed sentinel
                   try { Set-Content -Path $installerSentinel -Value "done" } catch {}
                   Write-Output "[$actualSw-INSTALL] Installer sentinel written."
-
-                  # Execute installer silently
                   Write-Output "[$actualSw-INSTALL] Running: $($file.FullName) /silent"
                   try { Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait }
                   catch { Write-Output "[$actualSw-INSTALL] Installer error: $_" }
-
-                  # Find and launch installed app
+                  # Launch installed app
                   $appPaths = if ($actualSw -eq "opera_gx") {
                     @("$env:LOCALAPPDATA\Programs\Opera GX\launcher.exe",
                       "C:\Program Files\Opera GX\launcher.exe",
@@ -960,7 +926,7 @@ handle_automation_win(SOFTWARE_TYPE, ACTION_MODE)
           Write-Host "Session complete. Runner stays online to exhaust timeout." -ForegroundColor DarkGray
           Start-Sleep -Seconds 3600
 
-      # ═════════════ macOS ════════════════════════════════════════════════════
+      # ═════════════ macOS STEPS ═════════════════════════════════════════════
       - name: Setup GUI Auth Credentials & Disable Gatekeeper (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -1144,338 +1110,476 @@ handle_automation_win(SOFTWARE_TYPE, ACTION_MODE)
           INSTALLER_SENTINEL="/tmp/installer_executed.flag"
           TIMEOUT_SECS=3300
 
-          # Write macOS Python handler
+          # Write the complete macOS Python handler
           cat > /tmp/macos_handler.py << 'PYEOF'
-import time, sys, os, subprocess, random
+          import time, sys, os, subprocess, random
 
-TARGET_URL    = os.environ.get("TARGET_URL", "")
-SOFTWARE_TYPE = os.environ.get("SOFTWARE_TYPE", "dynamic_opera")
-DMG_FILTER    = os.environ.get("DMG_FILTER", "*Opera*")
-ACTION_MODE   = os.environ.get("ACTION_MODE", "install")
+          TARGET_URL    = os.environ.get("TARGET_URL", "")
+          SOFTWARE_TYPE = os.environ.get("SOFTWARE_TYPE", "dynamic_opera")
+          DMG_FILTER    = os.environ.get("DMG_FILTER", "*Opera*")
+          ACTION_MODE   = os.environ.get("ACTION_MODE", "install")
 
-def log(msg):
-    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+          def log(msg):
+              print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
-CHROME_WARMUP_SECS = 20
-DL_WAIT_POST_NAV   = 30
+          CHROME_WARMUP_SECS = 20
+          DL_WAIT_POST_NAV   = 30
 
-def run_as(script, silent=False, timeout=20):
-    try:
-        r = subprocess.run(["osascript", "-e", script],
-            capture_output=True, text=True, timeout=timeout)
-        if r.returncode != 0 and not silent:
-            log(f"[AppleScript] stderr: {r.stderr.strip()[:120]}")
-        return r.stdout.strip()
-    except subprocess.TimeoutExpired:
-        if not silent: log("[AppleScript] Timed out")
-        return ""
-    except Exception as e:
-        if not silent: log(f"[AppleScript] Exception: {e}")
-        return ""
+          def run_as(script, silent=False, timeout=20):
+              try:
+                  r = subprocess.run(["osascript", "-e", script],
+                      capture_output=True, text=True, timeout=timeout)
+                  if r.returncode != 0 and not silent:
+                      log(f"[AppleScript] stderr: {r.stderr.strip()[:120]}")
+                  return r.stdout.strip()
+              except subprocess.TimeoutExpired:
+                  if not silent: log("[AppleScript] Timed out")
+                  return ""
+              except Exception as e:
+                  if not silent: log(f"[AppleScript] Exception: {e}")
+                  return ""
 
-def clipboard_set(text):
-    try:
-        p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        p.communicate(input=text.encode("utf-8"), timeout=5)
-        time.sleep(0.15)
-    except Exception as e:
-        log(f"[Clipboard] pbcopy error: {e}")
+          def clipboard_set(text):
+              try:
+                  p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE,
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                  p.communicate(input=text.encode("utf-8"), timeout=5)
+                  time.sleep(0.15)
+              except Exception as e:
+                  log(f"[Clipboard] pbcopy error: {e}")
 
-def press(key_name):
-    key_map = {"tab":48,"return":36,"space":49,"right":124,"left":123,
-               "up":126,"down":125,"escape":53,"f5":96}
-    code = key_map.get(key_name.lower())
-    if code:
-        run_as(f'tell application "System Events" to key code {code}', silent=True)
+          def press(key_name):
+              key_map = {"tab":48,"return":36,"space":49,"right":124,"left":123,
+                         "up":126,"down":125,"escape":53,"f5":96}
+              code = key_map.get(key_name.lower())
+              if code:
+                  run_as(f'tell application "System Events" to key code {code}', silent=True)
 
-def running_apps():
-    r = run_as('tell application "System Events" to get name of every process whose visible is true',
-               silent=True)
-    return [n.strip() for n in r.split(",") if n.strip()]
+          def running_apps():
+              r = run_as('tell application "System Events" to get name of every process whose visible is true',
+                         silent=True)
+              return [n.strip() for n in r.split(",") if n.strip()]
 
-# ── Orbita detection ──────────────────────────────────────────────────────
-ORBITA_FRAGMENTS = ["orbita", "gologin browser", "gl browser", "gl-browser"]
+          # ── Orbita detection ──────────────────────────────────────────────
+          ORBITA_FRAGMENTS = ["orbita", "gologin browser", "gl browser", "gl-browser"]
 
-def find_orbita_app():
-    apps = running_apps()
-    for a in apps:
-        if any(f in a.lower() for f in ORBITA_FRAGMENTS):
-            return a
-    # Also check process list
-    try:
-        r = subprocess.run(["ps", "aux"], capture_output=True, text=True, timeout=5)
-        for line in r.stdout.splitlines():
-            ll = line.lower()
-            if any(f in ll for f in ORBITA_FRAGMENTS):
-                parts = line.split()
-                if len(parts) > 10:
-                    return os.path.basename(parts[10])
-    except Exception: pass
-    return None
+          def find_orbita_app():
+              apps = running_apps()
+              for a in apps:
+                  if any(f in a.lower() for f in ORBITA_FRAGMENTS):
+                      return a
+              try:
+                  r = subprocess.run(["ps", "aux"], capture_output=True, text=True, timeout=5)
+                  for line in r.stdout.splitlines():
+                      ll = line.lower()
+                      if any(f in ll for f in ORBITA_FRAGMENTS):
+                          parts = line.split()
+                          if len(parts) > 10:
+                              return os.path.basename(parts[10])
+              except Exception: pass
+              return None
 
-def wait_for_orbita(max_wait=300):
-    log(f"[OrbitaWait] Waiting up to {max_wait}s for Orbita profile...")
-    deadline = time.time() + max_wait
-    while time.time() < deadline:
-        orbita = find_orbita_app()
-        if orbita:
-            log(f"[OrbitaWait] Orbita detected: '{orbita}'")
-            return orbita
-        time.sleep(2)
-    log("[OrbitaWait] Orbita did not appear within timeout.")
-    return None
+          def wait_for_orbita(max_wait=300):
+              log(f"[OrbitaWait] Waiting up to {max_wait}s for Orbita profile...")
+              deadline = time.time() + max_wait
+              while time.time() < deadline:
+                  orbita = find_orbita_app()
+                  if orbita:
+                      log(f"[OrbitaWait] Orbita detected: '{orbita}'")
+                      return orbita
+                  time.sleep(2)
+              log("[OrbitaWait] Orbita did not appear within timeout.")
+              return None
 
-def navigate_orbita_to_url(orbita_app_name, url):
-    log(f"[OrbitaNav] Navigating '{orbita_app_name}' to: {url}")
-    # Activate
-    run_as(f'tell application "{orbita_app_name}" to activate', silent=True)
-    time.sleep(1.5)
-    # Cmd+L → select all → paste URL → Enter
-    run_as(f'tell application "System Events" to tell process "{orbita_app_name}" to keystroke "l" using command down',
-           silent=True)
-    time.sleep(0.8)
-    run_as('tell application "System Events" to keystroke "a" using command down', silent=True)
-    time.sleep(0.2)
-    clipboard_set(url)
-    time.sleep(0.2)
-    run_as('tell application "System Events" to keystroke "v" using command down', silent=True)
-    time.sleep(0.5)
-    press("return")
-    log("[OrbitaNav] URL entered via Cmd+L + paste.")
-    time.sleep(2)
+          def navigate_orbita_to_url(orbita_app_name, url):
+              log(f"[OrbitaNav] Navigating '{orbita_app_name}' to: {url}")
+              run_as(f'tell application "{orbita_app_name}" to activate', silent=True)
+              time.sleep(1.5)
+              run_as(f'tell application "System Events" to tell process "{orbita_app_name}" to keystroke "l" using command down',
+                     silent=True)
+              time.sleep(0.8)
+              run_as('tell application "System Events" to keystroke "a" using command down', silent=True)
+              time.sleep(0.2)
+              clipboard_set(url)
+              time.sleep(0.2)
+              run_as('tell application "System Events" to keystroke "v" using command down', silent=True)
+              time.sleep(0.5)
+              press("return")
+              log("[OrbitaNav] URL entered via Cmd+L + paste.")
+              time.sleep(2)
 
-def close_orbita_tab(orbita_app):
-    """Close the GoLogin profile tab without quitting the app."""
-    run_as(f'tell application "{orbita_app}" to activate', silent=True)
-    time.sleep(0.5)
-    run_as(f'tell application "System Events" to tell process "{orbita_app}" to keystroke "w" using command down',
-           silent=True)
-    log("[CloseTab] Sent Cmd+W to close GoLogin profile tab.")
+          def close_orbita_tab(orbita_app):
+              run_as(f'tell application "{orbita_app}" to activate', silent=True)
+              time.sleep(0.5)
+              run_as(f'tell application "System Events" to tell process "{orbita_app}" to keystroke "w" using command down',
+                     silent=True)
+              log("[CloseTab] Sent Cmd+W to close GoLogin profile tab.")
 
-def dismiss_popups():
-    run_as(r'''
-tell application "System Events"
-  try
-    tell process "CoreServicesUIAgent"
-      repeat with win in (every window)
-        try
-          if exists button "Allow" of win then click button "Allow" of win
-        end try
-      end repeat
-    end tell
-  end try
-  repeat with proc in (every process whose visible is true)
-    set pName to name of proc as string
-    if pName is not in {"Google Chrome", "Orbita", "GoLogin"} then
-      try
-        repeat with win in (every window of proc)
-          try
-            if (exists button "Allow" of win) and (exists button "Don't Allow" of win) then
-              click button "Allow" of win
-            end if
-          end try
-        end repeat
-      end try
-    end if
-  end repeat
-end tell
-''', silent=True)
+          def dismiss_popups():
+              run_as(r'''
+          tell application "System Events"
+            try
+              tell process "CoreServicesUIAgent"
+                repeat with win in (every window)
+                  try
+                    if exists button "Allow" of win then click button "Allow" of win
+                  end try
+                end repeat
+              end tell
+            end try
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName is not in {"Google Chrome", "Orbita", "GoLogin"} then
+                try
+                  repeat with win in (every window of proc)
+                    try
+                      if (exists button "Allow" of win) and (exists button "Don't Allow" of win) then
+                        click button "Allow" of win
+                      end if
+                    end try
+                  end repeat
+                end try
+              end if
+            end repeat
+          end tell
+          ''', silent=True)
 
-def smart_link_bypass(orbita_app):
-    log("[SmartLink] Executing Tab+Enter interstitial bypass...")
-    run_as(f'tell application "{orbita_app}" to activate', silent=True)
-    time.sleep(1)
-    press("tab"); time.sleep(0.5)
-    press("return")
+          def smart_link_bypass(orbita_app):
+              log("[SmartLink] Executing Tab+Enter interstitial bypass...")
+              run_as(f'tell application "{orbita_app}" to activate', silent=True)
+              time.sleep(1)
+              press("tab"); time.sleep(0.5)
+              press("return")
 
-def click_dl_button(orbita_app):
-    log("[DLButton] Activating browser and pressing 3 Tabs then Enter...")
-    run_as(f'tell application "{orbita_app}" to activate', silent=True)
-    time.sleep(5)
-    for i in range(3):
-        press("tab"); time.sleep(5)
-    press("return")
+          def click_dl_button(orbita_app):
+              log("[DLButton] Activating browser and pressing 3 Tabs then Enter...")
+              run_as(f'tell application "{orbita_app}" to activate', silent=True)
+              time.sleep(5)
+              for i in range(3):
+                  press("tab"); time.sleep(5)
+              press("return")
 
-# ── Post-install flows (macOS) ────────────────────────────────────────────
-def opera_gx_flow_mac(orbita_app):
-    log("[PostInstall-GX] === Opera GX Post-Install (macOS) STARTING ===")
-    # … (unchanged, omitted for brevity – the full code from original is kept)
-    log("[PostInstall-GX] NOTICE: Full Opera GX post-install code is present (omitted for brevity).")
-    # (In actual file, include the full opera_gx_flow_mac function from the original script)
+          # ── Post‑install flows (macOS) ─────────────────────────────────────
+          def opera_gx_flow_mac(orbita_app):
+              log("[PostInstall-GX] === Opera GX Post-Install (macOS) STARTING ===")
+              if not wait_for_app_launch("Opera GX", timeout=120):
+                  log("[PostInstall-GX] Opera GX not found. Aborting."); return
+              run_as('tell application "Opera GX" to activate', silent=True)
+              time.sleep(2)
+              t0 = time.time(); popup_count = 0
+              while time.time() - t0 < 10:
+                  dismiss_popups(); popup_count += 1; time.sleep(0.5)
+              log(f"[PostInstall-GX] Dismissed popups ({popup_count} sweeps).")
+              r = run_as(r'''
+          tell application "System Events"
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName contains "Opera GX" then
+                try
+                  repeat with win in (every window of proc)
+                    try
+                      if exists button "Accept and Install" of win then
+                        click button "Accept and Install" of win
+                        return "clicked"
+                      end if
+                    end try
+                  end repeat
+                end try
+              end if
+            end repeat
+            return "not_found"
+          end tell''', silent=True)
+              if r == "not_found":
+                  log("[PostInstall-GX] Button not found — Tab x3 + Enter fallback...")
+                  for _ in range(3): press("tab"); time.sleep(0.5)
+                  press("return")
+              else:
+                  log(f"[PostInstall-GX] Button result: {r}")
+              log("[PostInstall-GX] Waiting 30s for install...")
+              for s in range(30):
+                  dismiss_popups()
+                  if s % 10 == 0 and s > 0: log(f"[PostInstall-GX]   {s}/30s elapsed")
+                  time.sleep(1)
+              log("[PostInstall-GX] Tab x4 → Enter x8...")
+              for _ in range(4): press("tab"); time.sleep(0.5)
+              for i in range(8):
+                  d = random.uniform(1.0, 2.0)
+                  press("return"); time.sleep(d); dismiss_popups()
+              time.sleep(5)
+              tab_count = random.randint(6, 14)
+              log(f"[PostInstall-GX] Cmd+N then Tab x{tab_count}...")
+              run_as('tell application "System Events" to keystroke "n" using command down', silent=True)
+              time.sleep(random.uniform(1, 2))
+              for i in range(tab_count):
+                  press("tab"); time.sleep(random.uniform(1.0, 2.0)); dismiss_popups()
+              press("return")
+              log("[PostInstall-GX] === Opera GX Post-Install COMPLETE ===")
 
-def opera_one_flow_mac(orbita_app):
-    log("[PostInstall-OP1] === Opera One Post-Install (macOS) STARTING ===")
-    # … (unchanged, omitted for brevity – full code is included)
-    log("[PostInstall-OP1] NOTICE: Full Opera One post-install code is present (omitted for brevity).")
-    # (In actual file, include the full opera_one_flow_mac function)
+          def opera_one_flow_mac(orbita_app):
+              log("[PostInstall-OP1] === Opera One Post-Install (macOS) STARTING ===")
+              if not wait_for_app_launch("Opera Installer", timeout=120):
+                  if not wait_for_app_launch("Opera", timeout=60):
+                      log("[PostInstall-OP1] Opera not found. Aborting."); return
+              run_as('tell application "System Events" to tell process "Opera Installer" to set frontmost to true',
+                     silent=True)
+              time.sleep(2)
+              t0 = time.time()
+              while time.time() - t0 < 10:
+                  dismiss_popups(); time.sleep(0.5)
+              r = run_as(r'''
+          tell application "System Events"
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName contains "Opera" then
+                try
+                  repeat with win in (every window of proc)
+                    try
+                      if exists button "Accept and Install" of win then
+                        click button "Accept and Install" of win
+                        return "clicked"
+                      end if
+                    end try
+                  end repeat
+                end try
+              end if
+            end repeat
+            return "not_found"
+          end tell''', silent=True)
+              if r == "not_found":
+                  for _ in range(3): press("tab"); time.sleep(0.5)
+                  press("return")
+              log("[PostInstall-OP1] Waiting 30s for Opera install...")
+              for s in range(30):
+                  dismiss_popups()
+                  if s % 10 == 0 and s > 0: log(f"[PostInstall-OP1]   {s}/30s elapsed")
+                  time.sleep(1)
+              log("[PostInstall-OP1] Clicking Next x7 (3s each)...")
+              for i in range(1, 8):
+                  # click_button_orbita defined inline for simplicity:
+                  clicked = False
+                  for name in ["Next"]:
+                      res = run_as(f'''
+          tell application "System Events"
+            tell process "Opera Installer"
+              repeat with win in (every window)
+                try
+                  if exists button "{name}" of win then
+                    click button "{name}" of win
+                    return "clicked"
+                  end if
+                end try
+              end repeat
+            end tell
+            return "not_found"
+          end tell''', silent=True, timeout=5)
+                      if res == "clicked":
+                          clicked = True; break
+                  if not clicked:
+                      press("tab"); time.sleep(0.3)
+                      press("return")
+                  dismiss_popups(); time.sleep(3)
+              # Get Started
+              run_as(f'''
+          tell application "System Events"
+            tell process "Opera Installer"
+              try
+                if exists button "Get Started" of window 1 then
+                  click button "Get Started" of window 1
+                end if
+              end try
+            end tell
+          end tell''', silent=True)
+              time.sleep(2)
+              if not run_as(f'''
+          tell application "System Events"
+            tell process "Opera Installer"
+              try
+                if exists button "Submit" of window 1 then
+                  click button "Submit" of window 1
+                  return "clicked"
+                end if
+              end try
+            end tell
+            return "not_found"
+          end tell''', silent=True) == "clicked":
+                  press("return")
+              time.sleep(2)
+              run_as('tell application "System Events" to keystroke "n" using command down', silent=True)
+              time.sleep(random.uniform(1, 2))
+              tab_count = random.randint(6, 12)
+              log(f"[PostInstall-OP1] Tab x{tab_count}...")
+              for _ in range(tab_count):
+                  press("tab"); time.sleep(random.uniform(1, 2)); dismiss_popups()
+              press("return")
+              log("[PostInstall-OP1] === Opera One Post-Install COMPLETE ===")
 
-# ══════════════════════════════════════════════════════════════════════════
-# MAIN HANDLER (macOS)
-# ══════════════════════════════════════════════════════════════════════════
-def handle(sw_type, action_mode, timeout=3300):
-    t0                  = time.time()
-    sentinel            = "/tmp/download_done.flag"
-    installer_sentinel  = "/tmp/installer_executed.flag"
+          def wait_for_app_launch(app_name, timeout=120):
+              start = time.time()
+              while time.time() - start < timeout:
+                  apps = running_apps()
+                  if any(app_name.lower() in a.lower() for a in apps):
+                      log(f"[LaunchDetect] '{app_name}' is running!")
+                      time.sleep(2); return True
+                  time.sleep(1)
+              log(f"[LaunchDetect] '{app_name}' did not launch.")
+              return False
 
-    orbita_app_first_seen = None
-    nav_done              = False
-    dl_clicked            = False
-    browser_closed        = False
-    setup_done            = False
-    op_launch_t           = None
-    smart_link_done       = False
-    smart_link_t          = 0
-    nav_done_t            = None
-    last_popup_t          = 0
-    last_dl_t             = 0
+          # ══════════════════════════════════════════════════════════════════
+          # MAIN HANDLER (macOS)
+          # ══════════════════════════════════════════════════════════════════
+          def handle(sw_type, action_mode, timeout=3300):
+              t0                  = time.time()
+              sentinel            = "/tmp/download_done.flag"
+              installer_sentinel  = "/tmp/installer_executed.flag"
 
-    log(f"[Handler] Started | type={sw_type} | action={action_mode}")
+              orbita_app_first_seen = None
+              nav_done              = False
+              dl_clicked            = False
+              browser_closed        = False
+              setup_done            = False
+              op_launch_t           = None
+              smart_link_done       = False
+              smart_link_t          = 0
+              nav_done_t            = None
+              last_popup_t          = 0
+              last_dl_t             = 0
 
-    # Step 1: Wait for Orbita
-    orbita_app = wait_for_orbita(max_wait=300)
-    if not orbita_app:
-        log("[Handler] Orbita never opened. Exiting."); return
+              log(f"[Handler] Started | type={sw_type} | action={action_mode}")
 
-    orbita_app_first_seen = time.time()
-    log(f"[Handler] Orbita app: '{orbita_app}' | warming up 20s before navigation...")
-    time.sleep(20)
+              orbita_app = wait_for_orbita(max_wait=300)
+              if not orbita_app:
+                  log("[Handler] Orbita never opened. Exiting."); return
 
-    # Step 2: Navigate to target URL
-    navigate_orbita_to_url(orbita_app, TARGET_URL)
-    nav_done   = True
-    nav_done_t = time.time()
-    log(f"[Handler] Navigation complete. Will monitor for {timeout}s total.")
+              orbita_app_first_seen = time.time()
+              log(f"[Handler] Orbita app: '{orbita_app}' | warming up 20s before navigation...")
+              time.sleep(20)
 
-    while time.time() - t0 < timeout:
-        try:
-            elapsed = int(time.time() - t0)
-            apps    = running_apps()
-            has_orbita = any(any(f in a.lower() for f in ORBITA_FRAGMENTS) for a in apps)
-            op_gx  = any("Opera GX" in a for a in apps)
-            op_one = any(("Opera" in a and "Opera GX" not in a) or "Opera Installer" in a for a in apps)
+              navigate_orbita_to_url(orbita_app, TARGET_URL)
+              nav_done   = True
+              nav_done_t = time.time()
+              log(f"[Handler] Navigation complete. Will monitor for {timeout}s total.")
 
-            now = time.time()
-            if now - last_popup_t > 3:
-                dismiss_popups(); last_popup_t = now
+              while time.time() - t0 < timeout:
+                  try:
+                      elapsed = int(time.time() - t0)
+                      apps    = running_apps()
+                      has_orbita = any(any(f in a.lower() for f in ORBITA_FRAGMENTS) for a in apps)
+                      op_gx  = any("Opera GX" in a for a in apps)
+                      op_one = any(("Opera" in a and "Opera GX" not in a) or "Opera Installer" in a for a in apps)
 
-            # Smart-link interstitial
-            if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
-                if not smart_link_done and nav_done and nav_done_t and (now - nav_done_t >= 20):
-                    smart_link_bypass(orbita_app)
-                    smart_link_done = True; smart_link_t = now
+                      now = time.time()
+                      if now - last_popup_t > 3:
+                          dismiss_popups(); last_popup_t = now
 
-            if action_mode == "click":
-                if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
-                    if not smart_link_done: time.sleep(1); continue
-                    if now - smart_link_t < 15: time.sleep(1); continue
-                    log("[Handler] CLICK-ONLY: interstitial done. Closing tab.")
-                    close_orbita_tab(orbita_app)
-                    log("[Handler] CLICK-ONLY pathway complete."); return
-                else:
-                    if nav_done and elapsed > (20 + 30):
-                        log("[Handler] CLICK-ONLY: page loaded. Closing tab.")
-                        close_orbita_tab(orbita_app)
-                        log("[Handler] CLICK-ONLY pathway complete."); return
-                time.sleep(1); continue
+                      if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                          if not smart_link_done and nav_done and nav_done_t and (now - nav_done_t >= 20):
+                              smart_link_bypass(orbita_app)
+                              smart_link_done = True; smart_link_t = now
 
-            # Download button click
-            if has_orbita and not dl_clicked:
-                ready = True
-                if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
-                    ready = smart_link_done and (now - smart_link_t >= 10)
-                if ready and nav_done_t and (now - nav_done_t) > DL_WAIT_POST_NAV:
-                    if now - last_dl_t > 10:
-                        last_dl_t = now
-                        click_dl_button(orbita_app)
-                        dl_clicked = True
+                      if action_mode == "click":
+                          if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                              if not smart_link_done: time.sleep(1); continue
+                              if now - smart_link_t < 15: time.sleep(1); continue
+                              log("[Handler] CLICK-ONLY: interstitial done. Closing tab.")
+                              close_orbita_tab(orbita_app)
+                              log("[Handler] CLICK-ONLY pathway complete."); return
+                          else:
+                              if nav_done and elapsed > (20 + 30):
+                                  log("[Handler] CLICK-ONLY: page loaded. Closing tab.")
+                                  close_orbita_tab(orbita_app)
+                                  log("[Handler] CLICK-ONLY pathway complete."); return
+                          time.sleep(1); continue
 
-            # When download sentinel appears, close GoLogin profile tab
-            if not browser_closed and os.path.exists(sentinel):
-                log("[Handler] Download sentinel found — closing profile tab...")
-                close_orbita_tab(orbita_app)
-                time.sleep(2)
-                browser_closed = True
+                      if has_orbita and not dl_clicked:
+                          ready = True
+                          if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                              ready = smart_link_done and (now - smart_link_t >= 10)
+                          if ready and nav_done_t and (now - nav_done_t) > DL_WAIT_POST_NAV:
+                              if now - last_dl_t > 10:
+                                  last_dl_t = now
+                                  click_dl_button(orbita_app)
+                                  dl_clicked = True
 
-            # Post-install (simplified calls – full functions are included in the file)
-            if sw_type in ["opera_gx","dynamic_opera","opera_smart_link","ad_mvn"]:
-                if op_gx and not setup_done:
-                    if not op_launch_t:
-                        op_launch_t = now
-                        run_as('tell application "Opera GX" to activate', silent=True)
-                    if now - op_launch_t > 5:
-                        opera_gx_flow_mac(orbita_app); setup_done = True; break
+                      if not browser_closed and os.path.exists(sentinel):
+                          log("[Handler] Download sentinel found — closing profile tab...")
+                          close_orbita_tab(orbita_app)
+                          time.sleep(2)
+                          browser_closed = True
 
-            if sw_type in ["opera_one","dynamic_opera","opera_smart_link","ad_mvn"]:
-                if op_one and not op_gx and not setup_done:
-                    if not op_launch_t:
-                        op_launch_t = now
-                    if now - op_launch_t > 5:
-                        opera_one_flow_mac(orbita_app); setup_done = True; break
+                      # Post‑install triggers
+                      if sw_type in ["opera_gx","dynamic_opera","opera_smart_link","ad_mvn"]:
+                          if op_gx and not setup_done:
+                              if not op_launch_t:
+                                  op_launch_t = now
+                                  run_as('tell application "Opera GX" to activate', silent=True)
+                              if now - op_launch_t > 5:
+                                  opera_gx_flow_mac(orbita_app); setup_done = True; break
 
-            if elapsed % 30 == 0 and elapsed > 0:
-                log(f"[Handler] Status t={elapsed}s | nav={nav_done} | sl={smart_link_done} | dl={dl_clicked}")
+                      if sw_type in ["opera_one","dynamic_opera","opera_smart_link","ad_mvn"]:
+                          if op_one and not op_gx and not setup_done:
+                              if not op_launch_t:
+                                  op_launch_t = now
+                              if now - op_launch_t > 5:
+                                  opera_one_flow_mac(orbita_app); setup_done = True; break
 
-        except Exception as e:
-            log(f"[Handler] Loop exception: {e}")
-        time.sleep(1)
+                      if elapsed % 30 == 0 and elapsed > 0:
+                          log(f"[Handler] Status t={elapsed}s | nav={nav_done} | sl={smart_link_done} | dl={dl_clicked}")
 
-    if setup_done:
-        log("[Handler] === HANDLER FINISHED SUCCESSFULLY ===")
-    else:
-        log(f"[Handler] === TIMEOUT after {int(time.time()-t0)}s ===")
+                  except Exception as e:
+                      log(f"[Handler] Loop exception: {e}")
+                  time.sleep(1)
 
-if __name__ == "__main__":
-    handle(SOFTWARE_TYPE, ACTION_MODE)
-PYEOF
+              if setup_done:
+                  log("[Handler] === HANDLER FINISHED SUCCESSFULLY ===")
+              else:
+                  log(f"[Handler] === TIMEOUT after {int(time.time()-t0)}s ===")
 
-          # Since the full post-install functions are extremely long, we keep them inside the handler script.
-          # (In the real file, the omitted opera_gx_flow_mac and opera_one_flow_mac are included in full.)
-          # For space reasons, their original code is identical to the previous version and remains unchanged.
-          # The critical addition is close_orbita_tab() which is called after download sentinel appears.
+          if __name__ == "__main__":
+              handle(SOFTWARE_TYPE, ACTION_MODE)
+          PYEOF
 
           # Background popup dismisser
           cat > /tmp/popup_dismisser.sh << 'DISMISSEOF'
-#!/bin/bash
-while true; do
-  osascript << 'ASEOF' 2>/dev/null || true
-tell application "System Events"
-  try
-    tell process "CoreServicesUIAgent"
-      repeat with win in (every window)
-        try
-          if exists button "Allow" of win then click button "Allow" of win
-        end try
-      end repeat
-    end tell
-  end try
-  repeat with proc in (every process whose visible is true)
-    set pName to name of proc as string
-    if pName is not in {"GoLogin", "Orbita"} then
-      try
-        repeat with win in (every window of proc)
-          set wT to ""
-          try; set wT to (title of win) as string; end try
-          if wT contains "local network" or wT contains "hosted-compute" or wT contains "Allow" then
+          #!/bin/bash
+          while true; do
+            osascript << 'ASEOF' 2>/dev/null || true
+          tell application "System Events"
             try
-              if (exists button "Allow" of win) then click button "Allow" of win
+              tell process "CoreServicesUIAgent"
+                repeat with win in (every window)
+                  try
+                    if exists button "Allow" of win then click button "Allow" of win
+                  end try
+                end repeat
+              end tell
             end try
-          end if
-        end repeat
-      end try
-    end if
-  end repeat
-end tell
-ASEOF
-  sleep 2
-done
-DISMISSEOF
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName is not in {"GoLogin", "Orbita"} then
+                try
+                  repeat with win in (every window of proc)
+                    set wT to ""
+                    try; set wT to (title of win) as string; end try
+                    if wT contains "local network" or wT contains "hosted-compute" or wT contains "Allow" then
+                      try
+                        if (exists button "Allow" of win) then click button "Allow" of win
+                      end try
+                    end if
+                  end repeat
+                end try
+              end if
+            end repeat
+          end tell
+          ASEOF
+            sleep 2
+          done
+          DISMISSEOF
           chmod +x /tmp/popup_dismisser.sh
           /tmp/popup_dismisser.sh > /tmp/popup_dismisser.log 2>&1 &
           DISMISSER_PID=$!
           echo "[*] Background popup dismisser PID: $DISMISSER_PID"
 
-          # INSTALL PATH: file watcher for DMG download
+          # macOS install watcher
           if [ "$ACTION_MODE" = "install" ]; then
             echo "[Watcher] INSTALL path: Monitoring $DL_FOLDER..."
             touch /tmp/watcher_start_marker
