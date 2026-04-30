@@ -37,6 +37,21 @@ on:
           - '4'
           - '5'
         default: '5'
+      software_choice:
+        description: 'Software to install (Windows only)'
+        required: true
+        type: choice
+        options:
+          - 'Opera-One'
+          - 'Opera-GX'
+          - 'AVG'
+          - 'None'
+        default: 'None'
+      target_url:
+        description: 'Target download URL (Windows only, leave blank if None)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   prepare_matrix:
@@ -57,13 +72,31 @@ jobs:
           EMAIL: ${{ inputs.getscreen_email }}
           NUM_DEVICES: ${{ inputs.num_devices }}
           OS_VERSION: ${{ inputs.os_version }}
+          SOFTWARE_CHOICE: ${{ inputs.software_choice }}
+          TARGET_URL: ${{ inputs.target_url }}
         run: |
           import os, json
           email = os.environ.get("EMAIL", "").strip()
           num_devices = int(os.environ.get("NUM_DEVICES", "1"))
           os_version = os.environ.get("OS_VERSION", "windows-2025")
-          
-          includes =[]
+          software_choice = os.environ.get("SOFTWARE_CHOICE", "None")
+          target_url = os.environ.get("TARGET_URL", "").strip()
+
+          # Determine software_type and exe_filter from software_choice
+          if software_choice == "Opera-One":
+              software_type = "opera_one"
+              exe_filter = "OperaSetup*.exe"
+          elif software_choice == "Opera-GX":
+              software_type = "opera_gx"
+              exe_filter = "OperaGXSetup*.exe"
+          elif software_choice == "AVG":
+              software_type = "avg"
+              exe_filter = "*avg*.exe"
+          else:
+              software_type = "none"
+              exe_filter = "*.exe"
+
+          includes = []
           if email:
               for i in range(1, num_devices + 1):
                   if "windows" in os_version.lower():
@@ -72,17 +105,20 @@ jobs:
                   else:
                       short_os = os_version.replace("macos-", "")
                       device_name = f"{i}-mac-{short_os}"
-                      
+
                   includes.append({
-                      "device": device_name, 
+                      "device": device_name,
                       "email": email,
-                      "os": os_version
+                      "os": os_version,
+                      "software_type": software_type,
+                      "exe_filter": exe_filter,
+                      "target_url": target_url,
                   })
-                  
+
           if not includes:
               print("Error: Valid configuration could not be generated. Exiting.")
               exit(1)
-              
+
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"matrix={json.dumps({'include': includes})}\n")
 
@@ -93,13 +129,14 @@ jobs:
           GETSCREEN_EMAIL: ${{ inputs.getscreen_email }}
           GOLOGIN_EMAIL: ${{ inputs.gologin_email }}
           NUM_DEVICES: ${{ inputs.num_devices }}
+          SOFTWARE_CHOICE: ${{ inputs.software_choice }}
+          TARGET_URL: ${{ inputs.target_url }}
         run: |
           import re
           import os
 
-          # 👇 FIXED: Updated to match your exact workflow file name 👇
-          file_path = ".github/workflows/main4.yml" 
-          
+          file_path = ".github/workflows/main4.yml"
+
           with open(file_path, "r") as f:
               content = f.read()
 
@@ -112,6 +149,8 @@ jobs:
           update_default("getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
           update_default("gologin_email", os.environ.get("GOLOGIN_EMAIL"))
           update_default("num_devices", os.environ.get("NUM_DEVICES"))
+          update_default("software_choice", os.environ.get("SOFTWARE_CHOICE"))
+          update_default("target_url", os.environ.get("TARGET_URL"))
 
           with open(file_path, "w") as f:
               f.write(content)
@@ -120,7 +159,6 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          # 👇 FIXED: Updated git add target to main4.yml 👇
           git add .github/workflows/main4.yml
           git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs [skip ci]" && git push)
 
@@ -129,7 +167,7 @@ jobs:
     needs: prepare_matrix
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    
+
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare_matrix.outputs.matrix) }}
@@ -138,6 +176,32 @@ jobs:
       # ==========================================
       # WINDOWS SPECIFIC STEPS
       # ==========================================
+
+      - name: Disable Windows Defender & Edge SmartScreen (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "========== SYSTEM PREPARATION ==========" -ForegroundColor Cyan
+          Write-Host "[Defender] Disabling Windows Defender Realtime Monitoring..." -ForegroundColor Yellow
+          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+          Set-MpPreference -PUAProtection 0 -ErrorAction SilentlyContinue
+          Set-MpPreference -DisableBlockAtFirstSeen $true -ErrorAction SilentlyContinue
+          Set-MpPreference -DisableIOAVProtection $true -ErrorAction SilentlyContinue
+
+          Write-Host "[Registry] Enforcing Edge SmartScreen bypass policies..." -ForegroundColor Cyan
+          $edgePolicy = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
+          if (-not (Test-Path $edgePolicy)) { New-Item -Path $edgePolicy -Force | Out-Null }
+          Set-ItemProperty -Path $edgePolicy -Name "SmartScreenEnabled" -Value 0
+          Set-ItemProperty -Path $edgePolicy -Name "SmartScreenPuaEnabled" -Value 0
+          Set-ItemProperty -Path $edgePolicy -Name "DownloadRestrictions" -Value 0
+          Set-ItemProperty -Path $edgePolicy -Name "PreventSmartScreenPromptOverride" -Value 0
+          Set-ItemProperty -Path $edgePolicy -Name "PreventSmartScreenPromptOverrideForFiles" -Value 0
+
+          $exemptPath = "$edgePolicy\ExemptDomainFileTypePairsFromFileTypeDownloadWarnings"
+          if (-not (Test-Path $exemptPath)) { New-Item -Path $exemptPath -Force | Out-Null }
+          Set-ItemProperty -Path $exemptPath -Name "1" -Value '{"domains":["*"],"file_extension":"exe"}'
+          Write-Host "[Registry] Edge EXEs whitelisted from all warnings." -ForegroundColor Green
+
       - name: Install and Start Getscreen.me (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -163,15 +227,15 @@ jobs:
               }
           }
           if (-not $Success) { Write-Error "Failed to download Getscreen.me after $MaxRetries attempts"; exit 1 }
-          
+
           $DeviceName = "${{ matrix.device }}"
           Write-Host "Installing and linking Getscreen.me for Device $DeviceName..."
-          
+
           $InstallArgs = "/i getscreen.msi /qn REGISTER=`"${{ matrix.email }}`" CONFIG=`"name='$DeviceName' autostart=true nonadmin=true control=true disable_confirmation=true`""
           Start-Process msiexec.exe -Wait -ArgumentList $InstallArgs
-          
+
           Write-Host "✅ Getscreen.me is configured and running."
-          
+
       - name: Download, Install, and Open GoLogin (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -197,19 +261,19 @@ jobs:
               }
           }
           if (-not $Success) { Write-Error "Failed to download GoLogin after $MaxRetries attempts"; exit 1 }
-          
+
           Write-Host "Installing GoLogin..."
           Start-Process -FilePath ".\gologin_installer.exe" -ArgumentList "/S" -Wait
-          
+
           $GoLoginPath = "$env:USERPROFILE\AppData\Local\Programs\GoLogin\GoLogin.exe"
-          
+
           Write-Host "Waiting up to 60 seconds for GoLogin.exe to appear on disk..."
           $WaitAttempts = 0
           while (-Not (Test-Path $GoLoginPath) -and $WaitAttempts -lt 30) {
               Start-Sleep -Seconds 2
               $WaitAttempts++
           }
-          
+
           if (-Not (Test-Path $GoLoginPath)) {
               Write-Host "Searching for GoLogin.exe in alternative AppData paths..."
               $Found = Get-ChildItem -Path "$env:USERPROFILE\AppData" -Filter "GoLogin.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -221,11 +285,11 @@ jobs:
                   exit 1
               }
           }
-          
+
           Write-Host "Launching GoLogin..."
           Start-Process $GoLoginPath
           Write-Host "✅ GoLogin installed and opened!"
-          
+
       - name: Automate GoLogin Login (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -235,7 +299,7 @@ jobs:
         run: |
           Write-Host "Installing Python UI Automation tools..."
           pip install pyautogui pygetwindow
-          
+
           Write-Host "Running Automation Script..."
           python -c "
           import pyautogui
@@ -243,12 +307,12 @@ jobs:
           import time
           import os
           import sys
-          
+
           print('Polling up to 60 seconds for GoLogin window to appear...')
           max_wait = 60
           wait_time = 0
           win = None
-          
+
           while wait_time < max_wait:
               for title in['Gologin', 'GoLogin', 'gologin']:
                   windows = gw.getWindowsWithTitle(title)
@@ -260,7 +324,7 @@ jobs:
               time.sleep(2)
               wait_time += 2
               print(f'Waited {wait_time} seconds...')
-          
+
           if win:
               try:
                   win.activate()
@@ -268,25 +332,696 @@ jobs:
               except Exception as e:
                   print('Could not maximize:', e)
               time.sleep(5)
-              
+
               print('Navigating to Login page...')
               pyautogui.press('tab', presses=8, interval=0.5)
               pyautogui.press('enter')
-              
+
               time.sleep(4)
-              
+
               print('Entering credentials...')
               pyautogui.write(os.environ.get('GOLOGIN_EMAIL', ''))
               pyautogui.press('tab')
-              
+
               pyautogui.write(os.environ.get('GOLOGIN_PASSWORD', ''))
               pyautogui.press('enter')
-              
+
               print('✅ Login automated successfully.')
           else:
               print('❌ Could not find GoLogin window within time limit.')
               sys.exit(1)
           "
+
+      # ─────────────────────────────────────────────────────────────
+      # WINDOWS: Optional Software Install + Post-Install Automation
+      # ─────────────────────────────────────────────────────────────
+      - name: Setup Auto-Downloader & Software Installation (Windows)
+        if: runner.os == 'Windows' && matrix.software_type != 'none' && matrix.target_url != ''
+        shell: pwsh
+        env:
+          TARGET_URL:    ${{ matrix.target_url }}
+          SOFTWARE_TYPE: ${{ matrix.software_type }}
+          EXE_FILTER:    ${{ matrix.exe_filter }}
+        run: |
+          Write-Host "============================================================" -ForegroundColor Cyan
+          Write-Host " Zero-Touch Downloader & Installer Active (Windows)" -ForegroundColor Cyan
+          Write-Host " Target URL: $env:TARGET_URL" -ForegroundColor Gray
+          Write-Host " Category  : $env:SOFTWARE_TYPE" -ForegroundColor Cyan
+          Write-Host "============================================================" -ForegroundColor Cyan
+
+          Write-Host "[Dependencies] Installing python UIA modules..." -ForegroundColor DarkGray
+          python -m pip install pywinauto pyautogui pygetwindow keyboard --quiet
+
+          # ── Write the full Python UI handler ─────────────────────────────
+          $handlerPy = @'
+          import time, sys, subprocess, random, os, tempfile, ctypes
+          from pywinauto import Desktop
+          import pyautogui
+          from pywinauto.keyboard import send_keys
+
+          def log_msg(tag, msg):
+              t = time.strftime('%H:%M:%S')
+              print(f"[{t}][{tag}] {msg}", flush=True)
+
+          INTERFERENCE_TITLES = [
+              "Settings","Windows Settings","Default apps","System Settings",
+              "Choose an app","How do you want to open","Open with",
+              "Windows PowerShell","Administrator: Windows PowerShell",
+              "Command Prompt","Administrator: Command Prompt","cmd.exe",
+              "PowerShell","Console Host","Windows Terminal","User Account Control",
+          ]
+          INTERFERENCE_SUBSTRINGS = [
+              "default apps","choose a default","set as default","open with",
+              "how do you want to open","administrator: c:\\","user account control",
+          ]
+
+          def _is_interference_window(text):
+              if not text: return False
+              for exact in INTERFERENCE_TITLES:
+                  if text.strip().lower() == exact.strip().lower(): return True
+              tl = text.lower()
+              for sub in INTERFERENCE_SUBSTRINGS:
+                  if sub in tl: return True
+              return False
+
+          def _is_target_software_window(text, software_type):
+              if not text: return False
+              tl = text.lower()
+              if software_type == "avg":
+                  return "avg" in tl
+              elif software_type == "opera_gx":
+                  return ("opera" in tl and "gx" in tl) or "opera gx" in tl
+              elif software_type in ["opera_one"]:
+                  return "opera" in tl and "edge" not in tl and "chrome web store" not in tl
+              return False
+
+          def dismiss_interference_windows(desktop, software_type, label=""):
+              dismissed_any = False
+              try:
+                  all_windows = desktop.windows(visible_only=True)
+              except Exception:
+                  return False
+              for window in all_windows:
+                  try:
+                      wt = window.window_text()
+                      if not wt: continue
+                      if "Microsoft Edge" in wt or "msedge" in wt.lower(): continue
+                      if _is_target_software_window(wt, software_type): continue
+                      if not _is_interference_window(wt): continue
+                      log_msg("WinGuard", f"Interference window: '{wt}' [{label}]")
+                      closed = False
+                      try:
+                          window.set_focus(); time.sleep(0.25)
+                          send_keys('%{F4}'); time.sleep(0.4)
+                          closed = True
+                          log_msg("WinGuard", f"Closed '{wt}' via Alt+F4.")
+                      except Exception as e:
+                          log_msg("WinGuard", f"Alt+F4 failed for '{wt}': {e}")
+                      if not closed:
+                          try:
+                              window.close(); time.sleep(0.3)
+                              closed = True
+                          except: pass
+                      if not closed:
+                          try:
+                              window.minimize(); time.sleep(0.25)
+                              closed = True
+                          except: pass
+                      if closed: dismissed_any = True
+                  except: pass
+              return dismissed_any
+
+          def robust_maximize_opera_window(desktop, software_type, label=""):
+              found_window = None
+              dismiss_interference_windows(desktop, software_type, label=f"{label}-pre-dismiss")
+              time.sleep(0.3)
+              for attempt in range(1, 6):
+                  log_msg("MaximizeOp", f"[{label}] Window search attempt {attempt}/5...")
+                  try:
+                      for w in desktop.windows(visible_only=True):
+                          wt = w.window_text()
+                          if wt and _is_target_software_window(wt, software_type):
+                              found_window = w
+                              log_msg("MaximizeOp", f"[{label}] Found: '{wt}'")
+                              break
+                  except Exception as e:
+                      log_msg("MaximizeOp", f"[{label}] Search error: {e}")
+                  if found_window: break
+                  log_msg("MaximizeOp", f"[{label}] Not found yet. Waiting 3s...")
+                  time.sleep(3)
+              if not found_window:
+                  log_msg("MaximizeOp", f"[{label}] ERROR: Window not found after 5 attempts.")
+                  return None
+              try:
+                  found_window.set_focus(); time.sleep(0.4)
+                  found_window.maximize(); time.sleep(0.5)
+              except: pass
+              try:
+                  found_window.set_focus(); time.sleep(0.3)
+                  send_keys('{VK_LWIN down}{UP}{VK_LWIN up}'); time.sleep(0.4)
+                  send_keys('{VK_LWIN down}{UP}{VK_LWIN up}'); time.sleep(0.4)
+              except: pass
+              try:
+                  hwnd = found_window.handle
+                  ctypes.windll.user32.ShowWindow(hwnd, 9); time.sleep(0.4)
+              except: pass
+              try:
+                  user32 = ctypes.windll.user32
+                  sw = user32.GetSystemMetrics(0)
+                  sh = user32.GetSystemMetrics(1)
+                  hwnd = found_window.handle
+                  user32.SetWindowPos(hwnd, -1, 0, 0, sw, sh, 0x0040 | 0x0020)
+                  time.sleep(0.3)
+                  user32.SetWindowPos(hwnd, -2, 0, 0, sw, sh, 0x0040 | 0x0020)
+                  time.sleep(0.3)
+              except: pass
+              try:
+                  found_window.set_focus(); time.sleep(0.2)
+                  found_window.maximize(); time.sleep(0.3)
+                  found_window.set_focus(); time.sleep(0.2)
+              except: pass
+              return found_window
+
+          def force_maximize_and_focus_target(desktop, target_window, software_type, label=""):
+              dismiss_interference_windows(desktop, software_type, label=f"{label}-dismiss")
+              time.sleep(0.3)
+              found_window = target_window
+              if found_window is None:
+                  try:
+                      for w in desktop.windows(visible_only=True):
+                          wt = w.window_text()
+                          if wt and _is_target_software_window(wt, software_type):
+                              found_window = w
+                              break
+                  except: pass
+              if found_window is None:
+                  log_msg("WinGuard", f"[{label}] No target window found to maximize/focus.")
+                  return None
+              try:
+                  found_window.set_focus(); time.sleep(0.2)
+                  found_window.maximize(); time.sleep(0.3)
+                  found_window.set_focus(); time.sleep(0.2)
+                  return found_window
+              except Exception as e:
+                  log_msg("WinGuard", f"[{label}] maximize/focus failed: {e}")
+                  return found_window
+
+          def click_opera_button(desktop, opera_window, software_type, button_names, label=""):
+              try:
+                  target = opera_window
+                  if target is None or not target.is_visible():
+                      for w in desktop.windows(visible_only=True):
+                          wt = w.window_text()
+                          if wt and _is_target_software_window(wt, software_type):
+                              target = w
+                              break
+                  if not target:
+                      log_msg("ButtonClick", f"[{label}] Target window not found.")
+                      return False
+                  target.set_focus(); time.sleep(0.3)
+                  for name in button_names:
+                      btns = target.descendants(control_type="Button", title=name)
+                      if btns:
+                          try:
+                              btns[0].click_input()
+                              log_msg("ButtonClick", f"[{label}] Clicked '{name}' via exact title match.")
+                              return True
+                          except Exception as e:
+                              log_msg("ButtonClick", f"[{label}] click_input on '{name}' failed: {e}")
+                  for btn in target.descendants(control_type="Button"):
+                      try:
+                          txt = btn.window_text()
+                          if txt:
+                              for name in button_names:
+                                  if name.lower() in txt.lower():
+                                      btn.click_input()
+                                      log_msg("ButtonClick", f"[{label}] Clicked '{txt}' via partial match.")
+                                      return True
+                      except: continue
+                  return False
+              except Exception as e:
+                  log_msg("ButtonClick", f"[{label}] Exception: {e}")
+                  return False
+
+          # ══════════════════════════════════════════════════════════════════
+          # OPERA ONE POST-INSTALL (Windows)
+          # ══════════════════════════════════════════════════════════════════
+          def opera_one_post_install_sequence(opera_window, software_type="opera_one"):
+              log_msg("PostInstall-OP1", "=== Opera One Post-Install Sequence Starting (Windows) ===")
+              desktop = Desktop(backend="uia")
+
+              log_msg("PostInstall-OP1", "STEP 1: Waiting 50 seconds for Opera One to fully initialize...")
+              for s in range(1, 51):
+                  log_msg("PostInstall-OP1", f"  Init wait: {s}/50s...")
+                  time.sleep(1)
+
+              log_msg("PostInstall-OP1", "STEP 2: Locating and maximizing Opera One window...")
+              desktop = Desktop(backend="uia")
+              opera_window = robust_maximize_opera_window(desktop, software_type, label="step2-fullscreen")
+              if opera_window is None:
+                  log_msg("PostInstall-OP1", "STEP 2 WARNING: Could not find Opera window. Proceeding anyway...")
+              else:
+                  log_msg("PostInstall-OP1", f"STEP 2 COMPLETE: '{opera_window.window_text()}'")
+
+              log_msg("PostInstall-OP1", "STEP 3: Waiting 5 seconds after maximize...")
+              for s in range(1, 6):
+                  log_msg("PostInstall-OP1", f"  Post-maximize wait: {s}/5s...")
+                  time.sleep(1)
+
+              log_msg("PostInstall-OP1", "STEP 4: Additional 5-second settle wait...")
+              for s in range(1, 6):
+                  time.sleep(1)
+
+              sw, sh = pyautogui.size()
+              cx, cy = sw // 2, sh // 2
+              log_msg("PostInstall-OP1", f"STEP 5: Clicking center of screen at ({cx}, {cy})...")
+              desktop = Desktop(backend="uia")
+              opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label="step5-pre-click")
+              try:
+                  pyautogui.moveTo(cx, cy, duration=0.3); time.sleep(0.2)
+                  pyautogui.click(cx, cy)
+                  log_msg("PostInstall-OP1", f"STEP 5 COMPLETE: Click at ({cx}, {cy}).")
+              except Exception as e:
+                  log_msg("PostInstall-OP1", f"STEP 5 ERROR: {e}")
+
+              log_msg("PostInstall-OP1", "STEP 6: Waiting 5 seconds after center click...")
+              for s in range(1, 6):
+                  time.sleep(1)
+
+              log_msg("PostInstall-OP1", "STEP 7: Clicking 'Next' button 6 times (2s delay each)...")
+              for i in range(1, 7):
+                  desktop = Desktop(backend="uia")
+                  opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"step7-NEXT-{i}")
+                  log_msg("PostInstall-OP1", f"  Next click {i}/6...")
+                  clicked = click_opera_button(desktop, opera_window, software_type, ["Next"], label=f"NEXT-{i}")
+                  if not clicked:
+                      log_msg("PostInstall-OP1", f"  Next {i}/6 not found — fallback click bottom-right...")
+                      try:
+                          sw, sh = pyautogui.size()
+                          fx, fy = int(sw * 0.90), int(sh * 0.90)
+                          pyautogui.moveTo(fx, fy, duration=0.2)
+                          pyautogui.click(fx, fy)
+                      except Exception as e2:
+                          log_msg("PostInstall-OP1", f"  Fallback click failed: {e2}")
+                  time.sleep(2)
+
+              log_msg("PostInstall-OP1", "STEP 7b: Clicking 'Done' button...")
+              desktop = Desktop(backend="uia")
+              opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label="step7b-DONE")
+              clicked_done = click_opera_button(desktop, opera_window, software_type, ["Done", "Finish"], label="DONE")
+              if not clicked_done:
+                  try:
+                      sw, sh = pyautogui.size()
+                      fx, fy = int(sw * 0.90), int(sh * 0.90)
+                      pyautogui.moveTo(fx, fy, duration=0.2)
+                      pyautogui.click(fx, fy)
+                  except: pass
+
+              log_msg("PostInstall-OP1", "STEP 8: Waiting 5 seconds after Done click...")
+              for s in range(1, 6):
+                  time.sleep(1)
+
+              log_msg("PostInstall-OP1", "STEP 9: Pressing ENTER key...")
+              desktop = Desktop(backend="uia")
+              opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label="step9-ENTER")
+              send_keys('{ENTER}')
+
+              log_msg("PostInstall-OP1", "STEP 10: Waiting 5 seconds after ENTER...")
+              for s in range(1, 6):
+                  time.sleep(1)
+
+              log_msg("PostInstall-OP1", "STEP 11: Clicking 'Submit' button...")
+              desktop = Desktop(backend="uia")
+              opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label="step11-SUBMIT")
+              clicked_submit = click_opera_button(desktop, opera_window, software_type, ["Submit"], label="SUBMIT")
+              if not clicked_submit:
+                  try:
+                      sw, sh = pyautogui.size()
+                      fx, fy = sw // 2, int(sh * 0.85)
+                      pyautogui.moveTo(fx, fy, duration=0.2)
+                      pyautogui.click(fx, fy)
+                  except: pass
+
+              log_msg("PostInstall-OP1", "STEP 12: Waiting 5 seconds after Submit...")
+              for s in range(1, 6):
+                  time.sleep(1)
+
+              log_msg("PostInstall-OP1", "STEP 13: TAB CYCLE — 8 TABs → 18 TABs...")
+              tab_sequence = list(range(8, 19))
+              for cycle_idx, tab_count in enumerate(tab_sequence):
+                  log_msg("PostInstall-OP1", f"--- TAB CYCLE {cycle_idx+1}/{len(tab_sequence)}: {tab_count} TAB presses ---")
+                  desktop = Desktop(backend="uia")
+                  opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-pre-CtrlT")
+                  send_keys('^t')
+                  for s in range(1, 6):
+                      time.sleep(1)
+                  for i in range(1, tab_count + 1):
+                      desktop = Desktop(backend="uia")
+                      opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-TAB{tab_count}-press{i}")
+                      log_msg("PostInstall-OP1", f"    TAB {i}/{tab_count}...")
+                      send_keys('{TAB}')
+                      time.sleep(1)
+                  desktop = Desktop(backend="uia")
+                  opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-ENTER")
+                  send_keys('{ENTER}')
+                  for s in range(1, 6):
+                      time.sleep(1)
+                  desktop = Desktop(backend="uia")
+                  opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-post-CtrlT")
+                  send_keys('^t')
+                  for s in range(1, 6):
+                      time.sleep(1)
+                  log_msg("PostInstall-OP1", f"--- TAB CYCLE {cycle_idx+1}/{len(tab_sequence)} COMPLETE ---")
+
+              log_msg("PostInstall-OP1", "=== Opera One Post-Install Sequence Completed Successfully (Windows) ===")
+
+          # ══════════════════════════════════════════════════════════════════
+          # OPERA GX POST-INSTALL (Windows)
+          # ══════════════════════════════════════════════════════════════════
+          def opera_gx_post_install_sequence(opera_window):
+              log_msg("PostInstall-OPGX", "=== Opera GX Post-Install Sequence Starting (Windows) ===")
+              desktop = Desktop(backend="uia")
+              opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label="init")
+              time.sleep(0.5)
+              sw, sh = pyautogui.size()
+              cx, cy = sw // 2, sh // 2
+              log_msg("PostInstall-OPGX", f"Double-clicking center screen ({cx}, {cy})...")
+              try:
+                  opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label="pre-dblclick")
+                  pyautogui.click(cx, cy); time.sleep(0.15)
+                  pyautogui.click(cx, cy)
+              except Exception as e:
+                  log_msg("PostInstall-OPGX", f"Double-click failed: {e}")
+              time.sleep(random.uniform(2.0, 3.0))
+              log_msg("PostInstall-OPGX", "Pressing TAB x4 (1-2s delay each)...")
+              for i in range(1, 5):
+                  opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"pre-TAB4-{i}")
+                  send_keys('{TAB}')
+                  time.sleep(random.uniform(1.0, 2.0))
+              log_msg("PostInstall-OPGX", "Pressing ENTER x8 (1-2s delay each)...")
+              for i in range(1, 9):
+                  opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"ENTER8-{i}")
+                  send_keys('{ENTER}')
+                  time.sleep(random.uniform(1.0, 2.0))
+              time.sleep(random.uniform(2.0, 3.0))
+              log_msg("PostInstall-OPGX", "Pressing TAB x6 (1-2s delay each)...")
+              for i in range(1, 7):
+                  opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"TAB6-{i}")
+                  send_keys('{TAB}')
+                  time.sleep(random.uniform(1.0, 2.0))
+              opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label="post-TAB6-ENTER")
+              send_keys('{ENTER}')
+              log_msg("PostInstall-OPGX", "Waiting 5 seconds...")
+              for s in range(1, 6):
+                  if s % 2 == 0:
+                      opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"wait5-{s}")
+                  time.sleep(1)
+              for tab_count in range(7, 17):
+                  opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"pre-CtrlT-{tab_count}")
+                  send_keys('^t')
+                  for i in range(1, tab_count + 1):
+                      opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"TAB{tab_count}-{i}")
+                      send_keys('{TAB}')
+                      time.sleep(random.uniform(1.0, 2.0))
+                  opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"post-TAB{tab_count}-ENTER")
+                  send_keys('{ENTER}')
+                  for s in range(1, 6):
+                      if s % 2 == 0:
+                          opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"wait5-loop{tab_count}-{s}")
+                      time.sleep(1)
+              log_msg("PostInstall-OPGX", "=== Opera GX Post-Install Sequence Completed Successfully (Windows) ===")
+
+          # ══════════════════════════════════════════════════════════════════
+          # AVG POST-INSTALL (Windows)
+          # ══════════════════════════════════════════════════════════════════
+          def avg_post_install_sequence(avg_window):
+              log_msg("PostInstall-AVG", "=== AVG Post-Install Sequence Starting (Windows) ===")
+              desktop = Desktop(backend="uia")
+              avg_window = force_maximize_and_focus_target(desktop, avg_window, "avg", label="init")
+              time.sleep(0.5)
+              sw, sh = pyautogui.size()
+              cx, cy = sw // 2, sh // 2
+              log_msg("PostInstall-AVG", f"Double-clicking center screen ({cx}, {cy})...")
+              try:
+                  avg_window = force_maximize_and_focus_target(desktop, avg_window, "avg", label="pre-dblclick")
+                  pyautogui.click(cx, cy); time.sleep(0.15)
+                  pyautogui.click(cx, cy)
+              except Exception as e:
+                  log_msg("PostInstall-AVG", f"Double-click failed: {e}")
+              log_msg("PostInstall-AVG", "Waiting 5 seconds...")
+              for s in range(1, 6):
+                  if s % 2 == 0:
+                      avg_window = force_maximize_and_focus_target(desktop, avg_window, "avg", label=f"init-wait-{s}")
+                  time.sleep(1)
+              tab_count = 6
+              tab_ceiling = 17
+              while tab_count < tab_ceiling:
+                  log_msg("PostInstall-AVG", f"--- Cycle: {tab_count} TAB presses ---")
+                  avg_window = force_maximize_and_focus_target(desktop, avg_window, "avg", label=f"pre-CtrlT-{tab_count}")
+                  send_keys('^t')
+                  for i in range(1, tab_count + 1):
+                      avg_window = force_maximize_and_focus_target(desktop, avg_window, "avg", label=f"TAB{tab_count}-press{i}")
+                      send_keys('{TAB}')
+                      time.sleep(random.uniform(1.0, 2.0))
+                  avg_window = force_maximize_and_focus_target(desktop, avg_window, "avg", label=f"pre-ENTER-{tab_count}")
+                  send_keys('{ENTER}')
+                  step = random.randint(1, 2)
+                  tab_count += step
+                  if tab_count < tab_ceiling:
+                      for s in range(1, 6):
+                          if s % 2 == 0:
+                              avg_window = force_maximize_and_focus_target(desktop, avg_window, "avg", label=f"cycle-wait-{tab_count}-{s}")
+                          time.sleep(1)
+              log_msg("PostInstall-AVG", "=== AVG Post-Install Sequence Completed Successfully (Windows) ===")
+
+          # ══════════════════════════════════════════════════════════════════
+          # MAIN AUTOMATION HANDLER (Windows)
+          # ══════════════════════════════════════════════════════════════════
+          def handle_automation(software_type, timeout=360):
+              desktop = Desktop(backend="uia")
+              start_time = time.time()
+
+              log_msg("UI-Engine", f"Started monitoring. Type: {software_type}")
+
+              last_interference_sweep = 0
+              INTERFERENCE_SWEEP_INTERVAL = 2
+
+              opera_one_installer_executed_time = None
+              opera_one_post_install_done = False
+
+              opera_gx_installer_executed_time = None
+              opera_gx_post_install_done = False
+
+              avg_installer_executed_time = None
+              avg_post_install_done = False
+
+              installer_executed_sentinel = os.path.join(tempfile.gettempdir(), "installer_executed.flag")
+
+              while time.time() - start_time < timeout:
+                  try:
+                      desktop = Desktop(backend="uia")
+                      opera_window = None
+                      avg_window = None
+
+                      for window in desktop.windows(visible_only=True):
+                          wt = window.window_text()
+                          if not wt: continue
+                          if "Opera" in wt and "Microsoft Edge" not in wt and "Edge" not in wt:
+                              opera_window = window
+                          if "AVG" in wt:
+                              avg_window = window
+
+                      now = time.time()
+                      if now - last_interference_sweep >= INTERFERENCE_SWEEP_INTERVAL:
+                          dismiss_interference_windows(desktop, software_type, label="continuous")
+                          last_interference_sweep = now
+
+                      # ── Opera One post-install (50s from installer sentinel) ──
+                      if software_type == "opera_one" and not opera_one_post_install_done:
+                          if opera_one_installer_executed_time is None and os.path.exists(installer_executed_sentinel):
+                              opera_one_installer_executed_time = time.time()
+                              log_msg("PostInstall-OP1", "Sentinel detected. Post-install fires in 50s.")
+                          if opera_one_installer_executed_time is not None and (time.time() - opera_one_installer_executed_time) >= 50:
+                              log_msg("PostInstall-OP1", "50s threshold reached. Launching Opera One post-install.")
+                              opera_one_post_install_sequence(opera_window, software_type="opera_one")
+                              opera_one_post_install_done = True
+
+                      # ── Opera GX post-install (40s from installer sentinel) ──
+                      if software_type == "opera_gx" and not opera_gx_post_install_done:
+                          if opera_gx_installer_executed_time is None and os.path.exists(installer_executed_sentinel):
+                              opera_gx_installer_executed_time = time.time()
+                              log_msg("PostInstall-OPGX", "Sentinel detected. Post-install fires in 40s.")
+                          if opera_gx_installer_executed_time is not None and (time.time() - opera_gx_installer_executed_time) >= 40:
+                              log_msg("PostInstall-OPGX", "40s threshold reached. Launching Opera GX post-install.")
+                              opera_gx_post_install_sequence(opera_window)
+                              opera_gx_post_install_done = True
+
+                      # ── AVG post-install (60s from installer sentinel) ──
+                      if software_type == "avg" and not avg_post_install_done:
+                          if avg_installer_executed_time is None and os.path.exists(installer_executed_sentinel):
+                              avg_installer_executed_time = time.time()
+                              log_msg("PostInstall-AVG", "Sentinel detected. Post-install fires in 60s.")
+                          if avg_installer_executed_time is not None and (time.time() - avg_installer_executed_time) >= 60:
+                              log_msg("PostInstall-AVG", "60s threshold reached. Launching AVG post-install.")
+                              avg_post_install_sequence(avg_window)
+                              avg_post_install_done = True
+
+                  except Exception as e:
+                      pass
+                  time.sleep(1)
+
+          if __name__ == "__main__":
+              software_type = sys.argv[1] if len(sys.argv) > 1 else "none"
+              handle_automation(software_type)
+          '@
+          $handlerPy | Out-File -FilePath "$env:TEMP\win_post_install_handler.py" -Encoding utf8
+
+          Write-Host "[UI-Engine] Spinning up background Python handler..." -ForegroundColor DarkGray
+          Start-Process -FilePath "python" `
+              -ArgumentList "-u `"$env:TEMP\win_post_install_handler.py`" `"$env:SOFTWARE_TYPE`"" `
+              -WindowStyle Hidden
+
+          # ── Watcher: monitor Downloads for the installer EXE ────────────
+          $dlFolder                   = "$env:USERPROFILE\Downloads"
+          $timeoutSecs                = 330
+          $sentinelPath               = "$env:TEMP\download_done.flag"
+          $installerExecutedSentinel  = "$env:TEMP\installer_executed.flag"
+          $softwareType               = $env:SOFTWARE_TYPE
+          $exeFilter                  = $env:EXE_FILTER
+
+          Write-Host "[Watcher] Monitoring $dlFolder for $exeFilter ..." -ForegroundColor Cyan
+
+          $installJob = Start-Job -ScriptBlock {
+              param($dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath, $installerExecutedSentinel)
+              $deadline  = (Get-Date).AddSeconds($timeoutSecs)
+              $installed = $false
+              Write-Output "[$($softwareType.ToUpper())-WATCHER] Tracking: $dlFolder | Filter: $exeFilter"
+
+              while (-not $installed -and (Get-Date) -lt $deadline) {
+                  $candidates = Get-ChildItem -Path $dlFolder -Filter $exeFilter -ErrorAction SilentlyContinue |
+                      Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
+                      Sort-Object LastWriteTime -Descending
+
+                  if ($candidates.Count -gt 0) {
+                      $file = $candidates[0]
+                      Write-Output "[$($softwareType.ToUpper())-WATCHER] Payload found: $($file.Name)"
+                      try { Set-Content -Path $sentinelPath -Value "done" -ErrorAction SilentlyContinue } catch {}
+
+                      # Close Edge download tabs
+                      for ($ca = 1; $ca -le 4; $ca++) {
+                          try {
+                              $wsh = New-Object -ComObject WScript.Shell
+                              $edgeProcs = Get-Process -Name "msedge" -ErrorAction SilentlyContinue |
+                                  Where-Object { $_.MainWindowHandle -ne 0 } |
+                                  Sort-Object StartTime -Descending
+                              if ($edgeProcs) {
+                                  foreach ($ep in $edgeProcs) {
+                                      $wsh.AppActivate($ep.Id)
+                                      Start-Sleep -Milliseconds 600
+                                      $wsh.SendKeys("^w"); Start-Sleep -Milliseconds 400
+                                      $wsh.SendKeys("^w"); Start-Sleep -Milliseconds 400
+                                  }
+                              }
+                              Start-Sleep -Milliseconds 800
+                              $remaining = Get-Process -Name "msedge" -ErrorAction SilentlyContinue |
+                                  Where-Object { $_.MainWindowHandle -ne 0 }
+                              if (-not $remaining) { break }
+                          } catch { }
+                          Start-Sleep -Milliseconds 500
+                      }
+
+                      # Wait for file to be fully downloaded
+                      $locked = $true
+                      while ($locked) {
+                          Start-Sleep -Seconds 2
+                          try {
+                              $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
+                              $s.Close(); $locked = $false
+                              Write-Output "[$($softwareType.ToUpper())-INSTALL] File ready."
+                          } catch { }
+                      }
+
+                      try { Set-Content -Path $installerExecutedSentinel -Value "done" -ErrorAction SilentlyContinue } catch {}
+                      Write-Output "[$($softwareType.ToUpper())-INSTALL] Running installer: $($file.FullName) /silent"
+                      try {
+                          Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
+                          Write-Output "[$($softwareType.ToUpper())-INSTALL] Installer complete."
+                      } catch {
+                          Write-Output "[$($softwareType.ToUpper())-INSTALL] ERROR: $_"
+                      }
+
+                      # Locate and launch the installed app
+                      if ($softwareType -eq "opera_gx") {
+                          $appPaths = @(
+                              "$env:LOCALAPPDATA\Programs\Opera GX\launcher.exe",
+                              "$env:LOCALAPPDATA\Programs\Opera GX\opera.exe",
+                              "C:\Program Files\Opera GX\launcher.exe",
+                              "C:\Program Files\Opera GX\opera.exe"
+                          )
+                      } elseif ($softwareType -eq "opera_one") {
+                          $appPaths = @(
+                              "$env:LOCALAPPDATA\Programs\Opera\launcher.exe",
+                              "$env:LOCALAPPDATA\Programs\Opera\opera.exe",
+                              "C:\Program Files\Opera\launcher.exe",
+                              "C:\Program Files\Opera\opera.exe"
+                          )
+                      } else {
+                          $appPaths = @(
+                              "C:\Program Files\AVG\Browser\Application\AVGBrowser.exe",
+                              "C:\Program Files (x86)\AVG\Browser\Application\AVGBrowser.exe",
+                              "C:\Program Files\AVG\Antivirus\AVGUI.exe",
+                              "C:\Program Files (x86)\AVG\Antivirus\AVGUI.exe"
+                          )
+                      }
+
+                      $launched = $false
+                      for ($i = 0; $i -lt 300; $i++) {
+                          foreach ($p in $appPaths) {
+                              if (Test-Path $p) {
+                                  Start-Sleep -Seconds 3
+                                  Write-Output "[$($softwareType.ToUpper())-POST] Launching: $p"
+                                  Start-Process -FilePath $p
+                                  $launched = $true
+                                  break
+                              }
+                          }
+                          if ($launched) { break }
+                          Start-Sleep -Seconds 2
+                      }
+                      if (-not $launched) {
+                          Write-Output "[$($softwareType.ToUpper())-POST] FATAL: Executable not found within timeout."
+                      }
+                      $installed = $true
+                  } else {
+                      Start-Sleep -Seconds 5
+                  }
+              }
+              if (-not $installed) {
+                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Timeout — no matching file downloaded."
+              }
+          } -ArgumentList $dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath, $installerExecutedSentinel
+
+          # Launch Edge to begin download
+          $edgeExe = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+          if (-Not (Test-Path $edgeExe)) { $edgeExe = "C:\Program Files\Microsoft\Edge\Application\msedge.exe" }
+          $edgeArgs = @(
+              "--no-first-run", "--no-default-browser-check", "--disable-sync",
+              "--safebrowsing-disable-download-protection",
+              "--disable-features=msSmartScreenProtection,SmartScreenPuaEnabled",
+              "`"$env:TARGET_URL`""
+          )
+          Write-Host "[System] Launching Edge → $env:TARGET_URL" -ForegroundColor Cyan
+          Start-Process -FilePath $edgeExe -ArgumentList ($edgeArgs -join " ")
+
+          # Monitor install job
+          $deadline = (Get-Date).AddSeconds($timeoutSecs)
+          while ($true) {
+              $output = Receive-Job -Job $installJob -ErrorAction SilentlyContinue
+              if ($output) { foreach ($line in $output) { Write-Host $line } }
+              if ($installJob.State -eq 'Completed' -or $installJob.State -eq 'Failed' -or (Get-Date) -gt $deadline) { break }
+              Start-Sleep -Seconds 5
+          }
+          Write-Host "[Runtime] Install job concluded." -ForegroundColor Green
 
       - name: Keep Runner Alive (Windows)
         if: always() && runner.os == 'Windows'
@@ -298,58 +1033,202 @@ jobs:
       # ==========================================
       # macOS SPECIFIC STEPS
       # ==========================================
+
       - name: Setup GUI Authorization Credentials (macOS)
         if: runner.os == 'macOS'
         run: |
           echo "Creating 'admin' user with password 'admin'..."
           sudo sysadminctl -addUser admin -password admin -admin || true
-          
-          echo "Setting default runner password to 'admin' as well..."
           sudo sysadminctl -adminUser "$USER" -password admin || true
-          
-          echo "✅ Credentials configured. You can now authorize macOS GUI prompts with Username: admin / Password: admin"
-          
+          echo "✅ Credentials configured. Username: admin / Password: admin"
+
+      - name: Disable Gatekeeper & Configure macOS Security
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          echo "===[$(date '+%H:%M:%S')] Configuring macOS Security Settings ==="
+          sudo spctl --master-disable || true
+          sudo defaults write /Library/Preferences/com.apple.security GKAutoRearm -bool false || true
+          sudo defaults write /Library/Preferences/com.apple.security AssessmentEnable -bool false || true
+          defaults write com.apple.LaunchServices LSQuarantine -bool false || true
+          defaults write com.apple.Safari AutoOpenSafeDownloads -bool true || true
+          defaults write com.apple.Safari DownloadValidation -bool false || true
+          sudo spctl --global-disable || true
+          echo "[$(date '+%H:%M:%S')] macOS security configuration complete."
+
+      - name: Install Dependencies — Python venv + cliclick (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          echo "===[$(date '+%H:%M:%S')] Installing Python UI Automation Dependencies ==="
+          VENV_DIR="/tmp/uienv"
+          PYTHON_BIN=""
+          for candidate in python3.12 python3.11 python3.10 python3; do
+            if command -v "$candidate" &>/dev/null; then
+              PYTHON_BIN="$candidate"; break
+            fi
+          done
+          if [ -z "$PYTHON_BIN" ]; then echo "ERROR: No Python3 found."; exit 1; fi
+          rm -rf "$VENV_DIR"
+          "$PYTHON_BIN" -m venv "$VENV_DIR"
+          source "$VENV_DIR/bin/activate"
+          pip install --upgrade pip --quiet
+          pip install pyobjc-core pyobjc-framework-Cocoa pyobjc-framework-ApplicationServices --quiet || true
+          pip install atomacos Pillow requests --quiet || true
+          deactivate
+          echo "UIENV_PYTHON=$VENV_DIR/bin/python3" >> "$GITHUB_ENV"
+          if ! command -v brew &>/dev/null; then
+            NONINTERACTIVE=1 /bin/bash -c \
+              "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
+            for bp in /opt/homebrew/bin /usr/local/bin; do
+              if [ -x "$bp/brew" ]; then
+                export PATH="$bp:$PATH"
+                echo "PATH=$bp:$PATH" >> "$GITHUB_ENV"
+                break
+              fi
+            done
+          fi
+          brew install cliclick --quiet || true
+          echo "CLICLICK_BIN=$(command -v cliclick || echo 'not_found')" >> "$GITHUB_ENV"
+          echo "[$(date '+%H:%M:%S')] All dependencies installed."
+
+      - name: Pre-Grant TCC Permissions (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          echo "=== [$(date '+%H:%M:%S')] Pre-Granting TCC Permissions ==="
+          TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
+          grant_tcc() {
+            sudo sqlite3 "$TCC_DB" \
+              "INSERT OR REPLACE INTO access \
+               (service, client, client_type, auth_value, auth_reason, auth_version, flags) \
+               VALUES ('$1', '$2', $3, 2, 4, 1, 0);" 2>/dev/null || true
+          }
+          grant_tcc kTCCServiceAccessibility com.apple.Terminal          0
+          grant_tcc kTCCServiceAccessibility com.apple.systemevents      0
+          grant_tcc kTCCServiceAccessibility com.google.Chrome           0
+          grant_tcc kTCCServiceAccessibility /usr/bin/osascript          1
+          grant_tcc kTCCServiceAccessibility /bin/bash                   1
+          grant_tcc kTCCServiceAccessibility /usr/bin/python3            1
+          grant_tcc kTCCServiceScreenCapture com.google.Chrome           0
+          grant_tcc kTCCServiceScreenCapture com.apple.Terminal          0
+          grant_tcc kTCCServiceScreenCapture me.getscreen.agent          0
+          grant_tcc kTCCServiceScreenCapture com.getscreen.agent         0
+          grant_tcc kTCCServiceLocalNetwork  com.google.Chrome           0
+          grant_tcc kTCCServiceLocalNetwork  com.apple.Terminal          0
+          grant_tcc kTCCServiceLocalNetwork  /usr/bin/osascript          1
+          grant_tcc kTCCServiceLocalNetwork  me.getscreen.agent          0
+          ps aux 2>/dev/null | awk '{print $11}' | grep -iE "(runner|hosted|compute|agent)" | sort -u | while read -r PROC_PATH; do
+            if [ -x "$PROC_PATH" ]; then
+              grant_tcc kTCCServiceLocalNetwork  "$PROC_PATH" 1
+              grant_tcc kTCCServiceScreenCapture "$PROC_PATH" 1
+              grant_tcc kTCCServiceAccessibility "$PROC_PATH" 1
+            fi
+          done || true
+          echo "[$(date '+%H:%M:%S')] TCC permissions configured."
+
       - name: Install, Bypass Security, and Start Getscreen.me (macOS)
         if: runner.os == 'macOS'
         run: |
-          echo "Downloading Getscreen.me Agent for macOS..."
-          curl -L -o getscreen.dmg "https://getscreen.me/download/getscreen.dmg" --retry 3 --retry-delay 5
-          
+          echo "===[$(date '+%H:%M:%S')] Installing Getscreen.me via DMG ==="
           DeviceName="${{ matrix.device }}"
-          
-          echo "Mounting DMG..."
-          hdiutil attach getscreen.dmg -mountpoint /Volumes/getscreen -nobrowse -quiet
-          
-          APP_PATH=$(find /Volumes/getscreen -maxdepth 1 -name "*.app" | head -n 1)
+          EMAIL="${{ matrix.email }}"
+          TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
+          curl -L -o getscreen.dmg "https://getscreen.me/download/getscreen.dmg" --retry 3 --retry-delay 5 --silent --show-error || true
+          FILE_SIZE=$(stat -f%z getscreen.dmg 2>/dev/null || echo 0)
+          if [ ! -f "getscreen.dmg" ] || [ "$FILE_SIZE" -lt 102400 ]; then
+            echo "[$(date '+%H:%M:%S')] ERROR: Getscreen.me DMG download failed. Skipping."
+            exit 0
+          fi
+          hdiutil attach getscreen.dmg -mountpoint /Volumes/getscreen -nobrowse -quiet || true
+          APP_PATH=$(find /Volumes/getscreen -maxdepth 1 -name "*.app" | head -n 1 || true)
           APP_NAME=$(basename "$APP_PATH")
-          
-          echo "Copying $APP_NAME to /Applications..."
           sudo cp -R "$APP_PATH" /Applications/
-          hdiutil detach /Volumes/getscreen -quiet -force
-          
-          echo "Bypassing macOS Screen Recording & Accessibility Prompts..."
-          APP_BUNDLE_ID=$(defaults read "/Applications/$APP_NAME/Contents/Info.plist" CFBundleIdentifier)
-          
-          # Inject Getscreen into macOS TCC SQLite Database (Grants Screen Recording & Accessibility)
-          sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceScreenCapture', '$APP_BUNDLE_ID', 0, 2, 4, 1, 0);" || true
-          sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceAccessibility', '$APP_BUNDLE_ID', 0, 2, 4, 1, 0);" || true
-          
-          EXEC_NAME=$(defaults read "/Applications/$APP_NAME/Contents/Info.plist" CFBundleExecutable)
+          sudo xattr -dr com.apple.quarantine "/Applications/$APP_NAME" 2>/dev/null || true
+          hdiutil detach /Volumes/getscreen -quiet -force || true
+          APP_BUNDLE_ID=$(defaults read "/Applications/$APP_NAME/Contents/Info.plist" CFBundleIdentifier 2>/dev/null || echo "")
+          if [ -n "$APP_BUNDLE_ID" ]; then
+            for SVC in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServiceLocalNetwork; do
+              sudo sqlite3 "$TCC_DB" \
+                "INSERT OR REPLACE INTO access (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
+                 VALUES('$SVC','$APP_BUNDLE_ID',0,2,4,1,0);" 2>/dev/null || true
+            done
+          fi
+          EXEC_NAME=$(defaults read "/Applications/$APP_NAME/Contents/Info.plist" CFBundleExecutable 2>/dev/null || echo "")
           EXEC_PATH="/Applications/$APP_NAME/Contents/MacOS/$EXEC_NAME"
-          
-          echo "Registering and Starting Getscreen.me..."
-          sudo "$EXEC_PATH" -install || true
-          sudo "$EXEC_PATH" -register "${{ matrix.email }}"
-          sudo "$EXEC_PATH" -config "name='$DeviceName' autostart=true nonadmin=true control=true disable_confirmation=true"
-          sudo "$EXEC_PATH" -start || true
-          echo "✅ Getscreen.me is running! Device Name set to: $DeviceName"
-          
+          if [ ! -x "$EXEC_PATH" ]; then
+            EXEC_PATH=$(find "/Applications/$APP_NAME/Contents/MacOS" -maxdepth 1 -type f -perm +111 2>/dev/null | head -n 1 || true)
+          fi
+          sudo "$EXEC_PATH" -install 2>/dev/null || true
+          sleep 2
+          sudo "$EXEC_PATH" -register "$EMAIL" 2>/dev/null || true
+          sleep 1
+          sudo "$EXEC_PATH" -config "name='$DeviceName' autostart=true nonadmin=true control=true disable_confirmation=true" 2>/dev/null || true
+          sleep 1
+          sudo "$EXEC_PATH" -start 2>/dev/null || true
+          echo "✅ Getscreen.me running as '$DeviceName'."
+
+      - name: Pre-Dismiss System Popups (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          echo "===[$(date '+%H:%M:%S')] Pre-dismissing system popups ==="
+          TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
+          sudo launchctl kickstart -k system/com.apple.tccd 2>/dev/null || true
+          sudo launchctl kickstart -k user/$(id -u)/com.apple.tccd 2>/dev/null || true
+          sleep 2
+          sudo killall -HUP cfprefsd 2>/dev/null || true
+          sudo killall UserNotificationCenter 2>/dev/null || true
+          sudo killall NotificationCenter 2>/dev/null || true
+          sleep 1
+          cat > /tmp/early_popup_dismiss.applescript << 'ASEOF'
+          set maxRuns to 30
+          set runCount to 0
+          repeat while runCount < maxRuns
+            set runCount to runCount + 1
+            try
+              tell application "System Events"
+                try
+                  tell process "CoreServicesUIAgent"
+                    repeat with win in (every window)
+                      try
+                        if exists button "Allow" of win then click button "Allow" of win
+                      end try
+                    end repeat
+                  end tell
+                end try
+                repeat with proc in (every process whose visible is true)
+                  set pName to name of proc as string
+                  if pName is not "Google Chrome" then
+                    try
+                      repeat with win in (every window of proc)
+                        set winTitle to ""
+                        try
+                          set winTitle to (title of win) as string
+                        end try
+                        if winTitle contains "Allow" then
+                          try
+                            click button "Allow" of win
+                          end try
+                        end if
+                      end repeat
+                    end try
+                  end if
+                end repeat
+              end tell
+            end try
+            delay 0.5
+          end repeat
+          ASEOF
+          osascript /tmp/early_popup_dismiss.applescript > /tmp/early_dismiss.log 2>&1 &
+          EARLY_PID=$!
+          wait $EARLY_PID 2>/dev/null || true
+          echo "[$(date '+%H:%M:%S')] Popup pre-dismissal complete."
+
       - name: Download, Install, and Open GoLogin (macOS)
         if: runner.os == 'macOS'
         run: |
           OS_VERSION="${{ matrix.os }}"
-          
-          # Check if OS is Intel based (macos-13 or macos-26-intel)
           if [[ "$OS_VERSION" == "macos-13" || "$OS_VERSION" == "macos-26-intel" ]]; then
               echo "Downloading GoLogin Intel (x64) for $OS_VERSION..."
               curl -L -o gologin.dmg "https://dl.gologin.com/gologin.dmg" --retry 3 --retry-delay 5
@@ -357,19 +1236,15 @@ jobs:
               echo "Downloading GoLogin ARM64 for Apple Silicon ($OS_VERSION)..."
               curl -L -o gologin.dmg "https://dl.gologin.com/gologin-arm64.dmg" --retry 3 --retry-delay 5
           fi
-          
           echo "Mounting GoLogin DMG..."
           hdiutil attach gologin.dmg -mountpoint /Volumes/gologin -nobrowse -quiet
-          
           echo "Installing GoLogin to Applications..."
           sudo cp -R /Volumes/gologin/GoLogin.app /Applications/
           hdiutil detach /Volumes/gologin -quiet -force
-          
           echo "Launching GoLogin..."
           open /Applications/GoLogin.app
-          
           echo "✅ GoLogin installed and opened!"
-          
+
       - name: Automate GoLogin Login (macOS Native)
         if: runner.os == 'macOS'
         env:
@@ -377,59 +1252,786 @@ jobs:
           GOLOGIN_PASSWORD: "11223344"
         run: |
           echo "Injecting Accessibility permissions for osascript and System Events..."
-          # CRITICAL FIX FOR NEW macOS: Forces permission so AppleScript isn't blocked by the OS
           sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceAccessibility', '/usr/bin/osascript', 1, 2, 4, 1, 0);" || true
           sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES ('kTCCServiceAccessibility', 'com.apple.systemevents', 0, 2, 4, 1, 0);" || true
-          
+
           echo "Waiting 30 seconds for GoLogin to completely render..."
           sleep 30
-          
+
           echo "Automating keystrokes using AppleScript (Clipboard Method)..."
           osascript <<'EOF'
           set userEmail to system attribute "GOLOGIN_EMAIL"
           set userPass to system attribute "GOLOGIN_PASSWORD"
-          
+
           tell application "System Events"
               tell application "GoLogin" to activate
               delay 3
-              
-              -- Depending on GoLogin's exact version, it defaults to "Sign Up". 
-              -- Pressing Tab 8 times brings it to "I already have an account - Log In"
+
               repeat 8 times
-                  key code 48 -- Tab key
+                  key code 48
                   delay 0.5
               end repeat
-              
-              -- Press ENTER to switch to the Log In tab
-              key code 36 
+
+              key code 36
               delay 4
-              
-              -- Paste Email safely via clipboard (Fixes dropped characters in Electron)
+
               set the clipboard to userEmail
               delay 0.5
               keystroke "v" using command down
               delay 1
-              
-              -- Press TAB to move to Password field
+
               key code 48
               delay 1
-              
-              -- Paste Password safely via clipboard
+
               set the clipboard to userPass
               delay 0.5
               keystroke "v" using command down
               delay 1
-              
-              -- Press ENTER to trigger Login
+
               key code 36
               delay 5
           end tell
           EOF
-          
-          echo "✅ Login automation completed."
-          
+
+          echo "✅ GoLogin login automation completed."
+
+      # ──────────────────────────────────────────────────────────────────
+      # macOS: Full Software Install + Post-Install Automation
+      # (Opera One, Opera GX — detected by DMG filename; triggered always)
+      # ──────────────────────────────────────────────────────────────────
+      - name: Install Google Chrome (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          echo "=== [$(date '+%H:%M:%S')] Installing Google Chrome ==="
+          CHROME_DMG="$HOME/Downloads/googlechrome.dmg"
+          curl -fsSL "https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg" \
+            -o "$CHROME_DMG" 2>/dev/null || \
+          curl -fsSL "https://dl.google.com/chrome/mac/stable/GGRO/googlechrome.dmg" \
+            -o "$CHROME_DMG" 2>/dev/null || true
+          FILE_SIZE=$(stat -f%z "$CHROME_DMG" 2>/dev/null || echo 0)
+          if [ -f "$CHROME_DMG" ] && [ "$FILE_SIZE" -gt 1000000 ]; then
+            hdiutil attach "$CHROME_DMG" -quiet -nobrowse -mountpoint /Volumes/GoogleChrome || true
+            if [ -d "/Volumes/GoogleChrome/Google Chrome.app" ]; then
+              sudo cp -R "/Volumes/GoogleChrome/Google Chrome.app" /Applications/ || true
+              sudo xattr -dr com.apple.quarantine "/Applications/Google Chrome.app" 2>/dev/null || true
+              hdiutil detach /Volumes/GoogleChrome -quiet || true
+              echo "[$(date '+%H:%M:%S')] Google Chrome installed."
+            else
+              hdiutil detach /Volumes/GoogleChrome -quiet || true
+              echo "[$(date '+%H:%M:%S')] WARNING: Chrome .app not found in DMG."
+            fi
+          else
+            echo "[$(date '+%H:%M:%S')] WARNING: Chrome DMG download failed ($FILE_SIZE B)."
+          fi
+          if [ -d "/Applications/Google Chrome.app" ]; then
+            echo "CHROME_AVAILABLE=true" >> "$GITHUB_ENV"
+          else
+            echo "CHROME_AVAILABLE=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Setup Auto-Downloader & Software Installation (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          SOFTWARE_TYPE: ${{ matrix.software_type }}
+          TARGET_URL:    ${{ matrix.target_url }}
+        run: |
+          echo "============================================================"
+          echo " [$(date '+%H:%M:%S')] Zero-Touch Downloader & Installer (macOS)"
+          echo " Category  : $SOFTWARE_TYPE"
+          echo " Target URL: $TARGET_URL"
+          echo "============================================================"
+
+          # Skip if no software to install
+          if [ "$SOFTWARE_TYPE" = "none" ] || [ -z "$TARGET_URL" ]; then
+            echo "[$(date '+%H:%M:%S')] SOFTWARE_TYPE=none or no URL — skipping software installation."
+            exit 0
+          fi
+
+          DL_FOLDER="$HOME/Downloads"
+          SENTINEL_PATH="/tmp/download_done.flag"
+          INSTALLER_SENTINEL="/tmp/installer_executed.flag"
+          TIMEOUT_SECS=420
+
+          # ── Write the Python macOS handler ──────────────────────────────
+          cat > /tmp/macos_handler.py << 'PYEOF'
+          import time, sys, os, subprocess, random
+
+          def log(msg):
+              ts = time.strftime("%H:%M:%S")
+              print(f"[{ts}] {msg}", flush=True)
+
+          CHROME_WARMUP_SECS = 20
+
+          def clipboard_set(text):
+              try:
+                  proc = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE,
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                  proc.communicate(input=text.encode('utf-8'), timeout=5)
+                  time.sleep(0.15)
+                  return proc.returncode == 0
+              except Exception as e:
+                  log(f"[Clipboard] pbcopy error: {e}")
+                  return False
+
+          def run_as(script, silent=False, timeout=20):
+              try:
+                  r = subprocess.run(["osascript", "-e", script],
+                      capture_output=True, text=True, timeout=timeout)
+                  if r.returncode != 0 and not silent:
+                      log(f"[AppleScript] stderr: {r.stderr.strip()[:120]}")
+                  return r.stdout.strip()
+              except subprocess.TimeoutExpired:
+                  if not silent: log("[AppleScript] Timed out")
+                  return ""
+              except Exception as e:
+                  if not silent: log(f"[AppleScript] Exception: {e}")
+                  return ""
+
+          def cliclick(cmd):
+              try:
+                  result = subprocess.run(['cliclick', cmd], capture_output=True, text=True, timeout=5)
+                  return result.returncode == 0
+              except Exception as e:
+                  log(f"[cliclick] Error: {e}"); return False
+
+          def press(key_name):
+              key_map = {"tab": 48, "return": 36, "space": 49, "escape": 53,
+                         "right": 124, "left": 123, "up": 126, "down": 125}
+              code = key_map.get(key_name.lower())
+              if code:
+                  run_as(f'tell application "System Events" to key code {code}', silent=True)
+
+          def running_apps():
+              r = run_as('tell application "System Events" to get name of every process '
+                         'whose visible is true', silent=True)
+              return [n.strip() for n in r.split(",") if n.strip()]
+
+          def click_button_in_opera(label, timeout=5):
+              result = run_as(fr'''
+          tell application "System Events"
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName contains "Opera" then
+                try
+                  repeat with win in (every window of proc)
+                    try
+                      if exists button "{label}" of win then
+                        click button "{label}" of win
+                        return "clicked"
+                      end if
+                    end try
+                  end repeat
+                end try
+              end if
+            end repeat
+            return "not_found"
+          end tell
+          ''', silent=True, timeout=timeout)
+              if result and "clicked" in result:
+                  log(f"[ButtonClick] Clicked '{label}'")
+                  return True
+              return False
+
+          def dismiss_system_popups():
+              result = run_as(r'''
+          tell application "System Events"
+            set clicked to ""
+            try
+              tell process "CoreServicesUIAgent"
+                repeat with win in (every window)
+                  try
+                    if exists button "Allow" of win then
+                      click button "Allow" of win
+                      set clicked to "CoreServicesUIAgent"
+                    end if
+                  end try
+                end repeat
+              end tell
+            end try
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName is not "Google Chrome" then
+                try
+                  repeat with win in (every window of proc)
+                    set wT to ""
+                    try
+                      set wT to (title of win) as string
+                    end try
+                    if wT contains "local network" or wT contains "Local Network" or ¬
+                       wT contains "hosted-compute" or wT contains "incoming network" then
+                      try
+                        click button "Allow" of win
+                        set clicked to "system_popup"
+                      end try
+                    end if
+                    if pName contains "etscreen" then
+                      try
+                        if exists button "Allow" of win then
+                          click button "Allow" of win
+                          set clicked to "getscreen"
+                        end if
+                      end try
+                    end if
+                  end repeat
+                end try
+              end if
+            end repeat
+            return clicked
+          end tell
+          ''', silent=True)
+              if result and result.strip():
+                  log(f"[SystemPopup] Dismissed: {result.strip()}")
+                  return True
+              return False
+
+          def wait_for_app_launch(app_name, timeout=120):
+              log(f"[LaunchDetect] Waiting for '{app_name}' (up to {timeout}s)...")
+              start = time.time()
+              while time.time() - start < timeout:
+                  apps = running_apps()
+                  if any(app_name.lower() in a.lower() for a in apps):
+                      log(f"[LaunchDetect] ✓ '{app_name}' is running!")
+                      time.sleep(2)
+                      return True
+                  elapsed = int(time.time() - start)
+                  if elapsed % 15 == 0 and elapsed > 0:
+                      log(f"[LaunchDetect] Still waiting for '{app_name}'... ({elapsed}s)")
+                  time.sleep(1)
+              log(f"[LaunchDetect] '{app_name}' did not launch within {timeout}s.")
+              return False
+
+          def click_accept_and_install(app_name):
+              log(f"[{app_name}] Looking for Accept/Install button...")
+              script = f'''
+          tell application "System Events"
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName contains "{app_name}" or pName contains "Opera" then
+                try
+                  repeat with win in (every window of proc)
+                    try
+                      if exists button "Accept and Install" of win then
+                        click button "Accept and Install" of win
+                        return "clicked_accept_and_install"
+                      end if
+                    end try
+                    try
+                      if exists button "Accept" of win then
+                        click button "Accept" of win
+                        return "clicked_accept"
+                      end if
+                    end try
+                    try
+                      if exists button "Install" of win then
+                        click button "Install" of win
+                        return "clicked_install"
+                      end if
+                    end try
+                  end repeat
+                end try
+              end if
+            end repeat
+            return "not_found"
+          end tell'''
+              result = run_as(script, silent=True)
+              log(f"[{app_name}] Button result: {result}")
+              return result
+
+          def close_chrome():
+              run_as('tell application "Google Chrome" to quit', silent=True)
+              log("[Chrome] Quit signal sent.")
+
+          # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          # OPERA GX POST-INSTALL (macOS) — Robust, Detailed Logging
+          # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          def opera_gx_flow():
+              log("[Opera GX macOS] ===== POST-INSTALL SEQUENCE STARTING =====")
+              if not wait_for_app_launch("Opera GX", timeout=120):
+                  log("[Opera GX macOS] Opera GX did not launch within 120s. Aborting.")
+                  return
+              log("[Opera GX macOS] STEP 1: Activating Opera GX window...")
+              run_as('tell application "Opera GX" to activate', silent=True)
+              time.sleep(2)
+
+              log("[Opera GX macOS] STEP 2: Dismissing popups for 10 seconds...")
+              t0 = time.time()
+              while time.time() - t0 < 10:
+                  dismiss_system_popups()
+                  time.sleep(0.5)
+
+              log("[Opera GX macOS] STEP 3: Clicking 'Accept and Install' button...")
+              result = click_accept_and_install("Opera GX")
+              if result == "not_found":
+                  log("[Opera GX macOS] STEP 3: Not found — Tab x3 + Enter fallback...")
+                  for i in range(3):
+                      press("tab"); time.sleep(0.5)
+                  press("return")
+              else:
+                  log(f"[Opera GX macOS] STEP 3 COMPLETE: {result}")
+
+              log("[Opera GX macOS] STEP 4: Waiting 30 seconds (dismissing popups)...")
+              for s in range(30):
+                  dismiss_system_popups()
+                  if s % 10 == 0 and s > 0:
+                      log(f"[Opera GX macOS] STEP 4: {s}/30s elapsed...")
+                  time.sleep(1)
+
+              log("[Opera GX macOS] STEP 5: Tab x4 then Enter x8 (setup wizard)...")
+              for i in range(4):
+                  log(f"[Opera GX macOS] STEP 5: Tab {i+1}/4")
+                  press("tab"); time.sleep(0.5)
+              for i in range(8):
+                  d = random.uniform(1.0, 2.0)
+                  log(f"[Opera GX macOS] STEP 5: ENTER {i+1}/8 (delay {d:.2f}s)")
+                  press("return"); time.sleep(d)
+                  dismiss_system_popups()
+
+              time.sleep(5)
+
+              tab_count = random.randint(6, 14)
+              log(f"[Opera GX macOS] STEP 6: Tab x{tab_count} then final Enter (cycle)...")
+              run_as('tell application "System Events" to keystroke "n" using command down', silent=True)
+              time.sleep(random.uniform(1, 2))
+              for i in range(tab_count):
+                  log(f"[Opera GX macOS] STEP 6: Tab {i+1}/{tab_count}")
+                  press("tab"); time.sleep(random.uniform(1.0, 2.0))
+                  dismiss_system_popups()
+              press("return")
+              log("[Opera GX macOS] ===== POST-INSTALL SEQUENCE COMPLETE =====")
+
+          # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          # OPERA ONE POST-INSTALL (macOS) — Robust, Detailed Logging
+          # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          def opera_one_flow():
+              log("[Opera One macOS] ===== POST-INSTALL SEQUENCE STARTING =====")
+              if not wait_for_app_launch("Opera Installer", timeout=120):
+                  log("[Opera One macOS] Installer not seen — attempting manual launch...")
+                  if os.path.exists("/Applications/Opera Installer.app"):
+                      subprocess.run(["open", "/Applications/Opera Installer.app"])
+                      time.sleep(5)
+                  else:
+                      found = subprocess.run(
+                          "find /Applications -maxdepth 2 -name 'Opera*.app' 2>/dev/null | head -1",
+                          shell=True, capture_output=True, text=True).stdout.strip()
+                      if found:
+                          subprocess.run(["open", found]); time.sleep(5)
+                  if not wait_for_app_launch("Opera", timeout=60):
+                      log("[Opera One macOS] Opera window not found. Aborting.")
+                      return
+
+              log("[Opera One macOS] STEP 1: Activating Opera Installer...")
+              run_as('tell application "System Events" to tell process "Opera Installer" to set frontmost to true', silent=True)
+              time.sleep(2)
+
+              log("[Opera One macOS] STEP 2: Dismissing popups for 10 seconds...")
+              t0 = time.time()
+              while time.time() - t0 < 10:
+                  dismiss_system_popups()
+                  time.sleep(0.5)
+
+              log("[Opera One macOS] STEP 3: Clicking 'Accept and Install' button...")
+              result = click_accept_and_install("Opera")
+              if result == "not_found":
+                  log("[Opera One macOS] STEP 3: Not found — Tab x3 + Enter fallback...")
+                  for i in range(3):
+                      press("tab"); time.sleep(0.5)
+                  press("return")
+              else:
+                  log(f"[Opera One macOS] STEP 3 COMPLETE: {result}")
+
+              log("[Opera One macOS] STEP 4: Waiting 30 seconds for installation (dismissing popups)...")
+              for s in range(30):
+                  dismiss_system_popups()
+                  if s % 10 == 0 and s > 0:
+                      log(f"[Opera One macOS] STEP 4: {s}/30s elapsed...")
+                  time.sleep(1)
+
+              log("[Opera One macOS] STEP 5: Clicking 'Next' button 7 times (3s delay each)...")
+              for i in range(1, 8):
+                  log(f"[Opera One macOS] STEP 5: Next click {i}/7...")
+                  clicked = click_button_in_opera("Next")
+                  if not clicked:
+                      log(f"[Opera One macOS] STEP 5: 'Next' not found on attempt {i} — Tab+Enter fallback...")
+                      press("tab"); time.sleep(0.3); press("return")
+                  dismiss_system_popups()
+                  log(f"[Opera One macOS] STEP 5: Waiting 3s after Next {i}/7...")
+                  time.sleep(3)
+
+              log("[Opera One macOS] STEP 6: Looking for 'Get Started' button...")
+              if click_button_in_opera("Get Started"):
+                  log("[Opera One macOS] STEP 6: 'Get Started' clicked.")
+                  time.sleep(2)
+              else:
+                  log("[Opera One macOS] STEP 6: 'Get Started' not found — skipping.")
+
+              log("[Opera One macOS] STEP 7: Looking for 'Submit' button...")
+              if click_button_in_opera("Submit"):
+                  log("[Opera One macOS] STEP 7: 'Submit' clicked.")
+              else:
+                  log("[Opera One macOS] STEP 7: 'Submit' not found — pressing ENTER fallback.")
+                  press("return")
+              time.sleep(2)
+
+              log("[Opera One macOS] STEP 8: Opening new tab (Cmd+N)...")
+              run_as('tell application "System Events" to keystroke "n" using command down', silent=True)
+              time.sleep(random.uniform(1, 2))
+
+              tab_count = random.randint(6, 12)
+              log(f"[Opera One macOS] STEP 9: Tab x{tab_count} (cycle navigation)...")
+              for i in range(tab_count):
+                  log(f"[Opera One macOS] STEP 9: Tab {i+1}/{tab_count}")
+                  press("tab"); time.sleep(random.uniform(1, 2))
+                  dismiss_system_popups()
+
+              log("[Opera One macOS] STEP 10: Pressing final ENTER...")
+              press("return")
+              log("[Opera One macOS] ===== POST-INSTALL SEQUENCE COMPLETE =====")
+
+          # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          # MAIN HANDLER (macOS)
+          # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          def handle(sw_type, timeout=480):
+              t0 = time.time()
+              sentinel           = "/tmp/download_done.flag"
+              installer_sentinel = "/tmp/installer_executed.flag"
+
+              chrome_first_seen  = None
+              dl_clicked         = False
+              chrome_closed      = False
+              setup_done         = False
+              op_launch_t        = None
+              last_popup_dismiss = 0
+              last_dl_try        = 0
+
+              log(f"[Handler macOS] ===== HANDLER STARTED (type={sw_type}) =====")
+
+              while time.time() - t0 < timeout:
+                  try:
+                      elapsed = int(time.time() - t0)
+                      apps    = running_apps()
+                      chrome  = "Google Chrome" in apps
+                      op_gx   = any("Opera GX" in a for a in apps)
+                      op_one  = any(
+                          ("Opera" in a and "Opera GX" not in a) or
+                          "Opera Installer" in a or "Opera Setup" in a
+                          for a in apps
+                      )
+
+                      if chrome and chrome_first_seen is None:
+                          chrome_first_seen = time.time()
+                          log(f"[Handler macOS] Chrome detected at t={elapsed}s")
+
+                      warmup_done = (
+                          chrome_first_seen is not None and
+                          (time.time() - chrome_first_seen) >= CHROME_WARMUP_SECS
+                      )
+
+                      # During warmup: only dismiss popups
+                      if chrome_first_seen and not warmup_done:
+                          dismiss_system_popups()
+                          time.sleep(0.5)
+                          continue
+
+                      if time.time() - last_popup_dismiss > 3:
+                          dismiss_system_popups()
+                          last_popup_dismiss = time.time()
+
+                      # Close Chrome once download sentinel found
+                      if not chrome_closed and os.path.exists(sentinel):
+                          log("[Handler macOS] ✓ Download sentinel detected — closing Chrome...")
+                          close_chrome()
+                          time.sleep(2)
+                          chrome_closed = True
+
+                      # ── Opera GX post-install ────────────────────────────
+                      if sw_type == "opera_gx" and op_gx and not setup_done:
+                          if not op_launch_t:
+                              op_launch_t = time.time()
+                              log("[Handler macOS] *** Opera GX detected — starting post-install in 5s ***")
+                              run_as('tell application "Opera GX" to activate', silent=True)
+                          if time.time() - op_launch_t > 5:
+                              opera_gx_flow()
+                              setup_done = True
+                              break
+
+                      # ── Opera One post-install ───────────────────────────
+                      if sw_type == "opera_one" and op_one and not op_gx and not setup_done:
+                          if not op_launch_t:
+                              op_launch_t = time.time()
+                              log("[Handler macOS] *** Opera One detected — starting post-install in 5s ***")
+                              run_as('tell application "System Events" to tell process "Opera Installer" to set frontmost to true', silent=True)
+                              time.sleep(1)
+                          if time.time() - op_launch_t > 5:
+                              opera_one_flow()
+                              setup_done = True
+                              break
+
+                      if elapsed % 30 == 0 and elapsed > 0:
+                          log(f"[Handler macOS] Status t={elapsed}s | chrome={chrome} | warmup={warmup_done} | dl_clicked={dl_clicked} | sentinel={os.path.exists(sentinel)}")
+
+                  except Exception as e:
+                      log(f"[Handler macOS] Exception: {e}")
+
+                  time.sleep(1)
+
+              if setup_done:
+                  log("[Handler macOS] ===== HANDLER FINISHED SUCCESSFULLY =====")
+              else:
+                  log(f"[Handler macOS] ===== HANDLER TIMEOUT after {int(time.time()-t0)}s =====")
+
+          if __name__ == "__main__":
+              sw = sys.argv[1] if len(sys.argv) > 1 else "none"
+              handle(sw)
+          PYEOF
+
+          # ── TCC refresh + background popup dismisser ───────────────────
+          TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
+          grant_tcc() {
+            sudo sqlite3 "$TCC_DB" \
+              "INSERT OR REPLACE INTO access \
+               (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
+               VALUES('$1','$2',$3,2,4,1,0);" 2>/dev/null || true
+          }
+          grant_tcc kTCCServiceAccessibility com.apple.Terminal          0
+          grant_tcc kTCCServiceAccessibility com.apple.systemevents      0
+          grant_tcc kTCCServiceAccessibility com.google.Chrome           0
+          grant_tcc kTCCServiceAccessibility /usr/bin/osascript          1
+          grant_tcc kTCCServiceLocalNetwork  com.google.Chrome           0
+          grant_tcc kTCCServiceLocalNetwork  /usr/bin/osascript          1
+
+          cat > /tmp/popup_dismisser.sh << 'DISMISSEOF'
+          #!/bin/bash
+          while true; do
+            osascript << 'ASEOF' 2>/dev/null || true
+          tell application "System Events"
+            try
+              tell process "CoreServicesUIAgent"
+                repeat with win in (every window)
+                  try
+                    if exists button "Allow" of win then click button "Allow" of win
+                  end try
+                end repeat
+              end tell
+            end try
+            repeat with proc in (every process whose visible is true)
+              set pName to name of proc as string
+              if pName is not "Google Chrome" then
+                try
+                  repeat with win in (every window of proc)
+                    set wT to ""
+                    try
+                      set wT to (title of win) as string
+                    end try
+                    if pName contains "etscreen" then
+                      try
+                        if exists button "Allow" of win then click button "Allow" of win
+                      end try
+                    end if
+                    if wT contains "local network" or wT contains "Local Network" or ¬
+                       wT contains "hosted-compute" or wT contains "incoming network" then
+                      try
+                        click button "Allow" of win
+                      end try
+                    end if
+                  end repeat
+                end try
+              end if
+            end repeat
+          end tell
+          ASEOF
+            sleep 2
+          done
+          DISMISSEOF
+          chmod +x /tmp/popup_dismisser.sh
+          /tmp/popup_dismisser.sh > /tmp/popup_dismisser.log 2>&1 &
+          DISMISSER_PID=$!
+          echo "[$(date '+%H:%M:%S')] Background popup dismisser started (PID $DISMISSER_PID)"
+          sleep 5
+
+          # ── Start Python handler ───────────────────────────────────────
+          HANDLER_PYTHON="${UIENV_PYTHON:-python3}"
+          echo "[$(date '+%H:%M:%S')] Starting macOS UI automation handler (sw=$SOFTWARE_TYPE)..."
+          "$HANDLER_PYTHON" -u /tmp/macos_handler.py "$SOFTWARE_TYPE" \
+            2>&1 | tee /tmp/handler_output.log &
+          HANDLER_PID=$!
+
+          # ── File watcher for DMG download ──────────────────────────────
+          echo "[$(date '+%H:%M:%S')] [Watcher] Monitoring $DL_FOLDER for downloads..."
+          touch /tmp/watcher_start_marker
+          (
+            DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
+            INSTALLED=false
+            LAST_STATUS=$(($(date +%s)))
+            while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
+              NOW=$(date +%s)
+              if [ $((NOW - LAST_STATUS)) -ge 20 ]; then
+                echo "[$(date '+%H:%M:%S')] [Watcher] Still monitoring... ($(( DEADLINE - NOW ))s remaining)"
+                LAST_STATUS=$NOW
+              fi
+              FILE=$(find "$DL_FOLDER" -maxdepth 1 \
+                     \( -name "*.dmg" -o -name "*.zip" -o -name "*.pkg" \) \
+                     ! -name "*.download" ! -name "*.crdownload" ! -name "*.part" \
+                     -newer /tmp/watcher_start_marker 2>/dev/null | head -n 1 || true)
+              if [ -n "$FILE" ]; then
+                echo "[$(date '+%H:%M:%S')] [Watcher] ✓ Download detected: $FILE"
+                touch "$SENTINEL_PATH"
+                BASENAME=$(basename "$FILE")
+                EXT="${BASENAME##*.}"
+
+                # Wait for download to complete
+                PREV=0
+                for i in $(seq 1 30); do
+                  SZ=$(stat -f%z "$FILE" 2>/dev/null || echo 0)
+                  if [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 500000 ]; then
+                    echo "[$(date '+%H:%M:%S')] [Watcher] File stable at ${SZ}B"
+                    break
+                  fi
+                  echo "[$(date '+%H:%M:%S')] [Watcher] Size=${SZ}B (try $i/30)..."
+                  PREV=$SZ; sleep 2
+                done
+
+                xattr -dr com.apple.quarantine "$FILE" 2>/dev/null || true
+                sleep 4
+
+                INSTALLED_APP_NAME=""
+                if [ "$EXT" = "dmg" ]; then
+                  echo "[$(date '+%H:%M:%S')] [Installer] Mounting DMG: $FILE"
+                  MNT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null \
+                        | awk '/\/Volumes\// {print $NF}' | head -n 1 || true)
+                  if [ -n "$MNT" ]; then
+                    APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -n 1 || true)
+                    if [ -n "$APP_SRC" ]; then
+                      AN=$(basename "$APP_SRC")
+                      sudo cp -R "$APP_SRC" /Applications/ || true
+                      sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
+                      echo "[$(date '+%H:%M:%S')] [Installer] ✓ $AN installed."
+                      INSTALLED_APP_NAME="$AN"
+                    fi
+                    hdiutil detach "$MNT" -quiet || true
+                  fi
+                elif [ "$EXT" = "zip" ]; then
+                  EXTRACT_DIR="${DL_FOLDER}/extracted_$(date +%s)"
+                  mkdir -p "$EXTRACT_DIR"
+                  ditto -xk "$FILE" "$EXTRACT_DIR" 2>/dev/null || \
+                    unzip -q -o "$FILE" -d "$EXTRACT_DIR" 2>/dev/null || true
+                  APP_IN_ZIP=$(find "$EXTRACT_DIR" -maxdepth 4 -name "*.app" \
+                               ! -path "*/__MACOSX/*" | head -n 1 || true)
+                  if [ -n "$APP_IN_ZIP" ]; then
+                    AN=$(basename "$APP_IN_ZIP")
+                    sudo cp -R "$APP_IN_ZIP" /Applications/ || true
+                    sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
+                    sudo codesign --force --deep --sign - "/Applications/$AN" 2>/dev/null || true
+                    INSTALLED_APP_NAME="$AN"
+                    rm -rf "$EXTRACT_DIR" 2>/dev/null || true
+                  fi
+                fi
+
+                touch "$INSTALLER_SENTINEL"
+
+                # Determine actual app and launch
+                ACTUAL="$SOFTWARE_TYPE"
+                if echo "$INSTALLED_APP_NAME$BASENAME" | grep -qi "gx"; then
+                  ACTUAL="opera_gx"
+                elif echo "$INSTALLED_APP_NAME$BASENAME" | grep -qi "opera"; then
+                  ACTUAL="opera_one"
+                fi
+                echo "[$(date '+%H:%M:%S')] [Watcher] App type: $ACTUAL"
+
+                # Quit Chrome
+                osascript -e 'tell application "Google Chrome" to quit' >/dev/null 2>&1 || true
+                sleep 2
+
+                if [ "$ACTUAL" = "opera_gx" ]; then
+                  SEARCH_PATHS=(
+                    "/Applications/$INSTALLED_APP_NAME"
+                    "/Applications/Opera GX.app"
+                    "$HOME/Applications/Opera GX.app"
+                  )
+                else
+                  SEARCH_PATHS=(
+                    "/Applications/$INSTALLED_APP_NAME"
+                    "/Applications/Opera.app"
+                    "/Applications/Opera Installer.app"
+                    "$HOME/Applications/Opera Installer.app"
+                    "$HOME/Applications/Opera.app"
+                  )
+                fi
+
+                echo "[$(date '+%H:%M:%S')] [Watcher] Waiting for app to appear on disk..."
+                LAUNCHED=false
+                for i in $(seq 1 60); do
+                  for P in "${SEARCH_PATHS[@]}"; do
+                    if [ -d "$P" ]; then
+                      sleep 3
+                      echo "[$(date '+%H:%M:%S')] [Watcher] Launching: $P"
+                      open "$P" || true
+                      sleep 5
+                      LAUNCHED=true
+                      break 2
+                    fi
+                  done
+                  sleep 2
+                done
+                if [ "$LAUNCHED" = false ]; then
+                  FOUND=$(find /Applications "$HOME/Applications" -maxdepth 2 -name "Opera*.app" 2>/dev/null | head -n 1 || true)
+                  if [ -n "$FOUND" ]; then
+                    echo "[$(date '+%H:%M:%S')] [Watcher] Fallback launch: $FOUND"
+                    open "$FOUND" || true
+                  fi
+                fi
+                INSTALLED=true
+                echo "[$(date '+%H:%M:%S')] [Watcher] ✓ Install + launch complete."
+              else
+                sleep 5
+              fi
+            done
+            echo "[$(date '+%H:%M:%S')] [Watcher] Exiting."
+          ) &
+          WATCHER_PID=$!
+
+          # ── Launch Chrome ──────────────────────────────────────────────
+          CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+          CHROME_FLAGS=(
+            --no-first-run --no-default-browser-check --disable-sync
+            --disable-translate --disable-infobars --disable-notifications
+            --disable-background-networking --disable-client-side-phishing-detection
+            --safebrowsing-disable-download-protection
+            --disable-features=SafeBrowsingEnhancedProtection,MediaRouter,DialMediaRouteProvider
+            --disable-extensions --disable-default-apps
+            --password-store=basic --use-mock-keychain
+          )
+          echo "[$(date '+%H:%M:%S')] Launching Chrome DIRECT → $TARGET_URL"
+          if [ -f "$CHROME_BIN" ]; then
+            "$CHROME_BIN" "${CHROME_FLAGS[@]}" "$TARGET_URL" &
+            CHROME_PID=$!
+            echo "[$(date '+%H:%M:%S')] Chrome launched (PID $CHROME_PID)"
+          else
+            echo "[$(date '+%H:%M:%S')] Chrome not found — Safari fallback."
+            open -a Safari "$TARGET_URL" || true
+          fi
+
+          # ── Wait for handler ───────────────────────────────────────────
+          HANDLER_TIMEOUT=500
+          POLL_START=$(date +%s)
+          while kill -0 $HANDLER_PID 2>/dev/null; do
+            ELAPSED=$(($(date +%s) - POLL_START))
+            if [ $ELAPSED -gt $HANDLER_TIMEOUT ]; then
+              echo "[$(date '+%H:%M:%S')] Handler timeout — killing."
+              kill $HANDLER_PID 2>/dev/null || true
+              break
+            fi
+            sleep 5
+          done
+
+          echo "[$(date '+%H:%M:%S')] Handler finished."
+          [ -n "$WATCHER_PID" ] && kill $WATCHER_PID 2>/dev/null || true
+          kill $DISMISSER_PID 2>/dev/null || true
+          echo "[$(date '+%H:%M:%S')] === macOS installation workflow complete ==="
+
       - name: Keep Runner Alive (macOS)
         if: always() && runner.os == 'macOS'
         run: |
           echo "Session is active. This runner will remain online until the job timeout is reached."
-          sleep 3600
+          sleep 3600hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
