@@ -30,17 +30,28 @@ on:
           - '4'
           - '5'
         default: '1'
+      num_clicks:
+        description: 'Number of Clicks (0 = all install)'
+        required: true
+        type: choice
+        options:
+          - '0'
+          - '1'
+          - '2'
+          - '3'
+          - '4'
+          - '5'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
         type: choice
         options:
-          - 'OperaGX - B4Books'
-          - 'OperaGX - Techx'
-          - 'OperaGX - Fatradez'
-          - 'OperaGX - James'
-          - 'OperaGX - Oliver'
-          - 'OperaGX - Mahal'
+          - 'Opera - Techx'
+          - 'Opera - Fatradez'
+          - 'Opera - James'
+          - 'Opera - Oliver'
+          - 'Opera - Mahal'
           - 'Opera-One - Esmeel'
           - 'Opera-One - Harrari'
           - 'Opera-One - Chloe'
@@ -50,24 +61,24 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaGX - B4Books'
-      run_manual_url:
-        description: 'Run Manual URL (Bypass software choice)'
-        required: true
-        type: boolean
-        default: false
-      manual_url:
+        default: 'Opera - Fatradez'
+      manual_software_url:
         description: 'Manual Software URL'
         required: false
         type: string
         default: ''
+      run_manual_link:
+        description: 'Run manual link'
+        required: true
+        type: boolean
+        default: false
       scrapeops_api_key:
-        description: 'ScrapeOps API Key'
+        description: 'ScrapeOps / FloppyData API Key / Manual Proxies'
         required: false
         type: string
         default: 'fd6d8b71-953d-4c71-9060-cb7bd4b7261e'
-      run_without_proxy:
-        description: 'Run without proxy (Bypass all proxies)'
+      use_without_proxy:
+        description: 'Run without proxy'
         required: true
         type: boolean
         default: false
@@ -83,6 +94,14 @@ on:
           - 'Germany'
           - 'France'
           - 'Brazil'
+          - 'Mexico'
+          - 'Spain'
+          - 'Vietnam'
+          - 'Switzerland'
+          - 'Indonesia'
+          - 'Italy'
+          - 'Netherlands'
+          - 'Poland'
         default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies'
@@ -113,44 +132,298 @@ jobs:
         env:
           EMAIL: ${{ inputs.getscreen_email }}
           NUM_DEVICES: ${{ inputs.num_devices }}
+          NUM_CLICKS: ${{ inputs.num_clicks }}
           OS_VERSION: ${{ inputs.os_version }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
-          RUN_MANUAL: ${{ inputs.run_manual_url }}
-          MANUAL_URL: ${{ inputs.manual_url }}
+          MANUAL_URL: ${{ inputs.manual_software_url }}
+          RUN_MANUAL: ${{ inputs.run_manual_link }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
-          RUN_WITHOUT_PROXY: ${{ inputs.run_without_proxy }}
+          WITHOUT_PROXY: ${{ inputs.use_without_proxy }}
           COUNTRY: ${{ inputs.proxy_country }}
           MOBILE: ${{ inputs.mobile_proxies }}
           STICKY: ${{ inputs.sticky_sessions }}
         run: |
-          import os, json, uuid
+          import os, json, uuid, random, re, sys, subprocess, time
+
+          print("========== INITIALIZING MATRIX GENERATION ==========")
+
+          try:
+              import requests
+          except ImportError:
+              subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "--quiet"])
+              import requests
+
           email = os.environ.get("EMAIL", "").strip()
           num_devices = int(os.environ.get("NUM_DEVICES", "1"))
-          os_version = os.environ.get("OS_VERSION", "macos-15")
-          api_key = os.environ.get("API_KEY", "").strip()
-          run_without_proxy = os.environ.get("RUN_WITHOUT_PROXY", "false").lower() == "true"
-          country_input = os.environ.get("COUNTRY", "USA")
-          mobile = os.environ.get("MOBILE", "false").lower() == "true"
-          sticky = os.environ.get("STICKY", "false").lower() == "true"
-          
-          run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
-          manual_url = os.environ.get("MANUAL_URL", "").strip()
-          software_choice = os.environ.get("SOFTWARE_CHOICE", "OperaGX - James")
-          
-          use_proxy = bool(api_key) and not run_without_proxy
+          num_clicks_raw = int(os.environ.get("NUM_CLICKS", "0"))
+          os_version = os.environ.get("OS_VERSION", "macos-14")
+
+          proxy_input = os.environ.get("API_KEY", "").strip()
+          without_proxy = os.environ.get("WITHOUT_PROXY", "false").lower() == "true"
+
+          is_manual_proxy = False
+          manual_proxy_strings = []
+          scrapeops_key = ""
+          floppy_key = ""
+
+          SCRAPEOPS_KEY_RE = re.compile(
+              r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
+          FLOPPY_KEY_RE = re.compile(r'^[A-Za-z0-9_]{30,80}$')
+
+          if without_proxy:
+              print("[Proxy] 'Run without proxy' checked. Disabling proxy.")
+              proxy_input = ""
+          elif not proxy_input or proxy_input.lower() in ["none", "null", "false", "blank", "empty", "''", '""']:
+              print("[Proxy] Proxy input empty or invalid. Disabling proxy.")
+              proxy_input = ""
+          else:
+              raw_items = re.split(r'[\s,;]+', proxy_input)
+              proxy_candidates = []
+              for item in raw_items:
+                  item = item.strip()
+                  if not item:
+                      continue
+                  if ('://' in item) or ('@' in item) or (item.count(':') >= 2 and len(item) > 10):
+                      proxy_candidates.append(item)
+
+              if len(proxy_candidates) >= 1:
+                  is_manual_proxy = True
+                  manual_proxy_strings = proxy_candidates
+                  print(f"[Proxy] Detected MANUAL PROXY mode with {len(manual_proxy_strings)} entries.")
+              elif SCRAPEOPS_KEY_RE.match(proxy_input):
+                  scrapeops_key = proxy_input
+                  print("[Proxy] Detected SCRAPEOPS API KEY mode.")
+              elif FLOPPY_KEY_RE.match(proxy_input):
+                  floppy_key = proxy_input
+                  print("[Proxy] Detected FLOPPYDATA API KEY mode.")
+              else:
+                  scrapeops_key = proxy_input
+                  print("[Proxy] Could not determine key type — treating as ScrapeOps.")
+
+          def parse_proxy(proxy_str):
+              original = proxy_str.strip()
+              if not original:
+                  return None
+
+              protocol = 'http'
+              rest = original
+
+              if '://' in rest:
+                  protocol, rest = rest.split('://', 1)
+                  if protocol.lower() == 'geolocation':
+                      protocol = 'http'
+
+              floppy_match = re.match(r'^([^:]+):([^@]+)@([^:]+):(\d+):(.+)$', rest)
+              if floppy_match:
+                  user, pwd, host, port, country_extra = floppy_match.groups()
+                  country = country_extra.split(' - ')[0].strip()
+                  return {
+                      'original': original, 'protocol': protocol,
+                      'username': user, 'password': pwd,
+                      'host': host, 'port': int(port),
+                      'server': f"{host}:{port}",
+                      'country_name': country, 'country_code': None,
+                      'url': f"http://{user}:{pwd}@{host}:{port}"
+                  }
+
+              std_match = re.match(r'^([^:]+):([^@]+)@([^:]+):(\d+)$', rest)
+              if std_match:
+                  user, pwd, host, port = std_match.groups()
+                  return {
+                      'original': original, 'protocol': protocol,
+                      'username': user, 'password': pwd,
+                      'host': host, 'port': int(port),
+                      'server': f"{host}:{port}",
+                      'country_name': None, 'country_code': None,
+                      'url': f"{protocol}://{user}:{pwd}@{host}:{port}"
+                  }
+
+              alt_match = re.match(r'^([^:]+):(\d+):([^:]+):(.+)$', rest)
+              if alt_match:
+                  host, port, user, pwd = alt_match.groups()
+                  return {
+                      'original': original, 'protocol': protocol,
+                      'username': user, 'password': pwd,
+                      'host': host, 'port': int(port),
+                      'server': f"{host}:{port}",
+                      'country_name': None, 'country_code': None,
+                      'url': f"{protocol}://{user}:{pwd}@{host}:{port}"
+                  }
+
+              simple_match = re.match(r'^([^:]+):(\d+)$', rest)
+              if simple_match:
+                  host, port = simple_match.groups()
+                  return {
+                      'original': original, 'protocol': protocol,
+                      'username': '', 'password': '',
+                      'host': host, 'port': int(port),
+                      'server': f"{host}:{port}",
+                      'country_name': None, 'country_code': None,
+                      'url': f"{protocol}://{host}:{port}"
+                  }
+
+              return None
+
+          def validate_proxy(pinfo):
+              try:
+                  proxies = {'http': pinfo['url'], 'https': pinfo['url']}
+                  resp = requests.get('http://ip-api.com/json/', proxies=proxies, timeout=15)
+                  data = resp.json()
+                  if data.get('status') == 'success':
+                      cc = data.get('countryCode', 'US').lower()
+                      country = pinfo.get('country_name') or data.get('country', 'Unknown')
+                      return {
+                          'working': True,
+                          'country_name': country,
+                          'country_code': cc,
+                          'ip': data.get('query', ''),
+                          **{k: v for k, v in pinfo.items() if k not in ['working', 'country_name', 'country_code', 'ip']}
+                      }
+              except Exception as e:
+                  print(f"[ProxyCheck] FAILED {pinfo.get('server','?')}: {e}")
+              return {'working': False, **pinfo}
+
+          country_name_to_code = {
+              'united states': 'us', 'united kingdom': 'uk', 'canada': 'ca',
+              'australia': 'au', 'germany': 'de', 'france': 'fr',
+              'brazil': 'br', 'mexico': 'mx', 'spain': 'es',
+              'vietnam': 'vn', 'switzerland': 'ch', 'indonesia': 'id',
+              'italy': 'it', 'netherlands': 'nl', 'poland': 'pl',
+              'usa': 'us', 'uk': 'uk', 'ca': 'ca', 'au': 'au', 'de': 'de',
+              'fr': 'fr', 'br': 'br', 'mx': 'mx', 'es': 'es', 'vn': 'vn',
+              'ch': 'ch', 'id': 'id', 'it': 'it', 'nl': 'nl', 'pl': 'pl'
+          }
+
           country_map = {
               "USA": "us", "UK": "uk", "Canada": "ca",
               "Australia": "au", "Germany": "de", "France": "fr",
-              "Brazil": "br"
+              "Brazil": "br", "Mexico": "mx", "Spain": "es",
+              "Vietnam": "vn", "Switzerland": "ch", "Indonesia": "id",
+              "Italy": "it", "Netherlands": "nl", "Poland": "pl"
           }
-          cc = country_map.get(country_input, "us")
+
+          active_proxies = []
+          use_proxy = False
+
+          if is_manual_proxy and not without_proxy:
+              parsed = []
+              for ps in manual_proxy_strings:
+                  p = parse_proxy(ps)
+                  if p:
+                      parsed.append(p)
+                  else:
+                      print(f"[ProxyParse] Could not parse: {ps[:60]}...")
+
+              print(f"[Proxy] Validating {len(parsed)} parsed proxies...")
+              for idx, p in enumerate(parsed):
+                  result = validate_proxy(p)
+                  if result['working']:
+                      if result.get('country_name'):
+                          cname = result['country_name'].lower()
+                          result['country_code'] = country_name_to_code.get(cname, result.get('country_code', 'us'))
+                      active_proxies.append(result)
+                      print(f"[Proxy] ACTIVE  -> {result['server']} | {result['country_name']} ({result['country_code']}) | IP: {result['ip']}")
+                  else:
+                      print(f"[Proxy] DEAD    -> {result.get('server','?')}")
+                  if idx < len(parsed) - 1:
+                      time.sleep(1)
+
+              if len(active_proxies) < num_devices:
+                  print(f"[Proxy] ERROR: Only {len(active_proxies)} active proxies for {num_devices} devices.")
+                  exit(1)
+
+              use_proxy = True
+              print(f"[Proxy] Manual proxy pool ready: {len(active_proxies)} active for {num_devices} devices.")
+
+          elif floppy_key and not without_proxy:
+              use_proxy = True
+              country_input = os.environ.get("COUNTRY", "USA")
+              mobile = os.environ.get("MOBILE", "false").lower() == "true"
+              sticky = os.environ.get("STICKY", "false").lower() == "true"
+              cc = country_map.get(country_input, "us").upper()
+              proxy_type = "mobile" if mobile else "residential"
+
+              FLOPPY_BASE = "https://client-api.floppy.host"
+              headers = {"X-Api-Key": floppy_key}
+
+              print(f"[FloppyData] Fetching base credentials...")
+              try:
+                  creds_resp = requests.get(
+                      f"{FLOPPY_BASE}/v1/rotating/smartParamsCredentials",
+                      headers=headers, timeout=15)
+                  creds_data = creds_resp.json()
+                  floppy_base_user = creds_data.get("username", "")
+                  floppy_base_pass = creds_data.get("password", "")
+                  print(f"[FloppyData] Base credentials fetched. User prefix: {floppy_base_user[:8]}***")
+              except Exception as e:
+                  print(f"[FloppyData] ERROR fetching credentials: {e}")
+                  exit(1)
+
+              print(f"[FloppyData] Building {num_devices} device proxy configs (type={proxy_type}, country={cc})...")
+              for i in range(1, num_devices + 1):
+                  session_id = str(uuid.uuid4())[:8] if sticky else ""
+                  params = {
+                      "type": proxy_type,
+                      "country": cc,
+                      "protocol": "http",
+                      "rotation": "0" if sticky else "-1",
+                  }
+                  if sticky and session_id:
+                      params["session"] = f"dev{i}_{session_id}"
+
+                  try:
+                      builder_resp = requests.get(
+                          f"{FLOPPY_BASE}/v1/rotating/smartParamsBuilder",
+                          headers=headers, params=params, timeout=15)
+                      builder_data = builder_resp.json()
+                      floppy_user = builder_data.get("username", floppy_base_user)
+                      floppy_pass = builder_data.get("password", floppy_base_pass)
+                      floppy_host = builder_data.get("host", "geo.g-w.info")
+                      floppy_port = str(builder_data.get("port", 10080))
+                      print(f"[FloppyData] Device {i}: {floppy_host}:{floppy_port} | user={floppy_user[:16]}... | session={'YES' if sticky else 'NO'}")
+                  except Exception as e:
+                      print(f"[FloppyData] ERROR building params for device {i}: {e}")
+                      exit(1)
+
+                  active_proxies.append({
+                      'username': floppy_user,
+                      'password': floppy_pass,
+                      'host': floppy_host,
+                      'port': int(floppy_port),
+                      'server': f"{floppy_host}:{floppy_port}",
+                      'country_code': cc.lower(),
+                      'country_name': country_input,
+                      'proxy_type_label': "floppydata",
+                      'url': f"http://{floppy_user}:{floppy_pass}@{floppy_host}:{floppy_port}"
+                  })
+                  time.sleep(0.3)
+
+              print(f"[FloppyData] Proxy pool ready: {len(active_proxies)} entries.")
+
+          elif scrapeops_key and not without_proxy:
+              use_proxy = True
+              print("[Proxy] ScrapeOps proxy pool ready.")
+
+          num_clicks = min(num_clicks_raw, num_devices)
+          num_installs = num_devices - num_clicks
+          action_list = ["install"] * num_installs + ["click"] * num_clicks
+          random.shuffle(action_list)
+
+          print(f"[Action Matrix] Total Devices : {num_devices}")
+          print(f"[Action Matrix] Install Paths : {num_installs}")
+          print(f"[Action Matrix] Click Paths   : {num_clicks}")
+          print(f"[Action Matrix] Randomized Queue: {action_list}")
+
+          run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
+          manual_url_input = os.environ.get("MANUAL_URL", "").strip()
+          manual_url = manual_url_input if run_manual else ""
+
           opera_urls = {
-              "OperaGX - B4Books":  "https://u.to/opx-b4b/2nh4Ig",
-              "OperaGX - Techx":    "https://u.to/techxsm/xVyFIg",
-              "OperaGX - Fatradez": "https://u.to/fatradezsm/cF2FIg",
-              "OperaGX - James":    "https://u.to/jamesxsm/eV2FIg",
-              "OperaGX - Oliver":   "https://u.to/oliverxsm/f12FIg",
-              "OperaGX - Mahal":    "https://u.to/mahalxsm/iF2FIg",
+              "Opera - Techx":    "https://u.to/techxsm/xVyFIg",
+              "Opera - Fatradez": "https://u.to/fatradezsm/cF2FIg",
+              "Opera - James":    "https://u.to/jamesxsm/eV2FIg",
+              "Opera - Oliver":   "https://u.to/oliverxsm/f12FIg",
+              "Opera - Mahal":    "https://u.to/mahalxsm/iF2FIg",
           }
           opera_one_urls = {
               "Opera-One - Esmeel":  "https://u.to/esmlxopo/cTOGIg",
@@ -166,30 +439,32 @@ jobs:
               "Ad-MVN - A2Z":        "https://u.to/a2zadmvnxsmrt/Y-t7Ig",
           }
           all_urls = {**opera_urls, **opera_one_urls, **ad_mvn_urls}
-          
-          if run_manual and manual_url:
+
+          dynamic_links = ["Opera - Techx", "Opera - Fatradez", "Opera - James", "Opera - Oliver", "Opera - Mahal"]
+          software_choice = os.environ.get("SOFTWARE_CHOICE", "Opera - Fatradez")
+
+          if manual_url:
               target_url = manual_url
               software_type = "dynamic_opera"
               dmg_filter = "*Opera*"
+              print(f"[Target] Manual URL selected: {target_url}")
           else:
-              target_url = all_urls.get(software_choice, opera_urls["OperaGX - James"])
-              dynamic_links =[
-                  "OperaGX - Techx", "OperaGX - Fatradez", "OperaGX - James",
-                  "OperaGX - Oliver", "OperaGX - Mahal"
-              ]
-              if software_choice in dynamic_links or software_choice.startswith("Ad-MVN"):
+              target_url = all_urls.get(software_choice, opera_urls["Opera - Techx"])
+              if software_choice in dynamic_links:
+                  software_type = "opera_smart_link"
+                  dmg_filter = "*Opera*"
+              elif software_choice.startswith("Ad-MVN"):
                   software_type = "dynamic_opera"
                   dmg_filter = "*Opera*"
-              elif software_choice.startswith("OperaGX"):
-                  software_type = "opera_gx"
-                  dmg_filter = "*OperaGX*"
               elif software_choice.startswith("Opera-One"):
                   software_type = "opera_one"
                   dmg_filter = "*Opera*"
               else:
                   software_type = "opera_gx"
-                  dmg_filter = "*Opera*"
-                  
+                  dmg_filter = "*OperaGX*"
+              print(f"[Target] Software: {software_choice} -> URL: {target_url}")
+              print(f"[Target] Engine Type: {software_type} | Filter: {dmg_filter}")
+
           def short_os(os_ver):
               mapping = {
                   "macos-15":        "M15",
@@ -200,14 +475,14 @@ jobs:
                   "macos-26-intel":  "M26I",
               }
               return mapping.get(os_ver, "MAC")
-              
+
           def short_software(choice):
               if run_manual:
                   return "MANUAL"
               prefix_map = {
-                  "OperaGX":   "OPX",
                   "Opera-One": "OPO",
                   "Ad-MVN":    "MVN",
+                  "Opera":     "OP",
               }
               for key, prefix in prefix_map.items():
                   if choice.startswith(key):
@@ -215,100 +490,203 @@ jobs:
                       list_name = parts[1].replace(" ", "") if len(parts) > 1 else ""
                       return f"{prefix}-{list_name}"
               return choice.replace(" ", "").replace("-", "")
-              
+
           short_os_tag = short_os(os_version)
           short_sw_tag = short_software(software_choice)
-          includes =[]
+
+          includes = []
           if email:
               for i in range(1, num_devices + 1):
-                  device_name = f"{i}-{short_os_tag}-{short_sw_tag}"
-                  if use_proxy:
+                  action_mode = action_list[i - 1]
+                  action_cap = action_mode.capitalize()
+
+                  if is_manual_proxy and active_proxies:
+                      proxy = active_proxies[i - 1]
+                      cc = proxy['country_code'].upper()
+                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{cc}"
+                      includes.append({
+                          "device": device_name, "email": email, "os": os_version,
+                          "use_proxy": "true",
+                          "proxy_server": proxy['server'],
+                          "proxy_user": proxy['username'],
+                          "proxy_pass": proxy['password'],
+                          "proxy_type": "manual",
+                          "target_url": target_url, "software_type": software_type,
+                          "dmg_filter": dmg_filter, "action_mode": action_mode
+                      })
+                      print(f"[Device Added] {device_name} | Proxy: {proxy['server']} ({cc}) | Auth: {'YES' if proxy['username'] else 'NO'}")
+
+                  elif floppy_key and active_proxies:
+                      proxy = active_proxies[i - 1]
+                      cc = proxy['country_code'].upper()
+                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{cc}"
+                      includes.append({
+                          "device": device_name, "email": email, "os": os_version,
+                          "use_proxy": "true",
+                          "proxy_server": proxy['server'],
+                          "proxy_user": proxy['username'],
+                          "proxy_pass": proxy['password'],
+                          "proxy_type": "floppydata",
+                          "target_url": target_url, "software_type": software_type,
+                          "dmg_filter": dmg_filter, "action_mode": action_mode
+                      })
+                      print(f"[Device Added] {device_name} | Proxy: FloppyData ({proxy['server']}) ({cc})")
+
+                  elif use_proxy and scrapeops_key:
+                      country_input = os.environ.get("COUNTRY", "USA")
+                      mobile = os.environ.get("MOBILE", "false").lower() == "true"
+                      sticky = os.environ.get("STICKY", "false").lower() == "true"
+                      cc = country_map.get(country_input, "us")
+                      country_cap = cc.upper()
+                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{country_cap}"
                       proxy_user = f"scrapeops.country={cc}"
                       if mobile:
                           proxy_user += ".mobile=true"
                       if sticky:
                           session_id = str(uuid.uuid4())[:8]
                           proxy_user += f".sticky_session={session_id}"
-                      proxy_pass = api_key
+                      includes.append({
+                          "device": device_name, "email": email, "os": os_version,
+                          "use_proxy": "true",
+                          "proxy_server": "residential-proxy.scrapeops.io:8181",
+                          "proxy_user": proxy_user,
+                          "proxy_pass": scrapeops_key,
+                          "proxy_type": "scrapeops",
+                          "target_url": target_url, "software_type": software_type,
+                          "dmg_filter": dmg_filter, "action_mode": action_mode
+                      })
+                      print(f"[Device Added] {device_name} | Proxy: ScrapeOps ({cc})")
+
                   else:
-                      proxy_user = ""
-                      proxy_pass = ""
-                  includes.append({
-                      "device":        device_name,
-                      "email":         email,
-                      "os":            os_version,
-                      "use_proxy":     str(use_proxy).lower(),
-                      "proxy_user":    proxy_user,
-                      "proxy_pass":    proxy_pass,
-                      "target_url":    target_url,
-                      "software_type": software_type,
-                      "dmg_filter":    dmg_filter,
-                  })
+                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-DIRECT"
+                      includes.append({
+                          "device": device_name, "email": email, "os": os_version,
+                          "use_proxy": "false",
+                          "proxy_server": "", "proxy_user": "", "proxy_pass": "",
+                          "proxy_type": "none",
+                          "target_url": target_url, "software_type": software_type,
+                          "dmg_filter": dmg_filter, "action_mode": action_mode
+                      })
+                      print(f"[Device Added] {device_name} | Proxy: NONE")
+
           if not includes:
-              print("Error: Valid configuration could not be generated.")
+              print("Error: Valid configuration could not be generated. Exiting.")
               exit(1)
+
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"matrix={json.dumps({'include': includes})}\n")
-              
+              f.write(f"is_manual_proxy={str(is_manual_proxy).lower()}\n")
+          print("========== MATRIX GENERATION COMPLETE ==========")
+
       - name: Update Workflow Defaults (Remember Inputs)
         shell: python
         env:
           OS_VERSION: ${{ inputs.os_version }}
           GETSCREEN_EMAIL: ${{ inputs.getscreen_email }}
           NUM_DEVICES: ${{ inputs.num_devices }}
+          NUM_CLICKS: ${{ inputs.num_clicks }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
-          RUN_MANUAL: ${{ inputs.run_manual_url }}
-          MANUAL_URL: ${{ inputs.manual_url }}
+          MANUAL_URL: ${{ inputs.manual_software_url }}
+          RUN_MANUAL: ${{ inputs.run_manual_link }}
           API_KEY: ${{ inputs.scrapeops_api_key }}
-          RUN_WITHOUT_PROXY: ${{ inputs.run_without_proxy }}
+          WITHOUT_PROXY: ${{ inputs.use_without_proxy }}
           COUNTRY: ${{ inputs.proxy_country }}
           MOBILE: ${{ inputs.mobile_proxies }}
           STICKY: ${{ inputs.sticky_sessions }}
         run: |
           import re, os
+
+          SCRAPEOPS_KEY_RE = re.compile(
+              r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
+          FLOPPY_KEY_RE = re.compile(r'^[A-Za-z0-9_]{30,80}$')
+
+          def update_yaml_default(yaml_str, input_key, new_val, is_bool=False):
+              lines = yaml_str.split("\n")
+              in_target_block = False
+              target_indent = -1
+              for i, line in enumerate(lines):
+                  match = re.match(r"^([ \t]*)" + input_key + r":", line)
+                  if match:
+                      in_target_block = True
+                      target_indent = len(match.group(1))
+                      continue
+                  if in_target_block:
+                      current_indent = len(line) - len(line.lstrip(" \t"))
+                      if line.strip() and current_indent <= target_indent:
+                          in_target_block = False
+                          continue
+                      if line.lstrip(" \t").startswith("default:"):
+                          indent = line[:len(line) - len(line.lstrip(" \t"))]
+                          if is_bool:
+                              val_str = "true" if str(new_val).lower() == "true" else "false"
+                              lines[i] = f"{indent}default: {val_str}"
+                          else:
+                              if new_val is None or str(new_val).strip().lower() in ["none", "null", "blank", "empty", "''", '""']: safe_val = ""
+                              else: safe_val = str(new_val).replace("'", "\\'")
+                              lines[i] = f"{indent}default: '{safe_val}'"
+                          break
+              return "\n".join(lines)
+
+          api_key_input = os.environ.get("API_KEY", "").strip()
+          is_manual_proxy = False
+          is_floppy_key = False
+          is_scrapeops_key = False
+          if api_key_input:
+              raw_items = re.split(r'[\s,;]+', api_key_input)
+              proxy_candidates = [item for item in raw_items if ('://' in item) or ('@' in item) or (item.count(':') >= 2 and len(item) > 10)]
+              if len(proxy_candidates) >= 1:
+                  is_manual_proxy = True
+              elif SCRAPEOPS_KEY_RE.match(api_key_input):
+                  is_scrapeops_key = True
+              elif FLOPPY_KEY_RE.match(api_key_input):
+                  is_floppy_key = True
+              else:
+                  is_scrapeops_key = True
+
           file_path = ".github/workflows/main6.yml"
           if os.path.exists(file_path):
-              with open(file_path, "r") as f:
+              print(f"[Workflow State] Attempting to update defaults in {file_path}")
+              with open(file_path, "r", encoding="utf-8") as f:
                   content = f.read()
-              def update_default_str(input_name, new_val):
-                  global content
-                  pattern = r"(" + input_name + r":[\s\S]*?default:\s*')[^']*(')"
-                  content = re.sub(pattern, rf"\g<1>{new_val}\g<2>", content, count=1)
-              def update_default_bool(input_name, new_val):
-                  global content
-                  pattern = r"(" + input_name + r":[\s\S]*?default:\s*)(true|false)"
-                  content = re.sub(pattern, rf"\g<1>{new_val.lower()}", content, count=1)
-                  
-              update_default_str("os_version",        os.environ.get("OS_VERSION"))
-              update_default_str("getscreen_email",   os.environ.get("GETSCREEN_EMAIL"))
-              update_default_str("num_devices",       os.environ.get("NUM_DEVICES"))
-              update_default_str("software_choice",   os.environ.get("SOFTWARE_CHOICE"))
-              update_default_bool("run_manual_url",   os.environ.get("RUN_MANUAL"))
-              if os.environ.get("RUN_MANUAL", "false").lower() == "true":
-                  update_default_str("manual_url",    os.environ.get("MANUAL_URL"))
+
+              run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
+              content = update_yaml_default(content, "os_version", os.environ.get("OS_VERSION"))
+              content = update_yaml_default(content, "getscreen_email", os.environ.get("GETSCREEN_EMAIL"))
+              content = update_yaml_default(content, "num_devices", os.environ.get("NUM_DEVICES"))
+              content = update_yaml_default(content, "num_clicks", os.environ.get("NUM_CLICKS"))
+              content = update_yaml_default(content, "software_choice", os.environ.get("SOFTWARE_CHOICE"))
+
+              manual_url_to_save = os.environ.get("MANUAL_URL") if run_manual else ""
+              content = update_yaml_default(content, "manual_software_url", manual_url_to_save)
+              content = update_yaml_default(content, "run_manual_link", run_manual, is_bool=True)
+
+              if not is_manual_proxy and api_key_input:
+                  content = update_yaml_default(content, "scrapeops_api_key", api_key_input)
+                  key_type = "FloppyData" if is_floppy_key else "ScrapeOps"
+                  print(f"[Workflow State] Saved {key_type} API key to defaults.")
               else:
-                  update_default_str("manual_url",    "")
-              update_default_str("scrapeops_api_key", os.environ.get("API_KEY"))
-              update_default_bool("run_without_proxy",os.environ.get("RUN_WITHOUT_PROXY"))
-              update_default_str("proxy_country",     os.environ.get("COUNTRY"))
-              update_default_bool("mobile_proxies",   os.environ.get("MOBILE"))
-              update_default_bool("sticky_sessions",  os.environ.get("STICKY"))
-              
-              with open(file_path, "w") as f:
+                  print("[Workflow State] Manual proxies detected — NOT saving proxy list to defaults.")
+
+              content = update_yaml_default(content, "use_without_proxy", os.environ.get("WITHOUT_PROXY"), is_bool=True)
+              content = update_yaml_default(content, "proxy_country", os.environ.get("COUNTRY"))
+              content = update_yaml_default(content, "mobile_proxies", os.environ.get("MOBILE"), is_bool=True)
+              content = update_yaml_default(content, "sticky_sessions", os.environ.get("STICKY"), is_bool=True)
+
+              with open(file_path, "w", encoding="utf-8") as f:
                   f.write(content)
+              print(f"[Workflow State] Successfully saved new defaults.")
           else:
-              print(f"File {file_path} not found. Skipping auto-save.")
-              
+              print(f"[Workflow State] Warning: File {file_path} not found. Skipping auto-save.")
+
       - name: Commit and Push New Defaults
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .github/workflows/main6.yml
-          git diff --quiet && git diff --staged --quiet || \
-            (git commit -m "Update last used inputs[skip ci]" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update last used inputs [skip ci]" && git push)
 
   remote_session:
-    name: Remote Session ${{ matrix.device }}
+    name: Session ${{ matrix.device }}
     needs: prepare_matrix
     runs-on: ${{ matrix.os }}
     timeout-minutes: 8
@@ -688,19 +1066,29 @@ jobs:
         shell: bash
         env:
           USE_PROXY:     ${{ matrix.use_proxy }}
+          PROXY_SERVER:  ${{ matrix.proxy_server }}
           PROXY_USER:    ${{ matrix.proxy_user }}
           PROXY_PASS:    ${{ matrix.proxy_pass }}
+          PROXY_TYPE:    ${{ matrix.proxy_type }}
           TARGET_URL:    ${{ matrix.target_url }}
           SOFTWARE_TYPE: ${{ matrix.software_type }}
           DMG_FILTER:    ${{ matrix.dmg_filter }}
+          ACTION_MODE:   ${{ matrix.action_mode }}
         run: |
           echo "============================================================"
           echo " [$(date '+%H:%M:%S')] Zero-Touch Downloader & Installer (macOS)"
           echo " Category  : $SOFTWARE_TYPE"
           echo " Target URL: $TARGET_URL"
+          echo " Action    : ${ACTION_MODE^^} PATHWAY ASSIGNED"
           if [ "$USE_PROXY" = "true" ]; then
-            echo " Mode      : Proxy-enabled (ScrapeOps)"
-            echo " Proxy User: $PROXY_USER"
+            if [ "$PROXY_TYPE" = "manual" ]; then
+              echo " Mode      : Proxy-enabled (Manual) → $PROXY_SERVER"
+            elif [ "$PROXY_TYPE" = "floppydata" ]; then
+              echo " Mode      : Proxy-enabled (FloppyData) → $PROXY_SERVER"
+            else
+              echo " Mode      : Proxy-enabled (ScrapeOps)"
+              echo " Proxy User: $PROXY_USER"
+            fi
           else
             echo " Mode      : Direct (no proxy)"
           fi
@@ -795,13 +1183,8 @@ jobs:
                   'whose visible is true', silent=True)
               return[n.strip() for n in r.split(",") if n.strip()]
 
-          # ------------------------------------------------------------
-          #  Generic button click using exact button name (case-insensitive)
-          #  Searches all visible processes whose name contains "opera"
-          # ------------------------------------------------------------
           def click_button_exact(label, timeout=5):
-              """Click a button whose name matches *label* (case-insensitive) in any Opera-related process.
-                 Returns True if a button was clicked."""
+              """Click a button whose name matches *label* (case-insensitive) in any Opera-related process."""
               result = run_as(fr'''
           tell application "System Events"
             repeat with proc in (every process whose visible is true)
@@ -864,8 +1247,6 @@ jobs:
               result = run_as(r'''
           tell application "System Events"
             set dismissed to ""
-            
-            -- CoreServicesUIAgent specifically manages TCC prompts like "hosted-compute-agent wants access to control Google Chrome"
             try
               tell process "CoreServicesUIAgent"
                 repeat with win in (every window)
@@ -878,7 +1259,6 @@ jobs:
                 end repeat
               end tell
             end try
-            
             repeat with proc in (every process whose visible is true)
               set pName to name of proc as string
               if pName is not "Google Chrome" then
@@ -921,7 +1301,6 @@ jobs:
               result = run_as(r'''
           tell application "System Events"
             set popupClicked to ""
-            
             try
               tell process "CoreServicesUIAgent"
                 repeat with win in (every window)
@@ -934,7 +1313,6 @@ jobs:
                 end repeat
               end tell
             end try
-
             repeat with proc in (every process whose visible is true)
               set pName to name of proc as string
               if pName is not "Google Chrome" then
@@ -1002,9 +1380,6 @@ jobs:
                   return True
               return False
 
-          # ------------------------------------------------------------
-          #  Scans ALL processes for the proxy auth dialog
-          # ------------------------------------------------------------
           def get_proxy_dialog_info():
               result = run_as(r'''
           tell application "System Events"
@@ -1033,7 +1408,7 @@ jobs:
                         repeat with b in (every button of w)
                           set bname to ""
                           try
-                            set bname to (name of b) as string
+                            set bname to name of b as string
                           end try
                           if bname contains "Sign" or bname contains "OK" then
                             set bpos to position of b
@@ -1073,9 +1448,6 @@ jobs:
                   log(f"[DialogInfo] Parse error: {e}, raw={result[:120]}")
                   return None
 
-          # ------------------------------------------------------------
-          #  fill_proxy_auth with keyboard fallback
-          # ------------------------------------------------------------
           def fill_proxy_auth(user, pwd):
               global PROXY_RETRY_INTERVAL
               info = get_proxy_dialog_info()
@@ -1170,9 +1542,6 @@ jobs:
               time.sleep(0.5)
               return result if result else "submitted"
 
-          # ------------------------------------------------------------
-          #  DOWNLOAD BUTTON CLICK – 3 Tab + Enter
-          # ------------------------------------------------------------
           def click_dl_button(sw_type):
               log("[DLButton] Activating Chrome and giving page time to settle...")
               run_as('tell application "Google Chrome" to activate', silent=True)
@@ -1318,7 +1687,6 @@ jobs:
               log("[Opera GX] Setup complete.")
 
           def opera_one_flow():
-              # Wait specifically for Opera Installer
               if not wait_for_app_launch("Opera Installer", timeout=120):
                   log("[Opera One] Installer not seen, attempting manual launch of /Applications/Opera Installer.app")
                   if os.path.exists("/Applications/Opera Installer.app"):
@@ -1359,9 +1727,6 @@ jobs:
                   dismiss_system_popups()
                   time.sleep(1)
 
-              # ------------------------------------------------------------
-              #  NEW: Click "Next" 7 times with a 3s delay between each
-              # ------------------------------------------------------------
               for i in range(1, 8):
                   log(f"[Opera One] Clicking 'Next' (attempt {i}/7)...")
                   clicked = click_button_exact("Next")
@@ -1369,14 +1734,10 @@ jobs:
                       log(f"[Opera One] 'Next' clicked successfully.")
                   else:
                       log(f"[Opera One] 'Next' button not found, continuing anyway.")
-                  # dismiss any stray popups
                   dismiss_compute_host_popup()
                   dismiss_system_popups()
                   time.sleep(3)
 
-              # ------------------------------------------------------------
-              #  Optional "Get Started" button (may not always appear)
-              # ------------------------------------------------------------
               log("[Opera One] Looking for 'Get Started' button...")
               if click_button_exact("Get Started"):
                   log("[Opera One] 'Get Started' clicked.")
@@ -1384,9 +1745,6 @@ jobs:
               else:
                   log("[Opera One] 'Get Started' not found – skipping.")
 
-              # ------------------------------------------------------------
-              #  Click "Submit"
-              # ------------------------------------------------------------
               log("[Opera One] Clicking 'Submit'...")
               if click_button_exact("Submit"):
                   log("[Opera One] 'Submit' clicked.")
@@ -1395,9 +1753,6 @@ jobs:
                   press("return")
               time.sleep(2)
 
-              # ------------------------------------------------------------
-              #  Keyboard sequence: Cmd+N, Tab random 6-12, Enter
-              # ------------------------------------------------------------
               log("[Opera One] Opening New Tab (Cmd+N)...")
               run_as('tell application "System Events" to keystroke "n" using command down', silent=True)
               time.sleep(random.uniform(1, 2))
@@ -1417,7 +1772,7 @@ jobs:
               run_as('tell application "Google Chrome" to quit', silent=True)
               log("[Chrome] Quit signal sent.")
 
-          def handle(user, pwd, sw_type, use_proxy, timeout=420):
+          def handle(user, pwd, sw_type, use_proxy, action_mode, timeout=420):
               global PROXY_RETRY_INTERVAL
               t0 = time.time()
               sentinel = "/tmp/download_done.flag"
@@ -1437,10 +1792,16 @@ jobs:
               last_cookie_try     = 0
               last_dl_try         = 0
 
-              log(f"[Handler] ===== HANDLER STARTED =====")
-              log(f"[Handler] type={sw_type} | proxy={use_proxy}")
+              smart_link_done     = False
+              smart_link_time     = 0
+
+              CLICK_TOTAL         = 75
+              RELOAD_THRESHOLD    = random.randint(20, 61)
+              RELOAD_FIRED        = False
+
+              log(f"[Handler] ===== HANDLER STARTED | mode={action_mode} | type={sw_type} | proxy={use_proxy} =====")
               if use_proxy:
-                  log(f"[Handler] Proxy user : {user}")
+                  log(f"[Handler] Proxy user : {user[:30]}...")
                   log(f"[Handler] Proxy pass : {pwd[:4]}...{pwd[-4:] if len(pwd)>8 else '****'}")
                   clipboard_set(user)
                   log("[Handler] Username pre-loaded to clipboard.")
@@ -1506,7 +1867,51 @@ jobs:
                               log(f"[ProxyAuth] Uncertain result — retrying in 2s")
                               PROXY_RETRY_INTERVAL = 2
 
-                      if chrome and not dl_clicked:
+                      # Smart Link Interstitial (1 Tab + Enter after 20s)
+                      if sw_type in ["opera_smart_link", "dynamic_opera"] and not smart_link_done:
+                          if chrome_first_seen and (time.time() - chrome_first_seen) > 20:
+                              if use_proxy and not proxy_done:
+                                  pass
+                              else:
+                                  log(f"[SmartLink] 20s elapsed. Executing TAB + ENTER interstitial bypass...")
+                                  press("tab")
+                                  time.sleep(0.5)
+                                  press("return")
+                                  smart_link_done = True
+                                  smart_link_time = time.time()
+                                  log("[SmartLink] TAB + ENTER injected.")
+
+                      # CLICK PATHWAY
+                      if action_mode == "click":
+                          if sw_type in ["opera_smart_link", "dynamic_opera"] and not smart_link_done:
+                              time.sleep(0.5)
+                              continue
+                          if sw_type in ["opera_smart_link", "dynamic_opera"] and (time.time() - smart_link_time) < 15:
+                              time.sleep(0.5)
+                              continue
+
+                          if not RELOAD_FIRED and elapsed >= RELOAD_THRESHOLD:
+                              log(f"[ClickPath] Reload threshold ({RELOAD_THRESHOLD}s) reached. Sending Cmd+R...")
+                              run_as('tell application "Google Chrome" to activate', silent=True)
+                              time.sleep(0.5)
+                              run_as('tell application "System Events" to keystroke "r" using command down', silent=True)
+                              RELOAD_FIRED = True
+                              log("[ClickPath] Page reload sent.")
+
+                          if elapsed >= CLICK_TOTAL:
+                              log("[ClickPath] Click pathway complete (75s). Exiting handler.")
+                              break
+
+                          time.sleep(0.5)
+                          continue
+
+                      # INSTALL PATHWAY ONLY BELOW
+                      can_click_download = True
+                      if sw_type in ["opera_smart_link", "dynamic_opera"]:
+                          if not smart_link_done or (time.time() - smart_link_time) < 15:
+                              can_click_download = False
+
+                      if chrome and not dl_clicked and can_click_download:
                           if use_proxy:
                               if not proxy_done:
                                   pass
@@ -1540,7 +1945,10 @@ jobs:
                           time.sleep(2)
                           chrome_closed = True
 
-                      if sw_type in ["opera_gx", "dynamic_opera", "ad_mvn"] and op_gx and not setup_done:
+                      gx_types = ["opera_gx", "dynamic_opera", "ad_mvn", "opera_smart_link"]
+                      one_types = ["opera_one", "dynamic_opera", "ad_mvn", "opera_smart_link"]
+
+                      if sw_type in gx_types and op_gx and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
                               log("[Handler] *** Opera GX detected — starting installer sequence in 5s ***")
@@ -1550,7 +1958,7 @@ jobs:
                               setup_done = True
                               break
 
-                      if sw_type in ["opera_one", "dynamic_opera"] and op_one and not op_gx and not setup_done:
+                      if sw_type in one_types and op_one and not op_gx and not setup_done:
                           if not op_launch_t:
                               op_launch_t = time.time()
                               log("[Handler] *** Opera One detected — starting installer sequence in 5s ***")
@@ -1569,8 +1977,10 @@ jobs:
 
                   time.sleep(1)
 
-              if setup_done:
-                  log("[Handler] ===== HANDLER FINISHED SUCCESSFULLY =====")
+              if action_mode == "click":
+                  log("[Handler] ===== CLICK HANDLER FINISHED SUCCESSFULLY =====")
+              elif setup_done:
+                  log("[Handler] ===== INSTALL HANDLER FINISHED SUCCESSFULLY =====")
               else:
                   log(f"[Handler] ===== HANDLER TIMEOUT after {int(time.time()-t0)}s =====")
                   log(f"[Handler] Final state: proxy_done={proxy_done}, dl_clicked={dl_clicked}, sentinel={os.path.exists('/tmp/download_done.flag')}")
@@ -1580,12 +1990,10 @@ jobs:
               p  = sys.argv[2] if len(sys.argv) > 2 else ""
               sw = sys.argv[3] if len(sys.argv) > 3 else "opera_gx"
               px = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
-              handle(u, p, sw, px)
+              am = sys.argv[5] if len(sys.argv) > 5 else "install"
+              handle(u, p, sw, px, am)
           PYEOF
 
-          # ------------------------------------------------------------
-          #  Shell helper functions & watcher
-          # ------------------------------------------------------------
           TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
           grant_tcc() {
             sudo sqlite3 "$TCC_DB" \
@@ -1685,168 +2093,176 @@ jobs:
 
           HANDLER_PYTHON="${UIENV_PYTHON:-python3}"
           echo "[$(date '+%H:%M:%S')] Starting UI automation handler (PID TBD)..."
-          echo "[$(date '+%H:%M:%S')] Handler: proxy=$USE_PROXY | sw_type=$SOFTWARE_TYPE"
+          echo "[$(date '+%H:%M:%S')] Handler: proxy=$USE_PROXY | sw_type=$SOFTWARE_TYPE | action=$ACTION_MODE"
           "$HANDLER_PYTHON" -u /tmp/macos_handler.py \
-            "$PROXY_USER" "$PROXY_PASS" "$SOFTWARE_TYPE" "$USE_PROXY" \
+            "$PROXY_USER" "$PROXY_PASS" "$SOFTWARE_TYPE" "$USE_PROXY" "$ACTION_MODE" \
             2>&1 | tee /tmp/handler_output.log &
           HANDLER_PID=$!
           echo "[$(date '+%H:%M:%S')] Handler started (PID $HANDLER_PID)"
 
-          touch /tmp/watcher_start_marker
-          (
-            DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
-            INSTALLED=false
-            echo "[$(date '+%H:%M:%S')] [Watcher] Started. Monitoring $DL_FOLDER for downloads..."
-            LAST_STATUS=$(($(date +%s)))
-            while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
-              NOW=$(date +%s)
-              if [ $((NOW - LAST_STATUS)) -ge 20 ]; then
-                echo "[$(date '+%H:%M:%S')] [Watcher] Still monitoring... ($(( DEADLINE - NOW ))s remaining)"
-                LAST_STATUS=$NOW
-              fi
-              FILE=$(find "$DL_FOLDER" -maxdepth 1 \
-                     \( -name "*.dmg" -o -name "*.zip" -o -name "*.pkg" \) \
-                     ! -name "*.download" ! -name "*.crdownload" ! -name "*.part" \
-                     -newer /tmp/watcher_start_marker 2>/dev/null | head -n 1 || true)
-              if [ -z "$FILE" ]; then
-                FILE=$(find "$DL_FOLDER" -maxdepth 1 -type d -name "*.app" \
+          if [ "$ACTION_MODE" = "install" ]; then
+            touch /tmp/watcher_start_marker
+            (
+              DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
+              INSTALLED=false
+              echo "[$(date '+%H:%M:%S')] [Watcher] Started. Monitoring $DL_FOLDER for downloads..."
+              LAST_STATUS=$(($(date +%s)))
+              while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
+                NOW=$(date +%s)
+                if [ $((NOW - LAST_STATUS)) -ge 20 ]; then
+                  echo "[$(date '+%H:%M:%S')] [Watcher] Still monitoring... ($(( DEADLINE - NOW ))s remaining)"
+                  LAST_STATUS=$NOW
+                fi
+                FILE=$(find "$DL_FOLDER" -maxdepth 1 \
+                       \( -name "*.dmg" -o -name "*.zip" -o -name "*.pkg" \) \
+                       ! -name "*.download" ! -name "*.crdownload" ! -name "*.part" \
                        -newer /tmp/watcher_start_marker 2>/dev/null | head -n 1 || true)
-              fi
-              if [ -n "$FILE" ]; then
-                echo "[$(date '+%H:%M:%S')] [Watcher] ✓ Download detected: $FILE"
-                touch "$SENTINEL_PATH"
-                BASENAME=$(basename "$FILE")
-                EXT="${BASENAME##*.}"
-                if [ "$EXT" != "app" ]; then
-                  echo "[$(date '+%H:%M:%S')] [Watcher] Waiting for download to complete..."
-                  PREV=0
-                  for i in $(seq 1 30); do
-                    SZ=$(stat -f%z "$FILE" 2>/dev/null || \
-                         stat -c%s "$FILE" 2>/dev/null || echo 0)
-                    if [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 500000 ]; then
-                      echo "[$(date '+%H:%M:%S')] [Watcher] File stable at ${SZ}B"
-                      break
+                if [ -z "$FILE" ]; then
+                  FILE=$(find "$DL_FOLDER" -maxdepth 1 -type d -name "*.app" \
+                         -newer /tmp/watcher_start_marker 2>/dev/null | head -n 1 || true)
+                fi
+                if [ -n "$FILE" ]; then
+                  echo "[$(date '+%H:%M:%S')] [Watcher] ✓ Download detected: $FILE"
+                  touch "$SENTINEL_PATH"
+                  BASENAME=$(basename "$FILE")
+                  EXT="${BASENAME##*.}"
+                  if [ "$EXT" != "app" ]; then
+                    echo "[$(date '+%H:%M:%S')] [Watcher] Waiting for download to complete..."
+                    PREV=0
+                    for i in $(seq 1 30); do
+                      SZ=$(stat -f%z "$FILE" 2>/dev/null || \
+                           stat -c%s "$FILE" 2>/dev/null || echo 0)
+                      if [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 500000 ]; then
+                        echo "[$(date '+%H:%M:%S')] [Watcher] File stable at ${SZ}B"
+                        break
+                      fi
+                      echo "[$(date '+%H:%M:%S')] [Watcher] Size=${SZ}B (try $i/30)..."
+                      PREV=$SZ; sleep 2
+                    done
+                  else
+                    sleep 5
+                  fi
+                  xattr -dr com.apple.quarantine "$FILE" 2>/dev/null || true
+                  echo "[$(date '+%H:%M:%S')] [Watcher] 4s cleanup delay..."
+                  sleep 4
+                  INSTALLED_APP_NAME=""
+                  if [ "$EXT" = "dmg" ]; then
+                    echo "[$(date '+%H:%M:%S')] [Installer] Mounting DMG: $FILE"
+                    MNT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null \
+                          | awk '/\/Volumes\// {print $NF}' | head -n 1 || true)
+                    if [ -n "$MNT" ]; then
+                      APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -n 1 || true)
+                      if [ -n "$APP_SRC" ]; then
+                        AN=$(basename "$APP_SRC")
+                        sudo cp -R "$APP_SRC" /Applications/ || true
+                        sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
+                        echo "[$(date '+%H:%M:%S')] [Installer] ✓ $AN installed from DMG."
+                        INSTALLED_APP_NAME="$AN"
+                      else
+                        echo "[$(date '+%H:%M:%S')] [Installer] WARNING: No .app in DMG."
+                      fi
+                      hdiutil detach "$MNT" -quiet || true
+                    else
+                      echo "[$(date '+%H:%M:%S')] [Installer] ERROR: DMG mount failed."
                     fi
-                    echo "[$(date '+%H:%M:%S')] [Watcher] Size=${SZ}B (try $i/30)..."
-                    PREV=$SZ; sleep 2
+                  elif [ "$EXT" = "zip" ]; then
+                    echo "[$(date '+%H:%M:%S')] [Installer] Extracting ZIP: $FILE"
+                    EXTRACT_DIR="${DL_FOLDER}/extracted_$(date +%s)"
+                    mkdir -p "$EXTRACT_DIR"
+                    if ! ditto -xk "$FILE" "$EXTRACT_DIR" 2>/dev/null; then
+                      echo "[$(date '+%H:%M:%S')] [Installer] ditto failed, trying unzip..."
+                      unzip -q -o "$FILE" -d "$EXTRACT_DIR" 2>/dev/null || true
+                    fi
+                    find "$EXTRACT_DIR" -name "__MACOSX" -exec rm -rf {} + 2>/dev/null || true
+                    APP_IN_ZIP=$(find "$EXTRACT_DIR" -maxdepth 4 -name "*.app" ! -path "*/__MACOSX/*" | head -n 1 || true)
+                    if [ -n "$APP_IN_ZIP" ]; then
+                      AN=$(basename "$APP_IN_ZIP")
+                      sudo cp -R "$APP_IN_ZIP" /Applications/ || true
+                      sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
+                      sudo codesign --force --deep --sign - "/Applications/$AN" 2>/dev/null || true
+                      echo "[$(date '+%H:%M:%S')] [Installer] ✓ $AN installed from ZIP."
+                      INSTALLED_APP_NAME="$AN"
+                      rm -rf "$EXTRACT_DIR" 2>/dev/null || true
+                    else
+                      echo "[$(date '+%H:%M:%S')] [Installer] WARNING: No .app in ZIP. Listing contents:"
+                      ls -laR "$EXTRACT_DIR" || true
+                    fi
+                  elif [ "$EXT" = "pkg" ]; then
+                    echo "[$(date '+%H:%M:%S')] [Installer] Installing PKG: $FILE"
+                    sudo installer -pkg "$FILE" -target / -verboseR || true
+                  elif [ "$EXT" = "app" ]; then
+                    echo "[$(date '+%H:%M:%S')] [Installer] Direct .app: $BASENAME"
+                    sudo cp -R "$FILE" /Applications/ || true
+                    sudo xattr -dr com.apple.quarantine "/Applications/$BASENAME" 2>/dev/null || true
+                    sudo codesign --force --deep --sign - "/Applications/$BASENAME" 2>/dev/null || true
+                    INSTALLED_APP_NAME="$BASENAME"
+                  fi
+                  ACTUAL="$SOFTWARE_TYPE"
+                  if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ] || [ "$ACTUAL" = "opera_smart_link" ]; then
+                    if echo "$INSTALLED_APP_NAME$BASENAME" | grep -qi "gx"; then
+                      ACTUAL="opera_gx"
+                    else
+                      ACTUAL="opera_one"
+                    fi
+                  fi
+                  echo "[$(date '+%H:%M:%S')] [Watcher] Determined app type: $ACTUAL"
+                  echo "[$(date '+%H:%M:%S')] [Watcher] Closing Chrome download tabs and quitting..."
+                  osascript -e 'tell application "Google Chrome" to activate' >/dev/null 2>&1 || true
+                  sleep 0.5
+                  osascript -e 'tell application "System Events" to keystroke "w" using command down' >/dev/null 2>&1 || true
+                  sleep 0.3
+                  osascript -e 'tell application "System Events" to keystroke "w" using command down' >/dev/null 2>&1 || true
+                  sleep 0.3
+                  osascript -e 'tell application "Google Chrome" to quit' >/dev/null 2>&1 || true
+                  sleep 2
+                  if [ "$ACTUAL" = "opera_gx" ]; then
+                    SEARCH_PATHS=(
+                      "/Applications/$INSTALLED_APP_NAME"
+                      "/Applications/Opera GX.app"
+                      "$HOME/Applications/Opera GX.app"
+                    )
+                  else
+                    SEARCH_PATHS=(
+                      "/Applications/$INSTALLED_APP_NAME"
+                      "/Applications/Opera.app"
+                      "/Applications/Opera Installer.app"
+                      "$HOME/Applications/Opera Installer.app"
+                      "$HOME/Applications/Opera.app"
+                    )
+                  fi
+                  echo "[$(date '+%H:%M:%S')] [Watcher] Waiting for app to appear on disk..."
+                  LAUNCHED=false
+                  for i in $(seq 1 60); do
+                    for P in "${SEARCH_PATHS[@]}"; do
+                      if [ -d "$P" ]; then
+                        sleep 3
+                        echo "[$(date '+%H:%M:%S')] [Watcher] Launching: $P"
+                        open "$P" || true
+                        sleep 5
+                        LAUNCHED=true
+                        break 2
+                      fi
+                    done
+                    sleep 2
                   done
+                  if [ "$LAUNCHED" = false ]; then
+                    FOUND=$(find /Applications "$HOME/Applications" -maxdepth 2 -name "Opera*.app" 2>/dev/null | head -n 1 || true)
+                    if [ -n "$FOUND" ]; then
+                      echo "[$(date '+%H:%M:%S')] [Watcher] Fallback launch: $FOUND"
+                      open "$FOUND" || true
+                    fi
+                  fi
+                  INSTALLED=true
+                  echo "[$(date '+%H:%M:%S')] [Watcher] ✓ Install + launch sequence complete."
                 else
                   sleep 5
                 fi
-                xattr -dr com.apple.quarantine "$FILE" 2>/dev/null || true
-                echo "[$(date '+%H:%M:%S')] [Watcher] 4s cleanup delay..."
-                sleep 4
-                INSTALLED_APP_NAME=""
-                if [ "$EXT" = "dmg" ]; then
-                  echo "[$(date '+%H:%M:%S')] [Installer] Mounting DMG: $FILE"
-                  MNT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null \
-                        | awk '/\/Volumes\// {print $NF}' | head -n 1 || true)
-                  if [ -n "$MNT" ]; then
-                    APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -n 1 || true)
-                    if [ -n "$APP_SRC" ]; then
-                      AN=$(basename "$APP_SRC")
-                      sudo cp -R "$APP_SRC" /Applications/ || true
-                      sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
-                      echo "[$(date '+%H:%M:%S')] [Installer] ✓ $AN installed from DMG."
-                      INSTALLED_APP_NAME="$AN"
-                    else
-                      echo "[$(date '+%H:%M:%S')] [Installer] WARNING: No .app in DMG."
-                    fi
-                    hdiutil detach "$MNT" -quiet || true
-                  else
-                    echo "[$(date '+%H:%M:%S')] [Installer] ERROR: DMG mount failed."
-                  fi
-                elif [ "$EXT" = "zip" ]; then
-                  echo "[$(date '+%H:%M:%S')] [Installer] Extracting ZIP: $FILE"
-                  EXTRACT_DIR="${DL_FOLDER}/extracted_$(date +%s)"
-                  mkdir -p "$EXTRACT_DIR"
-                  if ! ditto -xk "$FILE" "$EXTRACT_DIR" 2>/dev/null; then
-                    echo "[$(date '+%H:%M:%S')] [Installer] ditto failed, trying unzip..."
-                    unzip -q -o "$FILE" -d "$EXTRACT_DIR" 2>/dev/null || true
-                  fi
-                  find "$EXTRACT_DIR" -name "__MACOSX" -exec rm -rf {} + 2>/dev/null || true
-                  APP_IN_ZIP=$(find "$EXTRACT_DIR" -maxdepth 4 -name "*.app" ! -path "*/__MACOSX/*" | head -n 1 || true)
-                  if [ -n "$APP_IN_ZIP" ]; then
-                    AN=$(basename "$APP_IN_ZIP")
-                    sudo cp -R "$APP_IN_ZIP" /Applications/ || true
-                    sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
-                    sudo codesign --force --deep --sign - "/Applications/$AN" 2>/dev/null || true
-                    echo "[$(date '+%H:%M:%S')] [Installer] ✓ $AN installed from ZIP."
-                    INSTALLED_APP_NAME="$AN"
-                    rm -rf "$EXTRACT_DIR" 2>/dev/null || true
-                  else
-                    echo "[$(date '+%H:%M:%S')] [Installer] WARNING: No .app in ZIP. Listing contents:"
-                    ls -laR "$EXTRACT_DIR" || true
-                  fi
-                elif [ "$EXT" = "pkg" ]; then
-                  echo "[$(date '+%H:%M:%S')] [Installer] Installing PKG: $FILE"
-                  sudo installer -pkg "$FILE" -target / -verboseR || true
-                elif [ "$EXT" = "app" ]; then
-                  echo "[$(date '+%H:%M:%S')] [Installer] Direct .app: $BASENAME"
-                  sudo cp -R "$FILE" /Applications/ || true
-                  sudo xattr -dr com.apple.quarantine "/Applications/$BASENAME" 2>/dev/null || true
-                  sudo codesign --force --deep --sign - "/Applications/$BASENAME" 2>/dev/null || true
-                  INSTALLED_APP_NAME="$BASENAME"
-                fi
-                ACTUAL="$SOFTWARE_TYPE"
-                if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "ad_mvn" ]; then
-                  if echo "$INSTALLED_APP_NAME$BASENAME" | grep -qi "gx"; then
-                    ACTUAL="opera_gx"
-                  else
-                    ACTUAL="opera_one"
-                  fi
-                fi
-                echo "[$(date '+%H:%M:%S')] [Watcher] Determined app type: $ACTUAL"
-                echo "[$(date '+%H:%M:%S')] [Watcher] Quitting Chrome..."
-                osascript -e 'tell application "Google Chrome" to quit' >/dev/null 2>&1 || true
-                sleep 2
-                if [ "$ACTUAL" = "opera_gx" ]; then
-                  SEARCH_PATHS=(
-                    "/Applications/$INSTALLED_APP_NAME"
-                    "/Applications/Opera GX.app"
-                    "$HOME/Applications/Opera GX.app"
-                  )
-                else
-                  SEARCH_PATHS=(
-                    "/Applications/$INSTALLED_APP_NAME"
-                    "/Applications/Opera.app"
-                    "/Applications/Opera Installer.app"
-                    "$HOME/Applications/Opera Installer.app"
-                    "$HOME/Applications/Opera.app"
-                  )
-                fi
-                echo "[$(date '+%H:%M:%S')] [Watcher] Waiting for app to appear on disk..."
-                LAUNCHED=false
-                for i in $(seq 1 60); do
-                  for P in "${SEARCH_PATHS[@]}"; do
-                    if [ -d "$P" ]; then
-                      sleep 3
-                      echo "[$(date '+%H:%M:%S')] [Watcher] Launching: $P"
-                      open "$P" || true
-                      sleep 5
-                      LAUNCHED=true
-                      break 2
-                    fi
-                  done
-                  sleep 2
-                done
-                if [ "$LAUNCHED" = false ]; then
-                  FOUND=$(find /Applications "$HOME/Applications" -maxdepth 2 -name "Opera*.app" 2>/dev/null | head -n 1 || true)
-                  if [ -n "$FOUND" ]; then
-                    echo "[$(date '+%H:%M:%S')] [Watcher] Fallback launch: $FOUND"
-                    open "$FOUND" || true
-                  fi
-                fi
-                INSTALLED=true
-                echo "[$(date '+%H:%M:%S')] [Watcher] ✓ Install + launch sequence complete."
-              else
-                sleep 5
-              fi
-            done
-            echo "[$(date '+%H:%M:%S')] [Watcher] Exiting."
-          ) &
-          WATCHER_PID=$!
-          echo "[$(date '+%H:%M:%S')] Watcher started (PID $WATCHER_PID)"
+              done
+              echo "[$(date '+%H:%M:%S')] [Watcher] Exiting."
+            ) &
+            WATCHER_PID=$!
+            echo "[$(date '+%H:%M:%S')] Watcher started (PID $WATCHER_PID)"
+          fi
 
           CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
           CHROME_FLAGS=(
@@ -1867,9 +2283,15 @@ jobs:
           )
 
           if [ "$USE_PROXY" = "true" ]; then
-            PROXY_SRV="residential-proxy.scrapeops.io:8181"
-            echo "[$(date '+%H:%M:%S')] Launching Chrome WITH proxy → $TARGET_URL"
-            echo "[$(date '+%H:%M:%S')] Proxy server: $PROXY_SRV"
+            if [ "$PROXY_TYPE" = "manual" ] || [ "$PROXY_TYPE" = "floppydata" ]; then
+              PROXY_SRV="$PROXY_SERVER"
+              echo "[$(date '+%H:%M:%S')] Launching Chrome WITH proxy → $TARGET_URL"
+              echo "[$(date '+%H:%M:%S')] Proxy server: $PROXY_SRV (type=$PROXY_TYPE)"
+            else
+              PROXY_SRV="residential-proxy.scrapeops.io:8181"
+              echo "[$(date '+%H:%M:%S')] Launching Chrome WITH ScrapeOps proxy → $TARGET_URL"
+              echo "[$(date '+%H:%M:%S')] Proxy server: $PROXY_SRV"
+            fi
             if [ -f "$CHROME_BIN" ]; then
               "$CHROME_BIN" \
                 "${CHROME_FLAGS[@]}" \
@@ -1899,6 +2321,16 @@ jobs:
           echo "[$(date '+%H:%M:%S')] Monitoring handler output in real time below:"
           echo "------------------------------------------------------------"
 
+          if [ "$ACTION_MODE" = "click" ]; then
+            echo "[$(date '+%H:%M:%S')] Click mode: waiting for handler to complete..."
+            wait $HANDLER_PID
+            echo "[$(date '+%H:%M:%S')] Quitting Chrome after click pathway..."
+            osascript -e 'tell application "Google Chrome" to quit' >/dev/null 2>&1 || true
+            kill $DISMISSER_PID 2>/dev/null || true
+            echo "[$(date '+%H:%M:%S')] Click pathway finished. Exiting step cleanly."
+            exit 0
+          fi
+
           HANDLER_TIMEOUT=600
           POLL_START=$(date +%s)
           while kill -0 $HANDLER_PID 2>/dev/null; do
@@ -1921,7 +2353,7 @@ jobs:
       # STEP 7 — Keep runner alive                                         #
       # ================================================================== #
       - name: Keep Runner Alive
-        if: always()
+        if: always() && matrix.action_mode == 'install'
         shell: bash
         run: |
           echo "[$(date '+%H:%M:%S')] Session active. Runner stays online until job timeout."
