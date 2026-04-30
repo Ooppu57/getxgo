@@ -63,7 +63,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Ad-MVN - Techx'
+        default: 'Ad-MVN - B4Books'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
