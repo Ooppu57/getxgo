@@ -54,6 +54,7 @@ on:
           - 'Opera - James'
           - 'Opera - Oliver'
           - 'Opera - Mahal'
+          - 'Opera - Polar'
           - 'Opera-One - Esmeel'
           - 'Opera-One - Harrari'
           - 'Opera-One - Chloe'
@@ -63,7 +64,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Ad-MVN - B4Books'
+        default: 'Ad-MVN - Orderflowz'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -433,6 +434,7 @@ jobs:
               "Opera - James":      "https://u.to/jamesxsm/eV2FIg",
               "Opera - Oliver":     "https://u.to/oliverxsm/f12FIg",
               "Opera - Mahal":      "https://u.to/mahalxsm/iF2FIg",
+              "Opera - Polar":      "https://u.to/opxplr/wzh4Ig",
           }
           opera_one_urls = {
               "Opera-One - Esmeel":  "https://u.to/esmlxopo/cTOGIg",
