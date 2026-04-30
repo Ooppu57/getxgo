@@ -75,7 +75,7 @@ on:
         type: boolean
         default: false
       scrapeops_api_key:
-        description: 'ScrapeOps / FloppyData API Key / Manual Proxies'
+        description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
         default: '1IFG1IFjMPZi4DcrQ16KF2ku_fbxeCXI'
