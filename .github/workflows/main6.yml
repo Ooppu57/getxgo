@@ -18,7 +18,7 @@ on:
         description: 'Getscreen.me Account Email'
         required: true
         type: string
-        default: 'techx@justzeus.com'
+        default: 'techx@highmail.site'
       num_devices:
         description: 'Number of Devices to Spawn'
         required: true
@@ -29,7 +29,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '1'
+        default: '5'
       num_clicks:
         description: 'Number of Clicks (0 = all install)'
         required: true
@@ -41,7 +41,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '0'
+        default: '2'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -76,7 +76,7 @@ on:
         description: 'ScrapeOps / FloppyData API Key / Manual Proxies'
         required: false
         type: string
-        default: 'fd6d8b71-953d-4c71-9060-cb7bd4b7261e'
+        default: '1IFG1IFjMPZi4DcrQ16KF2ku_fbxeCXI'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -102,7 +102,7 @@ on:
           - 'Italy'
           - 'Netherlands'
           - 'Poland'
-        default: 'USA'
+        default: 'Australia'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
