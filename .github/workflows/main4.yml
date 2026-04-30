@@ -1,4 +1,4 @@
-name: Unified GoLogin Remote Automation
+name: Parallel Win/Mac Unified
 
 on:
   workflow_dispatch:
@@ -50,7 +50,7 @@ on:
           - '5'
         default: '3'
       software_choice:
-        description: 'Select Software & Link'
+        description: 'Select Software & Affiliate Link'
         required: true
         type: choice
         options:
@@ -75,57 +75,16 @@ on:
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
         default: 'Ad-MVN - Techx'
-      manual_software_url:
-        description: 'Manual Software URL'
+      run_manual_url:
+        description: 'Use Manual URL (overrides software choice if checked)'
+        required: true
+        type: boolean
+        default: false
+      manual_url:
+        description: 'Manual Software URL (only used if Use Manual URL is checked)'
         required: false
         type: string
         default: 'https://checkmyapp.space/sl/v1nrr'
-      run_manual_link:
-        description: 'Run manual link (bypass software choice)'
-        required: true
-        type: boolean
-        default: true
-      scrapeops_api_key:
-        description: 'ScrapeOps / FloppyData / Manual Proxies'
-        required: false
-        type: string
-        default: '1IFG1IFjMPZi4DcrQ16KF2ku_fbxeCXI'
-      use_without_proxy:
-        description: 'Run without proxy'
-        required: true
-        type: boolean
-        default: false
-      proxy_country:
-        description: 'Proxy Country Geotargeting'
-        required: true
-        type: choice
-        options:
-          - 'USA'
-          - 'UK'
-          - 'Canada'
-          - 'Australia'
-          - 'Germany'
-          - 'France'
-          - 'Brazil'
-          - 'Mexico'
-          - 'Spain'
-          - 'Vietnam'
-          - 'Switzerland'
-          - 'Indonesia'
-          - 'Italy'
-          - 'Netherlands'
-          - 'Poland'
-        default: 'Spain'
-      mobile_proxies:
-        description: 'Use Mobile Proxies'
-        required: true
-        type: boolean
-        default: false
-      sticky_sessions:
-        description: 'Enable Unique Sticky Sessions'
-        required: true
-        type: boolean
-        default: true
 
 jobs:
   prepare_matrix:
@@ -139,258 +98,31 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT }}
 
-      - name: Generate Dynamic Matrix & Proxy Config
+      - name: Generate Dynamic Matrix
         id: set-matrix
         shell: python
         env:
           EMAIL: ${{ inputs.getscreen_email }}
-          GOLOGIN_EMAIL: ${{ inputs.gologin_email }}
           NUM_DEVICES: ${{ inputs.num_devices }}
           NUM_CLICKS: ${{ inputs.num_clicks }}
           OS_VERSION: ${{ inputs.os_version }}
           SOFTWARE_CHOICE: ${{ inputs.software_choice }}
-          MANUAL_URL: ${{ inputs.manual_software_url }}
-          RUN_MANUAL: ${{ inputs.run_manual_link }}
-          API_KEY: ${{ inputs.scrapeops_api_key }}
-          WITHOUT_PROXY: ${{ inputs.use_without_proxy }}
-          COUNTRY: ${{ inputs.proxy_country }}
-          MOBILE: ${{ inputs.mobile_proxies }}
-          STICKY: ${{ inputs.sticky_sessions }}
+          RUN_MANUAL: ${{ inputs.run_manual_url }}
+          MANUAL_URL: ${{ inputs.manual_url }}
         run: |
-          import os, json, uuid, random, re, sys, subprocess, time
-
-          print("========== INITIALIZING UNIFIED MATRIX ==========")
-
-          try:
-              import requests
-          except ImportError:
-              subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "--quiet"])
-              import requests
+          import os, json, random
 
           email          = os.environ.get("EMAIL", "").strip()
-          gologin_email  = os.environ.get("GOLOGIN_EMAIL", "").strip()
           num_devices    = int(os.environ.get("NUM_DEVICES", "1"))
           num_clicks_raw = int(os.environ.get("NUM_CLICKS", "0"))
           num_clicks     = min(num_clicks_raw, num_devices)
           num_installs   = num_devices - num_clicks
           os_version     = os.environ.get("OS_VERSION", "windows-2025")
-
-          proxy_input      = os.environ.get("API_KEY", "").strip()
-          without_proxy    = os.environ.get("WITHOUT_PROXY", "false").lower() == "true"
-
-          is_manual_proxy      = False
-          manual_proxy_strings = []
-          scrapeops_key        = ""
-          floppy_key           = ""
-
-          SCRAPEOPS_KEY_RE = re.compile(
-              r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
-          FLOPPY_KEY_RE = re.compile(r'^[A-Za-z0-9_]{30,80}$')
-
-          if without_proxy:
-              print("[Proxy] 'Run without proxy' checked. Disabling proxy.")
-              proxy_input = ""
-          elif not proxy_input or proxy_input.lower() in ["none", "null", "false", "blank", "empty", "''", '""']:
-              print("[Proxy] Proxy input empty or invalid. Disabling proxy.")
-              proxy_input = ""
-          else:
-              raw_items = re.split(r'[\s,;]+', proxy_input)
-              proxy_candidates = []
-              for item in raw_items:
-                  item = item.strip()
-                  if not item:
-                      continue
-                  if ('://' in item) or ('@' in item) or (item.count(':') >= 2 and len(item) > 10):
-                      proxy_candidates.append(item)
-              if len(proxy_candidates) >= 1:
-                  is_manual_proxy      = True
-                  manual_proxy_strings = proxy_candidates
-                  print(f"[Proxy] Detected MANUAL PROXY mode with {len(manual_proxy_strings)} entries.")
-              elif SCRAPEOPS_KEY_RE.match(proxy_input):
-                  scrapeops_key = proxy_input
-                  print("[Proxy] Detected SCRAPEOPS API KEY mode.")
-              elif FLOPPY_KEY_RE.match(proxy_input):
-                  floppy_key = proxy_input
-                  print("[Proxy] Detected FLOPPYDATA API KEY mode.")
-              else:
-                  scrapeops_key = proxy_input
-                  print("[Proxy] Could not determine key type — treating as ScrapeOps.")
-
-          country_map = {
-              "USA": "us", "UK": "uk", "Canada": "ca",
-              "Australia": "au", "Germany": "de", "France": "fr",
-              "Brazil": "br", "Mexico": "mx", "Spain": "es",
-              "Vietnam": "vn", "Switzerland": "ch", "Indonesia": "id",
-              "Italy": "it", "Netherlands": "nl", "Poland": "pl"
-          }
-          country_name_to_code = {
-              'united states': 'us', 'united kingdom': 'uk', 'canada': 'ca',
-              'australia': 'au', 'germany': 'de', 'france': 'fr',
-              'brazil': 'br', 'mexico': 'mx', 'spain': 'es',
-              'vietnam': 'vn', 'switzerland': 'ch', 'indonesia': 'id',
-              'italy': 'it', 'netherlands': 'nl', 'poland': 'pl',
-              'usa': 'us', 'uk': 'uk',
-          }
-
-          def parse_proxy(proxy_str):
-              original = proxy_str.strip()
-              if not original:
-                  return None
-              protocol = 'http'
-              rest = original
-              if '://' in rest:
-                  protocol, rest = rest.split('://', 1)
-                  if protocol.lower() == 'geolocation':
-                      protocol = 'http'
-              floppy_match = re.match(r'^([^:]+):([^@]+)@([^:]+):(\d+):(.+)$', rest)
-              if floppy_match:
-                  user, pwd, host, port, country_extra = floppy_match.groups()
-                  country = country_extra.split(' - ')[0].strip()
-                  return {'original': original, 'protocol': protocol,
-                          'username': user, 'password': pwd,
-                          'host': host, 'port': int(port),
-                          'server': f"{host}:{port}", 'country_name': country,
-                          'country_code': None,
-                          'url': f"http://{user}:{pwd}@{host}:{port}"}
-              std_match = re.match(r'^([^:]+):([^@]+)@([^:]+):(\d+)$', rest)
-              if std_match:
-                  user, pwd, host, port = std_match.groups()
-                  return {'original': original, 'protocol': protocol,
-                          'username': user, 'password': pwd,
-                          'host': host, 'port': int(port),
-                          'server': f"{host}:{port}", 'country_name': None,
-                          'country_code': None,
-                          'url': f"{protocol}://{user}:{pwd}@{host}:{port}"}
-              alt_match = re.match(r'^([^:]+):(\d+):([^:]+):(.+)$', rest)
-              if alt_match:
-                  host, port, user, pwd = alt_match.groups()
-                  return {'original': original, 'protocol': protocol,
-                          'username': user, 'password': pwd,
-                          'host': host, 'port': int(port),
-                          'server': f"{host}:{port}", 'country_name': None,
-                          'country_code': None,
-                          'url': f"{protocol}://{user}:{pwd}@{host}:{port}"}
-              simple_match = re.match(r'^([^:]+):(\d+)$', rest)
-              if simple_match:
-                  host, port = simple_match.groups()
-                  return {'original': original, 'protocol': protocol,
-                          'username': '', 'password': '',
-                          'host': host, 'port': int(port),
-                          'server': f"{host}:{port}", 'country_name': None,
-                          'country_code': None,
-                          'url': f"{protocol}://{host}:{port}"}
-              return None
-
-          def validate_proxy(pinfo):
-              try:
-                  proxies = {'http': pinfo['url'], 'https': pinfo['url']}
-                  resp = requests.get('http://ip-api.com/json/', proxies=proxies, timeout=15)
-                  data = resp.json()
-                  if data.get('status') == 'success':
-                      cc = data.get('countryCode', 'US').lower()
-                      country = pinfo.get('country_name') or data.get('country', 'Unknown')
-                      return {'working': True, 'country_name': country, 'country_code': cc,
-                              'ip': data.get('query', ''),
-                              **{k: v for k, v in pinfo.items() if k not in ['working','country_name','country_code','ip']}}
-              except Exception as e:
-                  print(f"[ProxyCheck] FAILED {pinfo.get('server','?')}: {e}")
-              return {'working': False, **pinfo}
-
-          active_proxies = []
-          use_proxy      = False
-
-          if is_manual_proxy and not without_proxy:
-              parsed = []
-              for ps in manual_proxy_strings:
-                  p = parse_proxy(ps)
-                  if p:
-                      parsed.append(p)
-                  else:
-                      print(f"[ProxyParse] Could not parse: {ps[:60]}...")
-              print(f"[Proxy] Validating {len(parsed)} parsed proxies...")
-              for idx, p in enumerate(parsed):
-                  result = validate_proxy(p)
-                  if result['working']:
-                      if result.get('country_name'):
-                          cname = result['country_name'].lower()
-                          result['country_code'] = country_name_to_code.get(cname, result.get('country_code','us'))
-                      active_proxies.append(result)
-                      print(f"[Proxy] ACTIVE  -> {result['server']} | {result.get('country_name','?')} ({result.get('country_code','?')}) | IP: {result.get('ip','?')}")
-                  else:
-                      print(f"[Proxy] DEAD    -> {result.get('server','?')}")
-                  if idx < len(parsed) - 1:
-                      time.sleep(1)
-              if len(active_proxies) < num_devices:
-                  print(f"[Proxy] ERROR: Only {len(active_proxies)} active proxies for {num_devices} devices.")
-                  exit(1)
-              use_proxy = True
-              print(f"[Proxy] Manual proxy pool ready: {len(active_proxies)} active for {num_devices} devices.")
-
-          elif floppy_key and not without_proxy:
-              use_proxy = True
-              country_input = os.environ.get("COUNTRY", "USA")
-              mobile        = os.environ.get("MOBILE", "false").lower() == "true"
-              sticky        = os.environ.get("STICKY", "false").lower() == "true"
-              cc            = country_map.get(country_input, "us").upper()
-              proxy_type    = "mobile" if mobile else "residential"
-              FLOPPY_BASE   = "https://client-api.floppy.host"
-              headers       = {"X-Api-Key": floppy_key}
-              print(f"[FloppyData] Fetching base credentials...")
-              try:
-                  creds_resp = requests.get(f"{FLOPPY_BASE}/v1/rotating/smartParamsCredentials",
-                                            headers=headers, timeout=15)
-                  creds_data = creds_resp.json()
-                  floppy_base_user = creds_data.get("username", "")
-                  floppy_base_pass = creds_data.get("password", "")
-                  print(f"[FloppyData] Base credentials fetched. User prefix: {floppy_base_user[:8]}***")
-              except Exception as e:
-                  print(f"[FloppyData] ERROR fetching credentials: {e}")
-                  exit(1)
-              print(f"[FloppyData] Building {num_devices} device proxy configs (type={proxy_type}, country={cc})...")
-              for i in range(1, num_devices + 1):
-                  session_id = str(uuid.uuid4())[:8] if sticky else ""
-                  params = {"type": proxy_type, "country": cc, "protocol": "http",
-                            "rotation": "0" if sticky else "-1"}
-                  if sticky and session_id:
-                      params["session"] = f"dev{i}_{session_id}"
-                  try:
-                      builder_resp = requests.get(f"{FLOPPY_BASE}/v1/rotating/smartParamsBuilder",
-                                                  headers=headers, params=params, timeout=15)
-                      builder_data = builder_resp.json()
-                      floppy_user  = builder_data.get("username", floppy_base_user)
-                      floppy_pass  = builder_data.get("password", floppy_base_pass)
-                      floppy_host  = builder_data.get("host", "geo.g-w.info")
-                      floppy_port  = str(builder_data.get("port", 10080))
-                      print(f"[FloppyData] Device {i}: {floppy_host}:{floppy_port} | user={floppy_user[:16]}... | session={'YES' if sticky else 'NO'}")
-                  except Exception as e:
-                      print(f"[FloppyData] ERROR building params for device {i}: {e}")
-                      exit(1)
-                  active_proxies.append({
-                      'username': floppy_user, 'password': floppy_pass,
-                      'host': floppy_host, 'port': int(floppy_port),
-                      'server': f"{floppy_host}:{floppy_port}",
-                      'country_code': cc.lower(), 'country_name': country_input,
-                      'proxy_type_label': "floppydata",
-                      'url': f"http://{floppy_user}:{floppy_pass}@{floppy_host}:{floppy_port}"
-                  })
-                  time.sleep(0.3)
-              print(f"[FloppyData] Proxy pool ready: {len(active_proxies)} entries.")
-
-          elif scrapeops_key and not without_proxy:
-              use_proxy = True
-              print("[Proxy] ScrapeOps proxy pool ready.")
-
-          action_list = ["install"] * num_installs + ["click"] * num_clicks
-          random.shuffle(action_list)
-          print(f"[Action Matrix] Total Devices : {num_devices}")
-          print(f"[Action Matrix] Install Paths : {num_installs}")
-          print(f"[Action Matrix] Click Paths   : {num_clicks}")
-          print(f"[Action Matrix] Randomized Queue: {action_list}")
-
-          run_manual   = os.environ.get("RUN_MANUAL", "false").lower() == "true"
-          manual_url   = os.environ.get("MANUAL_URL", "").strip()
           software_choice = os.environ.get("SOFTWARE_CHOICE", "Ad-MVN - Techx")
+          run_manual     = os.environ.get("RUN_MANUAL", "false").lower() == "true"
+          manual_url_in  = os.environ.get("MANUAL_URL", "").strip()
 
+          # ── All affiliate URL maps ──────────────────────────────────────────
           avg_urls = {
               "AVG - TechxTrader": "https://u.to/a-trdr/GoeNIg",
               "AVG - B4Books":     "https://u.to/a-b4b/O4eNIg",
@@ -421,144 +153,82 @@ jobs:
           }
           all_urls = {**avg_urls, **opera_urls, **opera_one_urls, **ad_mvn_urls}
 
-          dynamic_links = list(opera_urls.keys()) + list(ad_mvn_urls.keys())
-          opera_one_links = list(opera_one_urls.keys())
-
-          if run_manual and manual_url:
-              target_url    = manual_url
+          # ── Determine target URL and software type ─────────────────────────
+          if run_manual and manual_url_in:
+              target_url    = manual_url_in
               software_type = "dynamic_opera"
-              exe_filter    = "*Opera*Setup*.exe"
+              exe_filter    = "*.exe"
               dmg_filter    = "*Opera*"
+              print(f"[Target] Manual URL override active: {target_url}")
           else:
-              target_url = all_urls.get(software_choice, ad_mvn_urls["Ad-MVN - Techx"])
-              if software_choice in avg_urls:
+              target_url = all_urls.get(software_choice, "https://u.to/techxadmvnxsmrt/gvd7Ig")
+              if software_choice.startswith("AVG"):
                   software_type = "avg"
                   exe_filter    = "*avg*.exe"
                   dmg_filter    = "*AVG*"
-              elif software_choice.startswith("OperaGX"):
+              elif software_choice == "OperaGX - B4Books":
                   software_type = "opera_gx"
                   exe_filter    = "OperaGXSetup*.exe"
                   dmg_filter    = "*Opera*GX*"
-              elif software_choice in opera_one_links:
+              elif software_choice.startswith("Opera-One"):
                   software_type = "opera_one"
                   exe_filter    = "OperaSetup*.exe"
                   dmg_filter    = "*Opera*"
-              else:
+              elif software_choice.startswith("Ad-MVN"):
                   software_type = "dynamic_opera"
                   exe_filter    = "*Opera*Setup*.exe"
                   dmg_filter    = "*Opera*"
+              else:
+                  # Opera - * (smart links)
+                  software_type = "opera_smart_link"
+                  exe_filter    = "*Opera*Setup*.exe"
+                  dmg_filter    = "*Opera*"
+              print(f"[Target] Software: {software_choice} | Type: {software_type} | URL: {target_url}")
 
-          def short_os(os_ver):
-              if os_ver.startswith("windows-"):
-                  return os_ver.replace("windows-", "W").replace("-", "")
-              elif os_ver.startswith("macos-"):
-                  mapping = {"macos-15": "M15", "macos-14": "M14", "macos-13": "M13",
-                             "macos-26": "M26", "macos-26-intel": "M26I"}
-                  return mapping.get(os_ver, "MAC")
-              return os_ver
+          # ── Build action list: install then click, shuffled ────────────────
+          action_list = ["install"] * num_installs + ["click"] * num_clicks
+          random.shuffle(action_list)
+          print(f"[Actions] install={num_installs} click={num_clicks} order={action_list}")
 
-          def short_software(choice):
-              if run_manual:
+          # ── Short name helpers ─────────────────────────────────────────────
+          def short_os(v):
+              m = {"windows-2025":"W25","windows-2022":"W22","windows-11-arm":"W11A",
+                   "macos-14":"M14","macos-15":"M15","macos-26":"M26","macos-26-intel":"M26I"}
+              return m.get(v, "OS")
+
+          def short_sw(choice):
+              if run_manual and manual_url_in:
                   return "MANUAL"
-              prefix_map = {
-                  "OperaGX": "OPX", "Opera-One": "OPO", "Ad-MVN": "MVN",
-                  "AVG": "AVG", "Opera": "OP",
-              }
-              for key, prefix in prefix_map.items():
-                  if choice.startswith(key):
+              pm = {"AVG":"AVG","OperaGX":"OPX","Opera-One":"OPO","Ad-MVN":"MVN","Opera":"OP"}
+              for k, p in pm.items():
+                  if choice.startswith(k):
                       parts = choice.split(" - ", 1)
-                      list_name = parts[1].replace(" ", "") if len(parts) > 1 else ""
-                      return f"{prefix}-{list_name}"
-              return choice.replace(" ", "").replace("-", "")
+                      return f"{p}-{parts[1].replace(' ','')}" if len(parts) > 1 else p
+              return choice.replace(" ","")[:8]
 
           short_os_tag = short_os(os_version)
-          short_sw_tag = short_software(software_choice)
+          short_sw_tag = short_sw(software_choice)
 
           includes = []
           if email:
               for i in range(1, num_devices + 1):
                   action_mode = action_list[i - 1]
                   action_cap  = action_mode.capitalize()
-
-                  if is_manual_proxy and active_proxies:
-                      proxy      = active_proxies[i - 1]
-                      cc_upper   = (proxy.get('country_code') or 'XX').upper()
-                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{cc_upper}"
-                      includes.append({
-                          "device": device_name, "email": email, "gologin_email": gologin_email,
-                          "os": os_version,
-                          "use_proxy": "true",
-                          "proxy_server": proxy['server'],
-                          "proxy_user":   proxy.get('username', ''),
-                          "proxy_pass":   proxy.get('password', ''),
-                          "proxy_type":   "manual",
-                          "target_url":   target_url, "software_type": software_type,
-                          "exe_filter":   exe_filter, "dmg_filter": dmg_filter,
-                          "action_mode":  action_mode,
-                      })
-                      print(f"[Device Added] {device_name} | Proxy: {proxy['server']} ({cc_upper})")
-
-                  elif floppy_key and active_proxies:
-                      proxy      = active_proxies[i - 1]
-                      cc_upper   = (proxy.get('country_code') or 'XX').upper()
-                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{cc_upper}"
-                      includes.append({
-                          "device": device_name, "email": email, "gologin_email": gologin_email,
-                          "os": os_version,
-                          "use_proxy": "true",
-                          "proxy_server": proxy['server'],
-                          "proxy_user":   proxy['username'],
-                          "proxy_pass":   proxy['password'],
-                          "proxy_type":   "floppydata",
-                          "target_url":   target_url, "software_type": software_type,
-                          "exe_filter":   exe_filter, "dmg_filter": dmg_filter,
-                          "action_mode":  action_mode,
-                      })
-                      print(f"[Device Added] {device_name} | Proxy: FloppyData ({proxy['server']}) ({cc_upper})")
-
-                  elif use_proxy and scrapeops_key:
-                      country_input = os.environ.get("COUNTRY", "USA")
-                      mobile        = os.environ.get("MOBILE", "false").lower() == "true"
-                      sticky        = os.environ.get("STICKY", "false").lower() == "true"
-                      cc            = country_map.get(country_input, "us")
-                      country_cap   = cc.upper()
-                      device_name   = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{country_cap}"
-                      proxy_user    = f"scrapeops.country={cc}"
-                      if mobile:
-                          proxy_user += ".mobile=true"
-                      if sticky:
-                          session_id  = str(uuid.uuid4())[:8]
-                          proxy_user += f".sticky_session={session_id}"
-                      includes.append({
-                          "device": device_name, "email": email, "gologin_email": gologin_email,
-                          "os": os_version,
-                          "use_proxy": "true",
-                          "proxy_server": "residential-proxy.scrapeops.io:8181",
-                          "proxy_user":   proxy_user,
-                          "proxy_pass":   scrapeops_key,
-                          "proxy_type":   "scrapeops",
-                          "target_url":   target_url, "software_type": software_type,
-                          "exe_filter":   exe_filter, "dmg_filter": dmg_filter,
-                          "action_mode":  action_mode,
-                      })
-                      print(f"[Device Added] {device_name} | Proxy: ScrapeOps ({cc})")
-
-                  else:
-                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-DIRECT"
-                      includes.append({
-                          "device": device_name, "email": email, "gologin_email": gologin_email,
-                          "os": os_version,
-                          "use_proxy": "false",
-                          "proxy_server": "", "proxy_user": "", "proxy_pass": "",
-                          "proxy_type":   "none",
-                          "target_url":   target_url, "software_type": software_type,
-                          "exe_filter":   exe_filter, "dmg_filter": dmg_filter,
-                          "action_mode":  action_mode,
-                      })
-                      print(f"[Device Added] {device_name} | Proxy: NONE")
+                  device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}"
+                  includes.append({
+                      "device":        device_name,
+                      "email":         email,
+                      "os":            os_version,
+                      "target_url":    target_url,
+                      "software_type": software_type,
+                      "exe_filter":    exe_filter,
+                      "dmg_filter":    dmg_filter,
+                      "action_mode":   action_mode,
+                  })
+                  print(f"[Device] {device_name} | {action_mode} | {software_type}")
 
           if not includes:
-              print("Error: Valid configuration could not be generated.")
+              print("ERROR: No valid configuration generated.")
               exit(1)
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
@@ -568,82 +238,64 @@ jobs:
       - name: Update Workflow Defaults (Remember Inputs)
         shell: python
         env:
-          OS_VERSION: ${{ inputs.os_version }}
-          GETSCREEN_EMAIL: ${{ inputs.getscreen_email }}
-          GOLOGIN_EMAIL: ${{ inputs.gologin_email }}
-          NUM_DEVICES: ${{ inputs.num_devices }}
-          NUM_CLICKS: ${{ inputs.num_clicks }}
-          SOFTWARE_CHOICE: ${{ inputs.software_choice }}
-          RUN_MANUAL: ${{ inputs.run_manual_link }}
-          MANUAL_URL: ${{ inputs.manual_software_url }}
-          API_KEY: ${{ inputs.scrapeops_api_key }}
-          WITHOUT_PROXY: ${{ inputs.use_without_proxy }}
-          COUNTRY: ${{ inputs.proxy_country }}
-          MOBILE: ${{ inputs.mobile_proxies }}
-          STICKY: ${{ inputs.sticky_sessions }}
+          OS_VERSION:       ${{ inputs.os_version }}
+          GETSCREEN_EMAIL:  ${{ inputs.getscreen_email }}
+          GOLOGIN_EMAIL:    ${{ inputs.gologin_email }}
+          NUM_DEVICES:      ${{ inputs.num_devices }}
+          NUM_CLICKS:       ${{ inputs.num_clicks }}
+          SOFTWARE_CHOICE:  ${{ inputs.software_choice }}
+          RUN_MANUAL:       ${{ inputs.run_manual_url }}
+          MANUAL_URL:       ${{ inputs.manual_url }}
         run: |
           import re, os
 
-          SCRAPEOPS_KEY_RE = re.compile(
-              r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
-          FLOPPY_KEY_RE = re.compile(r'^[A-Za-z0-9_]{30,80}$')
-
-          file_path = ".github/workflows/unified.yml"
-          if os.path.exists(file_path):
-              with open(file_path, "r") as f:
-                  content = f.read()
-
-              def update_default_str(input_name, new_val):
-                  global content
-                  pattern = r"(" + input_name + r":[\s\S]*?default:\s*')[^']*(')"
-                  content = re.sub(pattern, rf"\g<1>{new_val}\g<2>", content, count=1)
-
-              def update_default_bool(input_name, new_val):
-                  global content
-                  pattern = r"(" + input_name + r":[\s\S]*?default:\s*)(true|false)"
-                  content = re.sub(pattern, rf"\g<1>{new_val.lower()}", content, count=1)
-
-              api_key_input = os.environ.get("API_KEY", "").strip()
-              is_manual_proxy = False
-              if api_key_input:
-                  raw_items = re.split(r'[\s,;]+', api_key_input)
-                  proxy_candidates = [item for item in raw_items
-                                      if ('://' in item) or ('@' in item) or (item.count(':') >= 2 and len(item) > 10)]
-                  if len(proxy_candidates) >= 1:
-                      is_manual_proxy = True
-
-              update_default_str("os_version",        os.environ.get("OS_VERSION"))
-              update_default_str("getscreen_email",   os.environ.get("GETSCREEN_EMAIL"))
-              update_default_str("gologin_email",     os.environ.get("GOLOGIN_EMAIL"))
-              update_default_str("num_devices",       os.environ.get("NUM_DEVICES"))
-              update_default_str("num_clicks",        os.environ.get("NUM_CLICKS"))
-              update_default_str("software_choice",   os.environ.get("SOFTWARE_CHOICE"))
-              update_default_bool("run_manual_link",  os.environ.get("RUN_MANUAL"))
-              if os.environ.get("RUN_MANUAL", "false").lower() == "true":
-                  update_default_str("manual_software_url", os.environ.get("MANUAL_URL"))
-              else:
-                  update_default_str("manual_software_url", "")
-              if not is_manual_proxy and api_key_input:
-                  update_default_str("scrapeops_api_key", api_key_input)
-              update_default_bool("use_without_proxy", os.environ.get("WITHOUT_PROXY"))
-              update_default_str("proxy_country",     os.environ.get("COUNTRY"))
-              update_default_bool("mobile_proxies",   os.environ.get("MOBILE"))
-              update_default_bool("sticky_sessions",  os.environ.get("STICKY"))
-
-              with open(file_path, "w") as f:
-                  f.write(content)
-              print("[Workflow State] Defaults updated.")
-          else:
+          file_path = ".github/workflows/main4.yml"
+          if not os.path.exists(file_path):
               print(f"File {file_path} not found. Skipping auto-save.")
+              exit(0)
+
+          with open(file_path, "r", encoding="utf-8") as f:
+              content = f.read()
+
+          def update_str_default(input_name, new_val):
+              global content
+              pattern = r"(" + re.escape(input_name) + r":[\s\S]*?default:\s*')[^']*(')"
+              content = re.sub(pattern, rf"\g<1>{new_val}\g<2>", content, count=1)
+
+          def update_bool_default(input_name, new_val):
+              global content
+              val_str = "true" if str(new_val).lower() == "true" else "false"
+              pattern = r"(" + re.escape(input_name) + r":[\s\S]*?default:\s*)(true|false)"
+              content = re.sub(pattern, rf"\g<1>{val_str}", content, count=1)
+
+          update_str_default("os_version",       os.environ.get("OS_VERSION", ""))
+          update_str_default("getscreen_email",   os.environ.get("GETSCREEN_EMAIL", ""))
+          update_str_default("gologin_email",     os.environ.get("GOLOGIN_EMAIL", ""))
+          update_str_default("num_devices",       os.environ.get("NUM_DEVICES", ""))
+          update_str_default("num_clicks",        os.environ.get("NUM_CLICKS", ""))
+          update_str_default("software_choice",   os.environ.get("SOFTWARE_CHOICE", ""))
+          update_bool_default("run_manual_url",   os.environ.get("RUN_MANUAL", "false"))
+          run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
+          if run_manual:
+              update_str_default("manual_url",    os.environ.get("MANUAL_URL", ""))
+          else:
+              update_str_default("manual_url",    "")
+
+          with open(file_path, "w", encoding="utf-8") as f:
+              f.write(content)
+          print("[Workflow State] Defaults updated successfully.")
 
       - name: Commit and Push New Defaults
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/unified.yml
+          git add .github/workflows/main4.yml
           git diff --quiet && git diff --staged --quiet || \
             (git commit -m "Update last used inputs [skip ci]" && git push)
 
+  # ═══════════════════════════════════════════════════════════════════════════
+  # REMOTE SESSION JOB — runs in parallel on each matrix device
+  # ═══════════════════════════════════════════════════════════════════════════
   remote_session:
     name: Session ${{ matrix.device }}
     needs: prepare_matrix
@@ -655,666 +307,1553 @@ jobs:
       matrix: ${{ fromJson(needs.prepare_matrix.outputs.matrix) }}
 
     steps:
-      # ======================================================================
-      # WINDOWS — SYSTEM PREP
-      # ======================================================================
-      - name: System Preparation (Windows)
+
+      # ════════════════════════════════════════════════════════════════════
+      # ── WINDOWS STEPS ──────────────────────────────────────────────────
+      # ════════════════════════════════════════════════════════════════════
+
+      # ── 1-W: Disable Defender & SmartScreen ────────────────────────────
+      - name: Disable Windows Defender & Edge SmartScreen (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Write-Host "========== SYSTEM PREPARATION ==========" -ForegroundColor Cyan
+          Write-Host "======= SYSTEM PREP (Windows) =======" -ForegroundColor Cyan
           Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
           Set-MpPreference -PUAProtection 0 -ErrorAction SilentlyContinue
           Set-MpPreference -DisableBlockAtFirstSeen $true -ErrorAction SilentlyContinue
           Set-MpPreference -DisableIOAVProtection $true -ErrorAction SilentlyContinue
           $edgePolicy = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
           if (-not (Test-Path $edgePolicy)) { New-Item -Path $edgePolicy -Force | Out-Null }
-          Set-ItemProperty -Path $edgePolicy -Name "SmartScreenEnabled" -Value 0
-          Set-ItemProperty -Path $edgePolicy -Name "SmartScreenPuaEnabled" -Value 0
-          Set-ItemProperty -Path $edgePolicy -Name "DownloadRestrictions" -Value 0
+          Set-ItemProperty -Path $edgePolicy -Name "SmartScreenEnabled"                           -Value 0
+          Set-ItemProperty -Path $edgePolicy -Name "SmartScreenPuaEnabled"                        -Value 0
+          Set-ItemProperty -Path $edgePolicy -Name "DownloadRestrictions"                         -Value 0
+          Set-ItemProperty -Path $edgePolicy -Name "PreventSmartScreenPromptOverride"             -Value 0
+          Set-ItemProperty -Path $edgePolicy -Name "PreventSmartScreenPromptOverrideForFiles"     -Value 0
           $exemptPath = "$edgePolicy\ExemptDomainFileTypePairsFromFileTypeDownloadWarnings"
           if (-not (Test-Path $exemptPath)) { New-Item -Path $exemptPath -Force | Out-Null }
           Set-ItemProperty -Path $exemptPath -Name "1" -Value '{"domains":["*"],"file_extension":"exe"}'
+          Write-Host "[OK] Windows Defender and SmartScreen configured." -ForegroundColor Green
 
-      # ======================================================================
-      # WINDOWS — GETSCREEN + GOLOGIN SETUP
-      # ======================================================================
-      - name: Install Getscreen.me & GoLogin (Windows)
+      # ── 2-W: Install & Start Getscreen.me ──────────────────────────────
+      - name: Install and Start Getscreen.me (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        env:
-          GOLOGIN_EMAIL: ${{ matrix.gologin_email }}
         run: |
-          Write-Host "========== INSTALLING GETSCREEN.ME ==========" -ForegroundColor Cyan
+          Write-Host "======= GETSCREEN.ME AGENT (Windows) =======" -ForegroundColor Cyan
           $MaxRetries = 3; $RetryCount = 0; $Success = $false
           while (-not $Success -and $RetryCount -lt $MaxRetries) {
               try {
                   Invoke-WebRequest -Uri "https://getscreen.me/download/getscreen.msi" -OutFile "getscreen.msi" -ErrorAction Stop
                   if ((Get-Item "getscreen.msi").length -gt 1MB) { $Success = $true }
-                  else { $RetryCount++; Start-Sleep -Seconds 5 }
-              } catch { $RetryCount++; Start-Sleep -Seconds 5 }
+                  else { Write-Host "File too small, retrying..."; $RetryCount++; Start-Sleep 5 }
+              } catch { $RetryCount++; Write-Host "Download failed ($RetryCount/$MaxRetries)"; Start-Sleep 5 }
           }
-          if (-not $Success) { Write-Error "Getscreen download failed"; exit 1 }
-          $InstallArgs = "/i getscreen.msi /qn REGISTER=`"${{ matrix.email }}`" CONFIG=`"name='${{ matrix.device }}' autostart=true nonadmin=true control=true disable_confirmation=true`""
+          if (-not $Success) { Write-Error "Getscreen download failed after $MaxRetries attempts"; exit 1 }
+          $DeviceName = "${{ matrix.device }}"
+          $InstallArgs = "/i getscreen.msi /qn REGISTER=`"${{ matrix.email }}`" CONFIG=`"name='$DeviceName' autostart=true nonadmin=true control=true disable_confirmation=true`""
           Start-Process msiexec.exe -Wait -ArgumentList $InstallArgs
-          Write-Host "Getscreen.me installed." -ForegroundColor Green
+          Write-Host "[OK] Getscreen.me configured for device: $DeviceName" -ForegroundColor Green
 
-          Write-Host "========== INSTALLING GOLOGIN ==========" -ForegroundColor Cyan
-          $Success = $false; $RetryCount = 0
+      # ── 3-W: Download, Install & Open GoLogin ──────────────────────────
+      - name: Download, Install, and Open GoLogin (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "======= GOLOGIN SETUP (Windows) =======" -ForegroundColor Cyan
+          $MaxRetries = 3; $RetryCount = 0; $Success = $false
           while (-not $Success -and $RetryCount -lt $MaxRetries) {
               try {
                   Invoke-WebRequest -Uri "https://dl.gologin.com/gologin.exe" -OutFile "gologin_installer.exe" -ErrorAction Stop
                   if ((Get-Item "gologin_installer.exe").length -gt 10MB) { $Success = $true }
-                  else { $RetryCount++; Start-Sleep -Seconds 5 }
-              } catch { $RetryCount++; Start-Sleep -Seconds 5 }
+                  else { Write-Host "File too small, retrying..."; $RetryCount++; Start-Sleep 5 }
+              } catch { $RetryCount++; Write-Host "Download failed ($RetryCount/$MaxRetries)"; Start-Sleep 5 }
           }
           if (-not $Success) { Write-Error "GoLogin download failed"; exit 1 }
+          Write-Host "[*] Installing GoLogin silently..."
           Start-Process -FilePath ".\gologin_installer.exe" -ArgumentList "/S" -Wait
           $GoLoginPath = "$env:USERPROFILE\AppData\Local\Programs\GoLogin\GoLogin.exe"
           $WaitAttempts = 0
-          while (-Not (Test-Path $GoLoginPath) -and $WaitAttempts -lt 30) {
-              Start-Sleep -Seconds 2; $WaitAttempts++
-          }
+          while (-Not (Test-Path $GoLoginPath) -and $WaitAttempts -lt 30) { Start-Sleep 2; $WaitAttempts++ }
           if (-Not (Test-Path $GoLoginPath)) {
               $Found = Get-ChildItem -Path "$env:USERPROFILE\AppData" -Filter "GoLogin.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
               if ($Found) { $GoLoginPath = $Found.FullName }
-              else { Write-Error "GoLogin.exe not found"; exit 1 }
+              else { Write-Error "GoLogin.exe not found after install"; exit 1 }
           }
+          Write-Host "[*] Launching GoLogin from: $GoLoginPath"
           Start-Process $GoLoginPath
-          Write-Host "GoLogin launched." -ForegroundColor Green
+          Write-Host "[OK] GoLogin installed and launched." -ForegroundColor Green
 
-          Write-Host "========== GOLOGIN LOGIN AUTOMATION ==========" -ForegroundColor Cyan
+      # ── 4-W: Automate GoLogin Login ────────────────────────────────────
+      - name: Automate GoLogin Login (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GOLOGIN_EMAIL:    ${{ inputs.gologin_email }}
+          GOLOGIN_PASSWORD: "11223344"
+        run: |
+          Write-Host "======= GOLOGIN LOGIN AUTOMATION (Windows) =======" -ForegroundColor Cyan
           pip install pyautogui pygetwindow --quiet
           python -c "
           import pyautogui, pygetwindow as gw, time, os, sys
-          print('Polling for GoLogin window...')
           max_wait = 60; wait_time = 0; win = None
+          print('Polling for GoLogin window (up to 60s)...')
           while wait_time < max_wait:
-              for title in ['Gologin','GoLogin','gologin']:
+              for title in ['Gologin', 'GoLogin', 'gologin']:
                   windows = gw.getWindowsWithTitle(title)
                   if windows: win = windows[0]; break
               if win: break
               time.sleep(2); wait_time += 2
+              print(f'  Waited {wait_time}s...')
           if win:
               try: win.activate(); win.maximize()
               except: pass
               time.sleep(5)
+              print('Navigating to login tab (Tab x8, Enter)...')
               pyautogui.press('tab', presses=8, interval=0.5)
               pyautogui.press('enter')
               time.sleep(4)
-              pyautogui.write(os.environ.get('GOLOGIN_EMAIL',''))
+              print('Entering credentials...')
+              pyautogui.write(os.environ.get('GOLOGIN_EMAIL', ''))
               pyautogui.press('tab')
-              pyautogui.write('11223344')
+              pyautogui.write(os.environ.get('GOLOGIN_PASSWORD', ''))
               pyautogui.press('enter')
-              print('GoLogin login automated.')
+              print('[OK] Login automation complete.')
           else:
-              print('GoLogin window not found.')
+              print('[ERROR] GoLogin window not found.'); sys.exit(1)
           "
 
-      # ======================================================================
-      # WINDOWS — WAIT FOR PROFILE & EXECUTE AUTOMATION
-      # ======================================================================
-      - name: GoLogin Profile Detection & Automation (Windows)
+      # ── 5-W: Wait for GoLogin Profile & Run Software URL ───────────────
+      - name: Wait for GoLogin Orbita Profile & Run Software (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         env:
-          TARGET_URL: ${{ matrix.target_url }}
+          TARGET_URL:    ${{ matrix.target_url }}
           SOFTWARE_TYPE: ${{ matrix.software_type }}
-          EXE_FILTER: ${{ matrix.exe_filter }}
-          ACTION_MODE: ${{ matrix.action_mode }}
+          EXE_FILTER:    ${{ matrix.exe_filter }}
+          ACTION_MODE:   ${{ matrix.action_mode }}
         run: |
-          Write-Host "============================================================" -ForegroundColor Cyan
-          Write-Host " GoLogin is ready. Please open a profile via Getscreen.me " -ForegroundColor Yellow
-          Write-Host " remote access. The runner will auto-detect the browser.   " -ForegroundColor Yellow
-          Write-Host "============================================================" -ForegroundColor Cyan
+          Write-Host "======= GOLOGIN ORBITA DETECTION & SOFTWARE RUNNER (Windows) =======" -ForegroundColor Cyan
+          Write-Host "Target URL  : $env:TARGET_URL"
+          Write-Host "Action Mode : $($env:ACTION_MODE.ToUpper())"
+          Write-Host "Software    : $env:SOFTWARE_TYPE"
 
-          $readyFile = "$env:TEMP\gologin_browser_ready.flag"
-          $pollMins = 25
-          Write-Host "Waiting up to $pollMins minutes for you to open a GoLogin profile..."
-          Write-Host "TIP: Open your profile, then the script will detect it automatically."
-          $start = Get-Date
-          $detected = $false
-          while (((Get-Date) - $start).TotalMinutes -lt $pollMins) {
-              # Detection: look for a visible window that is likely the browser
-              Add-Type @"
-using System; using System.Runtime.InteropServices; using System.Text;
-public class WinFinder {
-  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc);
-  [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
-  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-  public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-}
-"@
-              $candidates = @()
-              $cb = [WinFinder+EnumWindowsProc]{
-                  param($hWnd, $lParam)
-                  if ([WinFinder]::IsWindowVisible($hWnd)) {
-                      $sb = New-Object System.Text.StringBuilder 256
-                      [WinFinder]::GetWindowText($hWnd, $sb, 256) | Out-Null
-                      $t = $sb.ToString()
-                      if ($t -and $t -notmatch "GoLogin" -and $t -notmatch "Program Manager" -and $t -notmatch "Settings" -and $t.Length -gt 5) {
-                          $script:candidates += [PSCustomObject]@{ Handle = $hWnd; Title = $t }
-                      }
-                  }
-                  return $true
-              }
-              [WinFinder]::EnumWindows($cb, [IntPtr]::Zero) | Out-Null
-              # Prefer window with URL-like or browser-like title
-              $browser = $candidates | Where-Object { $_.Title -match "http|\.com|New Tab|Chromium|Chrome|Opera|AVG" } | Select-Object -First 1
-              if (-not $browser) {
-                  $browser = $candidates | Sort-Object { $_.Title.Length } -Descending | Select-Object -First 1
-              }
-              if ($browser) {
-                  Write-Host "Detected browser window: $($browser.Title)" -ForegroundColor Green
-                  [WinFinder]::SetForegroundWindow($browser.Handle) | Out-Null
-                  Start-Sleep -Seconds 2
-                  # Navigate to target URL
-                  Add-Type -AssemblyName System.Windows.Forms
-                  [System.Windows.Forms.SendKeys]::SendWait("^l")
-                  Start-Sleep -Milliseconds 500
-                  [System.Windows.Forms.SendKeys]::SendWait("$env:TARGET_URL")
-                  Start-Sleep -Milliseconds 500
-                  [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-                  Start-Sleep -Seconds 5
-                  $browser.Handle | Out-File -FilePath $readyFile -Encoding utf8
-                  $detected = $true
-                  break
-              }
-              Start-Sleep -Seconds 5
-          }
-          if (-not $detected) {
-              Write-Host "Profile detection timeout. Proceeding with fallback (URL may need manual entry)." -ForegroundColor Red
-          }
+          pip install pywinauto pyautogui pygetwindow keyboard --quiet
 
-          Write-Host "========== AUTOMATION ENGINE STARTING ==========" -ForegroundColor Cyan
-          Write-Host "Action Mode: $($env:ACTION_MODE.ToUpper()) | Software: $($env:SOFTWARE_TYPE)"
+          # ── Inline Python: detect Orbita window, navigate to URL, run flow ─
+          $script = @'
+import time, sys, os, tempfile, random, subprocess, ctypes
+from pywinauto import Desktop
+import pyautogui
+from pywinauto.keyboard import send_keys
 
-          python -m pip install pywinauto pyautogui pygetwindow keyboard --quiet
+TARGET_URL    = os.environ.get("TARGET_URL", "")
+SOFTWARE_TYPE = os.environ.get("SOFTWARE_TYPE", "dynamic_opera")
+EXE_FILTER    = os.environ.get("EXE_FILTER", "*.exe")
+ACTION_MODE   = os.environ.get("ACTION_MODE", "install")
 
-          $handlerPy = @'
-          import time, sys, os, subprocess, random, tempfile
-          from pywinauto import Desktop
-          import pyautogui
-          from pywinauto.keyboard import send_keys
+DL_FOLDER               = os.path.join(os.environ.get("USERPROFILE",""), "Downloads")
+SENTINEL_PATH           = os.path.join(tempfile.gettempdir(), "download_done.flag")
+INSTALLER_EXECUTED_PATH = os.path.join(tempfile.gettempdir(), "installer_executed.flag")
 
-          def log(tag, msg):
-              print(f"[{time.strftime('%H:%M:%S')}][{tag}] {msg}", flush=True)
+def log(tag, msg):
+    print(f"[{time.strftime('%H:%M:%S')}][{tag}] {msg}", flush=True)
 
-          def find_browser_window(desktop):
-              for w in desktop.windows(visible_only=True):
-                  try:
-                      t = w.window_text()
-                      if t and len(t) > 3 and "GoLogin" not in t and "Program Manager" not in t and "Settings" not in t:
-                          return w
-                  except: pass
-              return None
+# ── Orbita / GoLogin browser detection helpers ────────────────────────────
+ORBITA_TITLE_FRAGMENTS = [
+    "orbita", "gologin", "GoLogin Browser", "GL Browser"
+]
+ORBITA_EXE_FRAGMENTS = [
+    "orbita", "gologin", "gl-browser", "gl_browser"
+]
 
-          def click_download_button(desktop):
-              try:
-                  for w in desktop.windows(visible_only=True):
-                      t = w.window_text()
-                      if not t: continue
-                      for btn in w.descendants(control_type="Button"):
-                          bt = btn.window_text()
-                          if bt and any(k in bt.lower() for k in ["download","accept and install","accept & install","download now","télécharger","descargar"]):
-                              try: btn.click_input(); log("DL", f"Clicked '{bt}'"); return True
-                              except: pass
-              except Exception as e: log("DL", f"Error: {e}")
-              return False
+def is_orbita_window(wt):
+    if not wt:
+        return False
+    tl = wt.lower()
+    # GoLogin Orbita windows often show "- Orbita" or process is orbita.exe
+    if any(f in tl for f in ORBITA_TITLE_FRAGMENTS):
+        return True
+    return False
 
-          def dismiss_interference(desktop):
-              for w in desktop.windows(visible_only=True):
-                  try:
-                      t = w.window_text()
-                      if t and any(x in t.lower() for x in ["settings","default apps","choose an app","open with","user account control"]):
-                          try: w.close()
-                          except: pass
-                  except: pass
+def is_orbita_process(proc_name):
+    if not proc_name:
+        return False
+    pl = proc_name.lower()
+    return any(f in pl for f in ORBITA_EXE_FRAGMENTS)
 
-          def handle_automation(software_type, action_mode, timeout=360):
-              desktop = Desktop(backend="uia")
-              start = time.time()
-              last_click = 0
-              while time.time() - start < timeout:
-                  dismiss_interference(desktop)
-                  if action_mode == "click":
-                      if time.time() - start > 75:
-                          log("Click", "Click-only path complete.")
-                          return
-                      time.sleep(1)
-                      continue
-                  # install path
-                  if time.time() - last_click > 8:
-                      if click_download_button(desktop):
-                          last_click = time.time()
-                  time.sleep(1)
+def find_orbita_window(desktop):
+    """Return the first visible Orbita/GoLogin browser window found."""
+    try:
+        for w in desktop.windows(visible_only=True):
+            wt = w.window_text() or ""
+            try:
+                proc_name = w.process().name()
+            except Exception:
+                proc_name = ""
+            if is_orbita_window(wt) or is_orbita_process(proc_name):
+                return w
+    except Exception:
+        pass
+    return None
 
-          if __name__ == "__main__":
-              handle_automation(sys.argv[1], sys.argv[2])
-          '@
-          $handlerPy | Out-File -FilePath "$env:TEMP\auto_handler.py" -Encoding utf8
+def navigate_orbita_to_url(desktop, url, max_wait=300):
+    """
+    Wait until a GoLogin Orbita profile window opens, then navigate it
+    to the given URL using the address bar (Ctrl+L / F6 → type → Enter).
+    Returns the window handle or None.
+    """
+    log("OrbitaNav", f"Waiting up to {max_wait}s for GoLogin Orbita profile window...")
+    deadline = time.time() + max_wait
+    orbita_win = None
+    while time.time() < deadline:
+        desktop = Desktop(backend="uia")
+        orbita_win = find_orbita_window(desktop)
+        if orbita_win:
+            log("OrbitaNav", f"Orbita window found: '{orbita_win.window_text()}'")
+            break
+        # Also scan all processes for chromium-based GoLogin windows
+        # by checking process names via psutil if available
+        try:
+            import psutil
+            for proc in psutil.process_iter(["name", "pid"]):
+                pname = (proc.info.get("name") or "").lower()
+                if any(f in pname for f in ORBITA_EXE_FRAGMENTS):
+                    log("OrbitaNav", f"Orbita process detected (PID {proc.pid}): {proc.info['name']} — waiting for window...")
+                    time.sleep(3)
+                    desktop = Desktop(backend="uia")
+                    orbita_win = find_orbita_window(desktop)
+                    if orbita_win:
+                        log("OrbitaNav", f"Got Orbita window after process scan.")
+                        break
+        except ImportError:
+            pass
+        elapsed = int(deadline - time.time())
+        if elapsed % 30 == 0:
+            log("OrbitaNav", f"Still waiting for Orbita... {elapsed}s remaining")
+        time.sleep(2)
 
+    if not orbita_win:
+        log("OrbitaNav", "ERROR: Orbita window never appeared. Aborting.")
+        return None
+
+    # ── Focus the Orbita window ─────────────────────────────────────────
+    try:
+        orbita_win.set_focus()
+        orbita_win.maximize()
+        time.sleep(1.5)
+    except Exception as e:
+        log("OrbitaNav", f"Focus/maximize warning: {e}")
+
+    # ── Navigate to target URL ─────────────────────────────────────────
+    log("OrbitaNav", f"Navigating to: {url}")
+    # Strategy 1: Ctrl+L (address bar shortcut — works in all Chromium browsers)
+    try:
+        orbita_win.set_focus()
+        time.sleep(0.5)
+        send_keys("^l")         # Ctrl+L  – focus address bar
+        time.sleep(0.8)
+        # Clear whatever is there, then type URL
+        send_keys("^a")
+        time.sleep(0.2)
+        pyautogui.hotkey("ctrl", "a")
+        time.sleep(0.1)
+        pyautogui.typewrite(url, interval=0.03)
+        time.sleep(0.3)
+        send_keys("{ENTER}")
+        log("OrbitaNav", "URL entered via Ctrl+L strategy.")
+        time.sleep(2)
+        return orbita_win
+    except Exception as e:
+        log("OrbitaNav", f"Ctrl+L strategy failed: {e}")
+
+    # Strategy 2: F6 (alternative address bar focus)
+    try:
+        orbita_win.set_focus()
+        time.sleep(0.5)
+        send_keys("{F6}")
+        time.sleep(0.8)
+        send_keys("^a")
+        time.sleep(0.2)
+        pyautogui.typewrite(url, interval=0.03)
+        time.sleep(0.3)
+        send_keys("{ENTER}")
+        log("OrbitaNav", "URL entered via F6 strategy.")
+        time.sleep(2)
+        return orbita_win
+    except Exception as e:
+        log("OrbitaNav", f"F6 strategy failed: {e}")
+
+    log("OrbitaNav", "WARNING: Could not navigate Orbita to URL.")
+    return orbita_win
+
+# ── Interference / download window helpers ────────────────────────────────
+DOWNLOAD_DONE_TITLES = [
+    "Thanks for downloading Opera", "Thanks for downloadin",
+    "Download | Thanks", "sudetyj", "GET READY TO PLAY", "ready to install",
+]
+INTERFERENCE_TITLES  = [
+    "Settings","Windows Settings","Default apps","System Settings",
+    "Choose an app","How do you want to open","Open with",
+    "Windows PowerShell","Administrator: Windows PowerShell",
+    "Command Prompt","Administrator: Command Prompt","User Account Control",
+]
+INTERFERENCE_SUBS    = [
+    "default apps","choose a default","set as default","open with",
+    "how do you want to open","user account control",
+]
+
+def _is_download_done(wt):
+    tl = (wt or "").lower()
+    return any(f.lower() in tl for f in DOWNLOAD_DONE_TITLES)
+
+def _is_interference(wt):
+    if not wt:
+        return False
+    for ex in INTERFERENCE_TITLES:
+        if wt.strip().lower() == ex.strip().lower():
+            return True
+    tl = wt.lower()
+    return any(s in tl for s in INTERFERENCE_SUBS)
+
+def _is_target_sw(wt, sw_type):
+    if not wt:
+        return False
+    tl = wt.lower()
+    if sw_type == "avg":
+        return "avg" in tl
+    if sw_type == "opera_gx":
+        return ("opera" in tl and "gx" in tl)
+    return "opera" in tl and "edge" not in tl and "chrome web store" not in tl
+
+def dismiss_interference(desktop, sw_type, label=""):
+    try:
+        for w in desktop.windows(visible_only=True):
+            wt = w.window_text() or ""
+            if _is_target_sw(wt, sw_type) or not _is_interference(wt):
+                continue
+            log("WinGuard", f"Closing interference: '{wt}' [{label}]")
+            for strategy in [lambda: (w.set_focus(), time.sleep(0.2), send_keys("%{F4}")),
+                             lambda: w.close(),
+                             lambda: w.minimize()]:
+                try:
+                    strategy(); time.sleep(0.3); break
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+def close_download_windows(desktop):
+    try:
+        for w in desktop.windows(visible_only=True):
+            wt = w.window_text() or ""
+            if not _is_download_done(wt):
+                continue
+            log("EdgeClose", f"Closing download-done window: '{wt}'")
+            for k in [lambda: send_keys("^w"), lambda: send_keys("%{F4}"), lambda: w.close()]:
+                try:
+                    w.set_focus(); time.sleep(0.3); k(); time.sleep(0.4); break
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+def robust_maximize(desktop, orbita_win, sw_type, label=""):
+    """Keep the target software window on top and maximized."""
+    dismiss_interference(desktop, sw_type, label)
+    target = orbita_win
+    try:
+        target.set_focus(); time.sleep(0.2)
+        target.maximize(); time.sleep(0.3)
+        # ctypes SW_MAXIMIZE
+        try:
+            ctypes.windll.user32.ShowWindow(target.handle, 9)
+            time.sleep(0.2)
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return target
+
+def click_button(desktop, win, sw_type, button_names, label=""):
+    if not win:
+        return False
+    for name in button_names:
+        for btn in win.descendants(control_type="Button"):
+            try:
+                txt = btn.window_text() or ""
+                if name.lower() in txt.lower():
+                    btn.click_input()
+                    log("BtnClick", f"[{label}] Clicked '{txt}'")
+                    return True
+            except Exception:
+                pass
+    return False
+
+# ══════════════════════════════════════════════════════════════════════════
+# WINDOWS POST-INSTALL SEQUENCES
+# ══════════════════════════════════════════════════════════════════════════
+
+def opera_one_post_install_win(sw_win, sw_type):
+    log("PostInstall-OP1", "=== Opera One Post-Install (Windows) STARTING ===")
+    desktop = Desktop(backend="uia")
+    log("PostInstall-OP1", "STEP 1: Waiting 50s for Opera One to initialize...")
+    for s in range(1, 51):
+        log("PostInstall-OP1", f"  Init wait {s}/50s")
+        time.sleep(1)
+    log("PostInstall-OP1", "STEP 2: Maximizing Opera window...")
+    try:
+        sw_win = robust_maximize(desktop, sw_win, sw_type, "step2")
+    except Exception:
+        pass
+    time.sleep(5)
+    sw, sh = pyautogui.size(); cx, cy = sw // 2, sh // 2
+    log("PostInstall-OP1", f"STEP 3: Center click at ({cx},{cy})...")
+    pyautogui.click(cx, cy); time.sleep(5)
+    log("PostInstall-OP1", "STEP 4: Clicking Next x6 (2s each)...")
+    for i in range(1, 7):
+        desktop = Desktop(backend="uia")
+        sw_win = robust_maximize(desktop, sw_win, sw_type, f"next-{i}")
+        if not click_button(desktop, sw_win, sw_type, ["Next"], f"NEXT-{i}"):
+            pyautogui.click(int(sw * 0.90), int(sh * 0.90))
+        time.sleep(2)
+    log("PostInstall-OP1", "STEP 5: Clicking Done/Finish...")
+    desktop = Desktop(backend="uia")
+    sw_win = robust_maximize(desktop, sw_win, sw_type, "done")
+    if not click_button(desktop, sw_win, sw_type, ["Done", "Finish"], "DONE"):
+        pyautogui.click(int(sw * 0.90), int(sh * 0.90))
+    time.sleep(5)
+    send_keys("{ENTER}"); time.sleep(5)
+    log("PostInstall-OP1", "STEP 6: Clicking Submit...")
+    desktop = Desktop(backend="uia")
+    sw_win = robust_maximize(desktop, sw_win, sw_type, "submit")
+    if not click_button(desktop, sw_win, sw_type, ["Submit"], "SUBMIT"):
+        pyautogui.click(sw // 2, int(sh * 0.85))
+    time.sleep(5)
+    log("PostInstall-OP1", "STEP 7: Tab cycle 8→18...")
+    for tab_count in range(8, 19):
+        desktop = Desktop(backend="uia")
+        sw_win = robust_maximize(desktop, sw_win, sw_type, f"ctrlT-{tab_count}")
+        send_keys("^t"); time.sleep(5)
+        for i in range(1, tab_count + 1):
+            desktop = Desktop(backend="uia")
+            sw_win = robust_maximize(desktop, sw_win, sw_type, f"tab{tab_count}-{i}")
+            send_keys("{TAB}"); time.sleep(1)
+        send_keys("{ENTER}"); time.sleep(5)
+        desktop = Desktop(backend="uia")
+        sw_win = robust_maximize(desktop, sw_win, sw_type, f"post-ctrlT-{tab_count}")
+        send_keys("^t"); time.sleep(5)
+    log("PostInstall-OP1", "=== Opera One Post-Install COMPLETE ===")
+
+def opera_gx_post_install_win(sw_win, sw_type):
+    log("PostInstall-OPGX", "=== Opera GX Post-Install (Windows) STARTING ===")
+    desktop = Desktop(backend="uia")
+    sw_win = robust_maximize(desktop, sw_win, sw_type, "init")
+    time.sleep(0.5)
+    sw, sh = pyautogui.size(); cx, cy = sw // 2, sh // 2
+    pyautogui.click(cx, cy); time.sleep(0.15); pyautogui.click(cx, cy)
+    time.sleep(random.uniform(2.0, 3.0))
+    for i in range(4):
+        sw_win = robust_maximize(Desktop(backend="uia"), sw_win, sw_type, f"tab4-{i}")
+        send_keys("{TAB}"); time.sleep(random.uniform(1.0, 2.0))
+    for i in range(8):
+        sw_win = robust_maximize(Desktop(backend="uia"), sw_win, sw_type, f"enter8-{i}")
+        send_keys("{ENTER}"); time.sleep(random.uniform(1.0, 2.0))
+    time.sleep(random.uniform(2.0, 3.0))
+    for i in range(6):
+        sw_win = robust_maximize(Desktop(backend="uia"), sw_win, sw_type, f"tab6-{i}")
+        send_keys("{TAB}"); time.sleep(random.uniform(1.0, 2.0))
+    sw_win = robust_maximize(Desktop(backend="uia"), sw_win, sw_type, "final-enter")
+    send_keys("{ENTER}"); time.sleep(5)
+    for tab_count in range(7, 17):
+        sw_win = robust_maximize(Desktop(backend="uia"), sw_win, sw_type, f"ctrlT-{tab_count}")
+        send_keys("^t")
+        for i in range(1, tab_count + 1):
+            sw_win = robust_maximize(Desktop(backend="uia"), sw_win, sw_type, f"tab{tab_count}-{i}")
+            send_keys("{TAB}"); time.sleep(random.uniform(1.0, 2.0))
+        sw_win = robust_maximize(Desktop(backend="uia"), sw_win, sw_type, f"enter-{tab_count}")
+        send_keys("{ENTER}"); time.sleep(5)
+    log("PostInstall-OPGX", "=== Opera GX Post-Install COMPLETE ===")
+
+def avg_post_install_win(avg_win):
+    log("PostInstall-AVG", "=== AVG Post-Install (Windows) STARTING ===")
+    desktop = Desktop(backend="uia")
+    avg_win = robust_maximize(desktop, avg_win, "avg", "init")
+    time.sleep(0.5)
+    sw, sh = pyautogui.size(); cx, cy = sw // 2, sh // 2
+    pyautogui.click(cx, cy); time.sleep(0.15); pyautogui.click(cx, cy)
+    time.sleep(5)
+    tab_count = 6
+    while tab_count < 17:
+        avg_win = robust_maximize(Desktop(backend="uia"), avg_win, "avg", f"ctrlT-{tab_count}")
+        send_keys("^t")
+        for i in range(1, tab_count + 1):
+            avg_win = robust_maximize(Desktop(backend="uia"), avg_win, "avg", f"tab{tab_count}-{i}")
+            send_keys("{TAB}"); time.sleep(random.uniform(1.0, 2.0))
+        avg_win = robust_maximize(Desktop(backend="uia"), avg_win, "avg", f"enter-{tab_count}")
+        send_keys("{ENTER}")
+        tab_count += random.randint(1, 2)
+        if tab_count < 17:
+            time.sleep(5)
+    log("PostInstall-AVG", "=== AVG Post-Install COMPLETE ===")
+
+# ══════════════════════════════════════════════════════════════════════════
+# MAIN AUTOMATION LOOP (Windows)
+# ══════════════════════════════════════════════════════════════════════════
+
+def handle_automation_win(sw_type, action_mode, timeout=3300):
+    desktop = Desktop(backend="uia")
+    start_t = time.time()
+
+    # Step 1: Navigate Orbita to target URL
+    orbita_win = navigate_orbita_to_url(desktop, TARGET_URL, max_wait=300)
+    if not orbita_win:
+        log("Main", "No Orbita window — aborting.")
+        return
+
+    last_ctrl_j_t    = time.time()
+    last_dl_click_t  = 0
+    ctrl_j_attempts  = 0
+    keep_clicked     = False
+    avg_dl_clicked   = False
+    smart_link_done  = False
+    smart_link_t     = 0
+    op1_installer_t  = None
+    op1_done         = False
+    opgx_installer_t = None
+    opgx_done        = False
+    avg_installer_t  = None
+    avg_done         = False
+    dl_windows_closed = False
+    proxy_auth_t     = start_t
+    last_interference = 0
+
+    log("Main", f"Automation loop started | action={action_mode} | type={sw_type}")
+
+    while time.time() - start_t < timeout:
+        try:
+            desktop     = Desktop(backend="uia")
+            edge_win    = None
+            orbita_win2 = None
+            op_win      = None
+            avg_app_win = None
+
+            for w in desktop.windows(visible_only=True):
+                wt = w.window_text() or ""
+                wl = wt.lower()
+                if "microsoft edge" in wl:
+                    edge_win = w
+                elif is_orbita_window(wt):
+                    try:
+                        if is_orbita_process(w.process().name()):
+                            orbita_win2 = w
+                    except Exception:
+                        orbita_win2 = w
+                elif "opera" in wl and "edge" not in wl and "chrome web store" not in wl:
+                    op_win = w
+                elif "avg" in wl:
+                    avg_app_win = w
+
+            now = time.time()
+
+            # Interference sweep every 2s
+            if now - last_interference >= 2:
+                dismiss_interference(desktop, sw_type, "continuous")
+                last_interference = now
+
+            # Sentinel: close download-done windows
+            if not dl_windows_closed and os.path.exists(SENTINEL_PATH):
+                log("Sentinel", "Download sentinel found — cleaning download windows...")
+                for _ in range(7):
+                    close_download_windows(desktop); time.sleep(2)
+                dl_windows_closed = True
+
+            # ── Opera One post-install trigger ────────────────────────────
+            if action_mode == "install" and not op1_done:
+                is_target = sw_type in ["opera_one","dynamic_opera","ad_mvn","opera_smart_link"]
+                if is_target:
+                    if op1_installer_t is None and os.path.exists(INSTALLER_EXECUTED_PATH):
+                        op1_installer_t = time.time()
+                        log("PostInstall-OP1", "Installer sentinel found. Trigger in 50s.")
+                    if op1_installer_t and (now - op1_installer_t) >= 50:
+                        if op_win and "GX" in (op_win.window_text() or "").upper():
+                            op1_done = True  # resolved to GX, skip One flow
+                        else:
+                            opera_one_post_install_win(op_win, sw_type)
+                            op1_done = True
+
+            # ── Opera GX post-install trigger ─────────────────────────────
+            if action_mode == "install" and not opgx_done:
+                is_target = sw_type in ["opera_gx","dynamic_opera","ad_mvn","opera_smart_link"]
+                if is_target:
+                    if opgx_installer_t is None and os.path.exists(INSTALLER_EXECUTED_PATH):
+                        opgx_installer_t = time.time()
+                        log("PostInstall-OPGX", "Installer sentinel found. Trigger in 40s.")
+                    if opgx_installer_t and (now - opgx_installer_t) >= 40:
+                        if op_win and "GX" not in (op_win.window_text() or "").upper():
+                            opgx_done = True  # resolved to One, skip GX flow
+                        else:
+                            opera_gx_post_install_win(op_win, sw_type)
+                            opgx_done = True
+
+            # ── AVG post-install trigger ──────────────────────────────────
+            if sw_type == "avg" and action_mode == "install" and not avg_done:
+                if avg_installer_t is None and os.path.exists(INSTALLER_EXECUTED_PATH):
+                    avg_installer_t = time.time()
+                    log("PostInstall-AVG", "Installer sentinel found. Trigger in 60s.")
+                if avg_installer_t and (now - avg_installer_t) >= 60:
+                    avg_post_install_win(avg_app_win)
+                    avg_done = True
+
+            # ── Smart-link interstitial (Tab+Enter after 20s) ─────────────
+            active_browser = edge_win or orbita_win2
+            if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                if not smart_link_done and active_browser and (now - proxy_auth_t) > 20:
+                    try:
+                        active_browser.set_focus(); time.sleep(0.5)
+                        send_keys("{TAB}"); time.sleep(0.5); send_keys("{ENTER}")
+                        log("SmartLink", "Tab+Enter interstitial bypass sent.")
+                    except Exception as e:
+                        log("SmartLink", f"Bypass error: {e}")
+                    smart_link_done = True; smart_link_t = now
+
+            # ── CLICK-ONLY: exit after interstitial ───────────────────────
+            if action_mode == "click":
+                if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                    if not smart_link_done:
+                        time.sleep(1); continue
+                    if now - smart_link_t < 15:
+                        time.sleep(1); continue
+                time.sleep(1); continue
+
+            # ── Edge download protection (Keep / Keep anyway) ─────────────
+            if edge_win and action_mode == "install":
+                for btn_name in ["Keep", "Keep anyway"]:
+                    btns = edge_win.descendants(control_type="Button", title=btn_name)
+                    if btns:
+                        try: btns[0].click_input(); keep_clicked = True; time.sleep(0.5)
+                        except Exception: pass
+
+            # ── Download button clicker (Opera types) ────────────────────
+            can_dl = True
+            if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                if not smart_link_done or (now - smart_link_t < 15):
+                    can_dl = False
+            if edge_win and action_mode == "install" and can_dl and sw_type not in ["avg"]:
+                if now - last_dl_click_t > 5:
+                    for btn in (edge_win.descendants(control_type="Button") or []):
+                        btxt = btn.window_text() or ""
+                        if any(k in btxt.lower() for k in ["download opera","download now","télécharger","descargar","download"]):
+                            try:
+                                edge_win.set_focus(); time.sleep(0.5)
+                                btn.click_input(); last_dl_click_t = now
+                                log("Download", f"Clicked: '{btxt}'"); break
+                            except Exception: pass
+
+            # ── AVG download trigger (Tab+Enter after 20s) ────────────────
+            if edge_win and sw_type == "avg" and action_mode == "install":
+                if not avg_dl_clicked and (now - proxy_auth_t) > 20:
+                    try:
+                        edge_win.set_focus(); time.sleep(0.5)
+                        send_keys("{TAB}"); time.sleep(random.uniform(1, 2))
+                        send_keys("{ENTER}")
+                        log("AVG", "Download trigger sent.")
+                        for w in range(10):
+                            log("AVG", f"  Init wait {w+1}/10s"); time.sleep(1)
+                    except Exception as e:
+                        log("AVG", f"Trigger error: {e}")
+                    avg_dl_clicked = True
+
+            # ── Ctrl+J to open downloads panel ───────────────────────────
+            can_ctrlj = not (sw_type == "avg" and not avg_dl_clicked)
+            if (action_mode == "install" and not keep_clicked and edge_win
+                    and can_ctrlj and (now - last_ctrl_j_t > 15) and ctrl_j_attempts < 4):
+                try:
+                    edge_win.set_focus(); time.sleep(0.5)
+                    send_keys("^j")
+                    last_ctrl_j_t = now; ctrl_j_attempts += 1
+                    log("Utility", f"Ctrl+J attempt {ctrl_j_attempts}/4")
+                except Exception: pass
+
+        except Exception as e:
+            log("Main", f"Loop exception: {e}")
+        time.sleep(1)
+
+    log("Main", "Automation loop complete.")
+
+handle_automation_win(SOFTWARE_TYPE, ACTION_MODE)
+'@
+          $scriptPath = "$env:TEMP\win_handler.py"
+          $script | Out-File -FilePath $scriptPath -Encoding utf8
+
+          # ── Start the background Python automation handler ─────────────
+          Write-Host "[*] Starting Python automation handler..." -ForegroundColor Cyan
+          $handlerProc = Start-Process -FilePath python `
+            -ArgumentList "-u `"$scriptPath`"" `
+            -PassThru -WindowStyle Hidden
+          Write-Host "[*] Handler PID: $($handlerProc.Id)" -ForegroundColor Cyan
+
+          # ── INSTALL PATH: watch Downloads for the installer EXE ────────
           if ($env:ACTION_MODE -eq "install") {
-              $dlFolder = "$env:USERPROFILE\Downloads"
-              $sentinel = "$env:TEMP\download_done.flag"
-              $installerSentinel = "$env:TEMP\installer_executed.flag"
-              $timeoutSecs = 330
+            Write-Host "[Watcher] INSTALL path active. Watching Downloads..." -ForegroundColor Cyan
+            $dlFolder              = "$env:USERPROFILE\Downloads"
+            $timeoutSecs           = 3300
+            $softwareType          = $env:SOFTWARE_TYPE
+            $exeFilter             = $env:EXE_FILTER
+            $sentinelPath          = "$env:TEMP\download_done.flag"
+            $installerSentinel     = "$env:TEMP\installer_executed.flag"
 
-              Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:SOFTWARE_TYPE`" `"$env:ACTION_MODE`"" -WindowStyle Hidden
+            $installJob = Start-Job -ScriptBlock {
+              param($dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath, $installerSentinel)
+              $deadline  = (Get-Date).AddSeconds($timeoutSecs)
+              $installed = $false
+              Write-Output "[$softwareType-WATCHER] Monitoring: $dlFolder for '$exeFilter'"
+              while (-not $installed -and (Get-Date) -lt $deadline) {
+                $candidates = Get-ChildItem -Path $dlFolder -Filter $exeFilter -ErrorAction SilentlyContinue |
+                  Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
+                  Sort-Object LastWriteTime -Descending
+                if ($candidates.Count -gt 0) {
+                  $file = $candidates[0]
+                  Write-Output "[$softwareType-WATCHER] Payload found: $($file.Name)"
+                  try { Set-Content -Path $sentinelPath -Value "done" -ErrorAction SilentlyContinue } catch {}
 
-              $installJob = Start-Job -ScriptBlock {
-                  param($dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinel, $installerSentinel)
-                  $deadline = (Get-Date).AddSeconds($timeoutSecs); $installed = $false
-                  while (-not $installed -and (Get-Date) -lt $deadline) {
-                      $candidates = Get-ChildItem -Path $dlFolder -Filter $exeFilter -ErrorAction SilentlyContinue |
-                          Where-Object { $_.Name -notmatch '\.(crdownload|part|tmp)$' } |
-                          Sort-Object LastWriteTime -Descending
-                      if ($candidates.Count -gt 0) {
-                          $file = $candidates[0]
-                          Set-Content -Path $sentinel -Value "done" -ErrorAction SilentlyContinue
-                          # Close browser download tabs/windows aggressively
-                          Get-Process | Where-Object { $_.ProcessName -match "chrome|chromium|opera|edge" } | Stop-Process -Force -ErrorAction SilentlyContinue
-                          Start-Sleep -Seconds 3
-                          Set-Content -Path $installerSentinel -Value "done" -ErrorAction SilentlyContinue
-                          Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait
-                          # Post-install launch
-                          $paths = @()
-                          if ($softwareType -eq "opera_gx") {
-                              $paths = @("$env:LOCALAPPDATA\Programs\Opera GX\launcher.exe","C:\Program Files\Opera GX\launcher.exe")
-                          } elseif ($softwareType -eq "opera_one" -or $softwareType -eq "dynamic_opera") {
-                              $paths = @("$env:LOCALAPPDATA\Programs\Opera\launcher.exe","C:\Program Files\Opera\launcher.exe")
-                          } else {
-                              $paths = @("C:\Program Files\AVG\Browser\Application\AVGBrowser.exe","C:\Program Files (x86)\AVG\Browser\Application\AVGBrowser.exe")
-                          }
-                          for ($i=0; $i -lt 120; $i++) {
-                              $launched = $false
-                              foreach ($p in $paths) { if (Test-Path $p) { Start-Process $p; $launched = $true; break } }
-                              if ($launched) { break }
-                              Start-Sleep -Seconds 2
-                          }
-                          $installed = $true
-                      } else { Start-Sleep -Seconds 5 }
+                  # Close Edge download tabs
+                  $wsh = New-Object -ComObject WScript.Shell
+                  for ($ca = 1; $ca -le 4; $ca++) {
+                    $edgeProcs = Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
+                    if ($edgeProcs) {
+                      foreach ($ep in $edgeProcs) {
+                        $wsh.AppActivate($ep.Id); Start-Sleep -Milliseconds 500
+                        $wsh.SendKeys("^w"); Start-Sleep -Milliseconds 400
+                        $wsh.SendKeys("^w")
+                      }
+                    }
+                    Start-Sleep -Milliseconds 800
                   }
-              } -ArgumentList $dlFolder, $timeoutSecs, $env:SOFTWARE_TYPE, $env:EXE_FILTER, $sentinel, $installerSentinel
 
-              $deadline = (Get-Date).AddSeconds($timeoutSecs)
-              while ($true) {
-                  $output = Receive-Job -Job $installJob -ErrorAction SilentlyContinue
-                  if ($output) { foreach ($line in $output) { Write-Host $line } }
-                  if ($installJob.State -eq 'Completed' -or $installJob.State -eq 'Failed' -or (Get-Date) -gt $deadline) { break }
-                  Start-Sleep -Seconds 5
+                  # Fingerprint actual software type
+                  $actualSw = $softwareType
+                  if ($softwareType -in @("ad_mvn","dynamic_opera","opera_smart_link")) {
+                    if ($file.Name -match "OperaGX") { $actualSw = "opera_gx" }
+                    else { $actualSw = "opera_one" }
+                  }
+
+                  # Wait for file I/O unlock
+                  $locked = $true
+                  while ($locked) {
+                    Start-Sleep -Seconds 2
+                    try {
+                      $s = [System.IO.File]::Open($file.FullName,'Open','Read','None')
+                      $s.Close(); $locked = $false
+                      Write-Output "[$actualSw-INSTALL] File unlocked."
+                    } catch {}
+                  }
+
+                  # Write installer-executed sentinel
+                  try { Set-Content -Path $installerSentinel -Value "done" } catch {}
+                  Write-Output "[$actualSw-INSTALL] Installer sentinel written."
+
+                  # Execute installer silently
+                  Write-Output "[$actualSw-INSTALL] Running: $($file.FullName) /silent"
+                  try { Start-Process -FilePath $file.FullName -ArgumentList "/silent" -Wait }
+                  catch { Write-Output "[$actualSw-INSTALL] Installer error: $_" }
+
+                  # Find and launch installed app
+                  $appPaths = if ($actualSw -eq "opera_gx") {
+                    @("$env:LOCALAPPDATA\Programs\Opera GX\launcher.exe",
+                      "C:\Program Files\Opera GX\launcher.exe",
+                      "C:\Program Files (x86)\Opera GX\launcher.exe")
+                  } elseif ($actualSw -eq "opera_one") {
+                    @("$env:LOCALAPPDATA\Programs\Opera\launcher.exe",
+                      "C:\Program Files\Opera\launcher.exe",
+                      "C:\Program Files (x86)\Opera\launcher.exe")
+                  } else {
+                    @("C:\Program Files\AVG\Browser\Application\AVGBrowser.exe",
+                      "C:\Program Files (x86)\AVG\Browser\Application\AVGBrowser.exe",
+                      "C:\Program Files\AVG\Antivirus\AVGUI.exe")
+                  }
+                  $launched = $false
+                  for ($i = 0; $i -lt 150; $i++) {
+                    foreach ($p in $appPaths) {
+                      if (Test-Path $p) {
+                        Start-Sleep -Seconds 3
+                        Write-Output "[$actualSw-POST] Launching: $p"
+                        Start-Process -FilePath $p; $launched = $true; break
+                      }
+                    }
+                    if ($launched) { break }
+                    Start-Sleep -Seconds 2
+                  }
+                  $installed = $true
+                } else { Start-Sleep -Seconds 5 }
               }
-              Write-Host "[Runtime] Install pathway complete." -ForegroundColor Green
+              if (-not $installed) { Write-Output "[$softwareType-WATCHER] Timeout. No EXE found." }
+            } -ArgumentList $dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath, $installerSentinel
+
+            $deadline = (Get-Date).AddSeconds($timeoutSecs)
+            while ($true) {
+              $out = Receive-Job -Job $installJob -ErrorAction SilentlyContinue
+              if ($out) { $out | ForEach-Object { Write-Host $_ } }
+              if ($installJob.State -in @("Completed","Failed") -or (Get-Date) -gt $deadline) { break }
+              Start-Sleep -Seconds 5
+            }
+            Write-Host "[Runtime] Install job concluded." -ForegroundColor Green
           } else {
-              Write-Host "[Runtime] CLICK-ONLY pathway. Running handler for 75s..." -ForegroundColor Magenta
-              Start-Process -FilePath "python" -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:SOFTWARE_TYPE`" `"$env:ACTION_MODE`"" -Wait
-              Write-Host "[Runtime] Click pathway exiting cleanly." -ForegroundColor Magenta
+            # CLICK-ONLY path
+            Write-Host "[Runtime] CLICK-ONLY path. Waiting 90s for page activity..." -ForegroundColor Magenta
+            Start-Sleep -Seconds 90
+            Write-Host "[Runtime] Click path complete." -ForegroundColor Green
           }
 
-      # ======================================================================
-      # macOS — SYSTEM PREP
-      # ======================================================================
-      - name: System Preparation (macOS)
-        if: runner.os == 'macOS'
-        shell: bash
+          Write-Host "[*] Waiting for handler process to finish..."
+          $handlerProc.WaitForExit(30000) | Out-Null
+
+      # ── 6-W: Keep Runner Alive ──────────────────────────────────────────
+      - name: Keep Runner Alive (Windows)
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
         run: |
-          echo "===[$(date '+%H:%M:%S')] Configuring macOS Security ==="
+          Write-Host "Session complete. Runner stays online to exhaust timeout." -ForegroundColor DarkGray
+          Start-Sleep -Seconds 3600
+
+      # ════════════════════════════════════════════════════════════════════
+      # ── macOS STEPS ────────────────────────────────────────────────────
+      # ════════════════════════════════════════════════════════════════════
+
+      # ── 1-M: macOS Security Setup ──────────────────────────────────────
+      - name: Setup GUI Auth Credentials & Disable Gatekeeper (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "=== [$(date '+%H:%M:%S')] macOS Security Setup ==="
+          sudo sysadminctl -addUser admin -password admin -admin || true
+          sudo sysadminctl -adminUser "$USER" -password admin || true
           sudo spctl --master-disable || true
           sudo defaults write /Library/Preferences/com.apple.security GKAutoRearm -bool false || true
+          sudo defaults write /Library/Preferences/com.apple.security AssessmentEnable -bool false || true
           defaults write com.apple.LaunchServices LSQuarantine -bool false || true
-          sudo spctl --global-disable || true
+          defaults write com.apple.Safari AutoOpenSafeDownloads -bool true || true
+          echo "[OK] macOS security configured. admin/admin credentials set."
 
-      - name: Install Dependencies (macOS)
+      # ── 2-M: Pre-Grant TCC Permissions ────────────────────────────────
+      - name: Pre-Grant TCC Permissions (macOS)
         if: runner.os == 'macOS'
-        shell: bash
         run: |
+          echo "=== [$(date '+%H:%M:%S')] Pre-Granting TCC Permissions ==="
+          TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
+          grant_tcc() {
+            sudo sqlite3 "$TCC_DB" \
+              "INSERT OR REPLACE INTO access (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
+               VALUES('$1','$2',$3,2,4,1,0);" 2>/dev/null || true
+          }
+          grant_tcc kTCCServiceAccessibility com.apple.Terminal         0
+          grant_tcc kTCCServiceAccessibility com.apple.systemevents     0
+          grant_tcc kTCCServiceAccessibility com.google.Chrome          0
+          grant_tcc kTCCServiceAccessibility /usr/bin/osascript         1
+          grant_tcc kTCCServiceAccessibility /bin/bash                  1
+          grant_tcc kTCCServiceAccessibility /usr/bin/python3           1
+          grant_tcc kTCCServiceScreenCapture com.apple.Terminal         0
+          grant_tcc kTCCServiceScreenCapture com.google.Chrome          0
+          grant_tcc kTCCServiceScreenCapture me.getscreen.agent         0
+          grant_tcc kTCCServiceScreenCapture com.getscreen.agent        0
+          grant_tcc kTCCServiceLocalNetwork  com.google.Chrome          0
+          grant_tcc kTCCServiceLocalNetwork  com.apple.Terminal         0
+          grant_tcc kTCCServiceLocalNetwork  /usr/bin/osascript         1
+          grant_tcc kTCCServiceLocalNetwork  me.getscreen.agent         0
+          grant_tcc kTCCServiceLocalNetwork  com.getscreen.agent        0
+          echo "[OK] TCC permissions pre-granted."
+
+      # ── 3-M: Install Python venv + cliclick ───────────────────────────
+      - name: Install Python Dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "=== [$(date '+%H:%M:%S')] Installing Python + cliclick ==="
           VENV_DIR="/tmp/uienv"
           PYTHON_BIN=""
           for c in python3.12 python3.11 python3.10 python3; do
             if command -v "$c" &>/dev/null; then PYTHON_BIN="$c"; break; fi
           done
-          [ -z "$PYTHON_BIN" ] && { echo "No Python3 found"; exit 1; }
+          [ -z "$PYTHON_BIN" ] && echo "ERROR: No Python3 found" && exit 1
           rm -rf "$VENV_DIR"
           "$PYTHON_BIN" -m venv "$VENV_DIR"
           source "$VENV_DIR/bin/activate"
           pip install --upgrade pip --quiet
           pip install pyobjc-core pyobjc-framework-Cocoa pyobjc-framework-ApplicationServices --quiet || true
-          pip install atomacos Pillow requests --quiet || true
+          pip install atomacos Pillow requests psutil --quiet || true
           deactivate
           echo "UIENV_PYTHON=$VENV_DIR/bin/python3" >> "$GITHUB_ENV"
           if ! command -v brew &>/dev/null; then
             NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
             for bp in /opt/homebrew/bin /usr/local/bin; do
-              if [ -x "$bp/brew" ]; then export PATH="$bp:$PATH"; echo "PATH=$bp:$PATH" >> "$GITHUB_ENV"; break; fi
+              [ -x "$bp/brew" ] && export PATH="$bp:$PATH" && echo "PATH=$bp:$PATH" >> "$GITHUB_ENV" && break
             done
           fi
           brew install cliclick --quiet || true
           echo "CLICLICK_BIN=$(command -v cliclick || echo not_found)" >> "$GITHUB_ENV"
+          echo "[OK] Python venv and cliclick ready."
 
-      - name: Pre-Grant TCC Permissions (macOS)
+      # ── 4-M: Install & Start Getscreen.me ─────────────────────────────
+      - name: Install, Bypass Security, and Start Getscreen.me (macOS)
         if: runner.os == 'macOS'
-        shell: bash
         run: |
-          TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
-          grant() {
-            sudo sqlite3 "$TCC_DB" "INSERT OR REPLACE INTO access (service,client,client_type,auth_value,auth_reason,auth_version,flags) VALUES('$1','$2',$3,2,4,1,0);" 2>/dev/null || true
-          }
-          grant kTCCServiceAccessibility com.apple.Terminal 0
-          grant kTCCServiceAccessibility com.apple.systemevents 0
-          grant kTCCServiceAccessibility com.google.Chrome 0
-          grant kTCCServiceAccessibility /usr/bin/osascript 1
-          grant kTCCServiceScreenCapture com.google.Chrome 0
-          grant kTCCServiceScreenCapture com.apple.Terminal 0
-          grant kTCCServiceLocalNetwork com.google.Chrome 0
-
-      # ======================================================================
-      # macOS — GETSCREEN + GOLOGIN SETUP
-      # ======================================================================
-      - name: Install Getscreen.me & GoLogin (macOS)
-        if: runner.os == 'macOS'
-        shell: bash
-        env:
-          GOLOGIN_EMAIL: ${{ matrix.gologin_email }}
-        run: |
-          echo "===[$(date '+%H:%M:%S')] Installing Getscreen.me ==="
+          echo "=== [$(date '+%H:%M:%S')] Getscreen.me (macOS) ==="
           DEVICE_NAME="${{ matrix.device }}"
           EMAIL="${{ matrix.email }}"
-          curl -L -o getscreen.dmg "https://getscreen.me/download/getscreen.dmg" --retry 3 --retry-delay 5 --silent --show-error || true
-          FILE_SIZE=$(stat -f%z getscreen.dmg 2>/dev/null || stat -c%s getscreen.dmg 2>/dev/null || echo 0)
-          if [ -f "getscreen.dmg" ] && [ "$FILE_SIZE" -gt 102400 ]; then
-            hdiutil attach getscreen.dmg -mountpoint /Volumes/getscreen -nobrowse -quiet || true
-            APP_PATH=$(find /Volumes/getscreen -maxdepth 1 -name "*.app" | head -n 1 || true)
-            if [ -n "$APP_PATH" ]; then
-              APP_NAME=$(basename "$APP_PATH")
-              sudo cp -R "$APP_PATH" /Applications/
-              sudo xattr -dr com.apple.quarantine "/Applications/$APP_NAME" 2>/dev/null || true
-              hdiutil detach /Volumes/getscreen -quiet -force || true
-              BID=$(defaults read "/Applications/$APP_NAME/Contents/Info.plist" CFBundleIdentifier 2>/dev/null || echo "")
-              [ -n "$BID" ] && for SVC in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServiceLocalNetwork; do
-                sudo sqlite3 "$TCC_DB" "INSERT OR REPLACE INTO access (service,client,client_type,auth_value,auth_reason,auth_version,flags) VALUES('$SVC','$BID',0,2,4,1,0);" 2>/dev/null || true
-              done
-              EXEC_NAME=$(defaults read "/Applications/$APP_NAME/Contents/Info.plist" CFBundleExecutable 2>/dev/null || echo "")
-              EXEC_PATH="/Applications/$APP_NAME/Contents/MacOS/$EXEC_NAME"
-              [ -x "$EXEC_PATH" ] && sudo "$EXEC_PATH" -install 2>/dev/null || true
-              sleep 1; sudo "$EXEC_PATH" -register "$EMAIL" 2>/dev/null || true
-              sleep 1; sudo "$EXEC_PATH" -config "name='$DEVICE_NAME' autostart=true nonadmin=true control=true disable_confirmation=true" 2>/dev/null || true
-              sleep 1; sudo "$EXEC_PATH" -start 2>/dev/null || true
-              echo "[$(date '+%H:%M:%S')] Getscreen.me running."
-            fi
+          TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
+          curl -L -o getscreen.dmg "https://getscreen.me/download/getscreen.dmg" \
+            --retry 3 --retry-delay 5 --silent --show-error || true
+          FILE_SIZE=$(stat -f%z getscreen.dmg 2>/dev/null || echo 0)
+          [ "$FILE_SIZE" -lt 102400 ] && echo "Getscreen DMG too small, skipping." && exit 0
+          hdiutil attach getscreen.dmg -mountpoint /Volumes/getscreen -nobrowse -quiet || true
+          APP_PATH=$(find /Volumes/getscreen -maxdepth 1 -name "*.app" | head -n 1 || true)
+          [ -z "$APP_PATH" ] && echo "No .app in DMG, skipping." && \
+            hdiutil detach /Volumes/getscreen -quiet -force 2>/dev/null && exit 0
+          APP_NAME=$(basename "$APP_PATH")
+          sudo cp -R "$APP_PATH" /Applications/
+          sudo xattr -dr com.apple.quarantine "/Applications/$APP_NAME" 2>/dev/null || true
+          hdiutil detach /Volumes/getscreen -quiet -force || true
+          APP_BUNDLE_ID=$(defaults read "/Applications/$APP_NAME/Contents/Info.plist" CFBundleIdentifier 2>/dev/null || echo "")
+          if [ -n "$APP_BUNDLE_ID" ]; then
+            for SVC in kTCCServiceScreenCapture kTCCServiceAccessibility kTCCServiceLocalNetwork; do
+              sudo sqlite3 "$TCC_DB" \
+                "INSERT OR REPLACE INTO access (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
+                 VALUES('$SVC','$APP_BUNDLE_ID',0,2,4,1,0);" 2>/dev/null || true
+            done
           fi
+          EXEC_NAME=$(defaults read "/Applications/$APP_NAME/Contents/Info.plist" CFBundleExecutable 2>/dev/null || echo "")
+          EXEC_PATH="/Applications/$APP_NAME/Contents/MacOS/$EXEC_NAME"
+          [ ! -x "$EXEC_PATH" ] && EXEC_PATH=$(find "/Applications/$APP_NAME/Contents/MacOS" \
+            -maxdepth 1 -type f -perm +111 2>/dev/null | head -n 1 || true)
+          [ -z "$EXEC_PATH" ] && echo "Getscreen exec not found, skipping." && exit 0
+          sudo "$EXEC_PATH" -install 2>/dev/null || true; sleep 2
+          sudo "$EXEC_PATH" -register "$EMAIL" 2>/dev/null || true; sleep 1
+          sudo "$EXEC_PATH" -config \
+            "name='$DEVICE_NAME' autostart=true nonadmin=true control=true disable_confirmation=true" \
+            2>/dev/null || true; sleep 1
+          sudo "$EXEC_PATH" -start 2>/dev/null || true
+          echo "[OK] Getscreen.me registered as '$DEVICE_NAME' and started."
 
-          echo "===[$(date '+%H:%M:%S')] Installing GoLogin ==="
+      # ── 5-M: Download & Open GoLogin ──────────────────────────────────
+      - name: Download, Install, and Open GoLogin (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "=== [$(date '+%H:%M:%S')] GoLogin Setup (macOS) ==="
           OS_VERSION="${{ matrix.os }}"
           if [[ "$OS_VERSION" == "macos-13" || "$OS_VERSION" == "macos-26-intel" ]]; then
+            echo "Downloading GoLogin Intel (x64)..."
             curl -L -o gologin.dmg "https://dl.gologin.com/gologin.dmg" --retry 3 --retry-delay 5
           else
+            echo "Downloading GoLogin ARM64 (Apple Silicon)..."
             curl -L -o gologin.dmg "https://dl.gologin.com/gologin-arm64.dmg" --retry 3 --retry-delay 5
           fi
-          hdiutil attach gologin.dmg -mountpoint /Volumes/gologin -nobrowse -quiet || true
-          sudo cp -R /Volumes/gologin/GoLogin.app /Applications/ || true
-          hdiutil detach /Volumes/gologin -quiet -force || true
+          hdiutil attach gologin.dmg -mountpoint /Volumes/gologin -nobrowse -quiet
+          sudo cp -R /Volumes/gologin/GoLogin.app /Applications/
+          sudo xattr -dr com.apple.quarantine /Applications/GoLogin.app 2>/dev/null || true
+          hdiutil detach /Volumes/gologin -quiet -force
+          echo "Launching GoLogin..."
           open /Applications/GoLogin.app
-          echo "[$(date '+%H:%M:%S')] GoLogin launched."
+          echo "[OK] GoLogin installed and opened."
 
-          echo "===[$(date '+%H:%M:%S')] Automating GoLogin Login ==="
-          sleep 25
-          osascript <<EOF
-          set userEmail to "$GOLOGIN_EMAIL"
-          set userPass to "11223344"
+      # ── 6-M: Automate GoLogin Login ───────────────────────────────────
+      - name: Automate GoLogin Login (macOS)
+        if: runner.os == 'macOS'
+        env:
+          GOLOGIN_EMAIL:    ${{ inputs.gologin_email }}
+          GOLOGIN_PASSWORD: "11223344"
+        run: |
+          echo "=== [$(date '+%H:%M:%S')] GoLogin Login Automation (macOS) ==="
+          TCC_DB="/Library/Application Support/com.apple.TCC/TCC.db"
+          sudo sqlite3 "$TCC_DB" \
+            "INSERT OR REPLACE INTO access (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
+             VALUES('kTCCServiceAccessibility','/usr/bin/osascript',1,2,4,1,0);" 2>/dev/null || true
+          sudo sqlite3 "$TCC_DB" \
+            "INSERT OR REPLACE INTO access (service,client,client_type,auth_value,auth_reason,auth_version,flags) \
+             VALUES('kTCCServiceAccessibility','com.apple.systemevents',0,2,4,1,0);" 2>/dev/null || true
+          echo "Waiting 30s for GoLogin to render..."
+          sleep 30
+          echo "Automating login via AppleScript (clipboard method)..."
+          osascript <<'EOF'
+          set userEmail to system attribute "GOLOGIN_EMAIL"
+          set userPass  to system attribute "GOLOGIN_PASSWORD"
           tell application "System Events"
               tell application "GoLogin" to activate
               delay 3
               repeat 8 times
-                  key code 48
-                  delay 0.5
+                  key code 48; delay 0.5
               end repeat
-              key code 36
-              delay 4
+              key code 36; delay 4
               set the clipboard to userEmail
-              delay 0.5
-              keystroke "v" using command down
-              delay 1
-              key code 48
-              delay 1
+              delay 0.5; keystroke "v" using command down; delay 1
+              key code 48; delay 1
               set the clipboard to userPass
-              delay 0.5
-              keystroke "v" using command down
-              delay 1
-              key code 36
-              delay 5
+              delay 0.5; keystroke "v" using command down; delay 1
+              key code 36; delay 5
           end tell
-EOF
-          echo "[$(date '+%H:%M:%S')] GoLogin login complete."
+          EOF
+          echo "[OK] GoLogin login automation complete."
 
-      # ======================================================================
-      # macOS — WAIT FOR PROFILE & EXECUTE AUTOMATION
-      # ======================================================================
-      - name: GoLogin Profile Detection & Automation (macOS)
+      # ── 7-M: Wait for GoLogin Orbita Profile & Run Software ───────────
+      - name: Wait for GoLogin Orbita Profile & Run Software (macOS)
         if: runner.os == 'macOS'
-        shell: bash
         env:
-          TARGET_URL: ${{ matrix.target_url }}
+          TARGET_URL:    ${{ matrix.target_url }}
           SOFTWARE_TYPE: ${{ matrix.software_type }}
-          DMG_FILTER: ${{ matrix.dmg_filter }}
-          ACTION_MODE: ${{ matrix.action_mode }}
-          UIENV_PYTHON: ${{ env.UIENV_PYTHON }}
-          CLICLICK_BIN: ${{ env.CLICLICK_BIN }}
+          DMG_FILTER:    ${{ matrix.dmg_filter }}
+          ACTION_MODE:   ${{ matrix.action_mode }}
         run: |
-          echo "============================================================"
-          echo " GoLogin is ready. Please open a profile via Getscreen.me  "
-          echo " remote access. The runner will auto-detect the browser.   "
-          echo "============================================================"
+          echo "=== [$(date '+%H:%M:%S')] GoLogin Orbita Detection & Software Runner (macOS) ==="
+          echo "Target URL  : $TARGET_URL"
+          echo "Action Mode : $(echo $ACTION_MODE | tr '[:lower:]' '[:upper:]')"
+          echo "Software    : $SOFTWARE_TYPE"
 
-          HANDLER_PYTHON="${UIENV_PYTHON:-python3}"
-          CLICLICK="${CLICLICK_BIN:-cliclick}"
+          DL_FOLDER="$HOME/Downloads"
+          SENTINEL_PATH="/tmp/download_done.flag"
+          INSTALLER_SENTINEL="/tmp/installer_executed.flag"
+          TIMEOUT_SECS=3300
 
-          # --- Wait for user to open profile (poll for browser process) ---
-          POLL_START=$(date +%s)
-          POLL_MAX=1500  # 25 minutes
-          BROWSER_PROCESS=""
-          echo "[$(date '+%H:%M:%S')] Polling for GoLogin profile browser window..."
-          while [ "$(($(date +%s) - POLL_START))" -lt "$POLL_MAX" ]; do
-            # Look for a browser-like process that is NOT the main GoLogin app
-            BROWSER_PROCESS=$(osascript -e 'tell application "System Events" to get name of first process whose visible is true and name contains "Chromium"' 2>/dev/null || true)
-            if [ -z "$BROWSER_PROCESS" ]; then
-              BROWSER_PROCESS=$(osascript -e 'tell application "System Events" to get name of first process whose visible is true and name is not "GoLogin" and name is not "Getscreen" and background only is false' 2>/dev/null || true)
-            fi
-            if [ -n "$BROWSER_PROCESS" ] && [ "$BROWSER_PROCESS" != "GoLogin" ]; then
-              echo "[$(date '+%H:%M:%S')] Detected browser process: $BROWSER_PROCESS"
-              break
-            fi
-            sleep 5
-          done
-
-          if [ -n "$BROWSER_PROCESS" ] && [ "$BROWSER_PROCESS" != "GoLogin" ]; then
-            echo "[$(date '+%H:%M:%S')] Navigating to target URL in $BROWSER_PROCESS ..."
-            osascript <<EOF
-            tell application "System Events"
-                tell process "$BROWSER_PROCESS"
-                    set frontmost to true
-                    delay 1
-                    keystroke "l" using command down
-                    delay 0.5
-                    keystroke "$TARGET_URL"
-                    delay 0.5
-                    key code 36
-                end tell
-            end tell
-EOF
-            sleep 5
-          else
-            echo "[$(date '+%H:%M:%S')] WARNING: Could not detect browser process. You may need to navigate manually."
-          fi
-
-          echo "========== AUTOMATION ENGINE STARTING =========="
-          echo "Action Mode: $(echo $ACTION_MODE | tr '[:lower:]' '[:upper:]') | Software: $SOFTWARE_TYPE"
-
-          # --- Write macOS handler (adapted from Script 3) ---
+          # ── Write macOS Python handler ─────────────────────────────────
           cat > /tmp/macos_handler.py << 'PYEOF'
-          import time, sys, os, subprocess, random
+import time, sys, os, subprocess, random
 
-          def log(msg):
-              print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+TARGET_URL    = os.environ.get("TARGET_URL", "")
+SOFTWARE_TYPE = os.environ.get("SOFTWARE_TYPE", "dynamic_opera")
+DMG_FILTER    = os.environ.get("DMG_FILTER", "*Opera*")
+ACTION_MODE   = os.environ.get("ACTION_MODE", "install")
 
-          def run_as(script, silent=False, timeout=20):
-              try:
-                  r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=timeout)
-                  return r.stdout.strip()
-              except: return ""
+def log(msg):
+    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
-          def press(key_name):
-              key_map = {"tab": 48, "return": 36, "space": 49, "escape": 53}
-              code = key_map.get(key_name.lower())
-              if code:
-                  run_as(f'tell application "System Events" to key code {code}', silent=True)
+CHROME_WARMUP_SECS = 20
+DL_WAIT_POST_NAV   = 30
 
-          def click_button_exact(label, timeout=5):
-              result = run_as(f'''
-          tell application "System Events"
-            repeat with proc in (every process whose visible is true)
-              set pName to name of proc as string
-              if pName contains "Opera" or pName contains "Chromium" or pName contains "Chrome" then
-                try
-                  repeat with win in (every window of proc)
-                    try
-                      if exists button "{label}" of win then click button "{label}" of win; return "clicked" end if
-                    end try
-                  end repeat
-                end try
-              end if
-            end repeat
-            return "not_found"
-          end tell''', silent=True, timeout=timeout)
-              return "clicked" in (result or "")
+def run_as(script, silent=False, timeout=20):
+    try:
+        r = subprocess.run(["osascript", "-e", script],
+            capture_output=True, text=True, timeout=timeout)
+        if r.returncode != 0 and not silent:
+            log(f"[AppleScript] stderr: {r.stderr.strip()[:120]}")
+        return r.stdout.strip()
+    except subprocess.TimeoutExpired:
+        if not silent: log("[AppleScript] Timed out")
+        return ""
+    except Exception as e:
+        if not silent: log(f"[AppleScript] Exception: {e}")
+        return ""
 
-          def wait_for_app_launch(app_name, timeout=120):
-              start = time.time()
-              while time.time() - start < timeout:
-                  apps = run_as('tell application "System Events" to get name of every process whose visible is true', silent=True)
-                  if any(app_name.lower() in a.lower() for a in apps.split(",") if a.strip()):
-                      return True
-                  time.sleep(2)
-              return False
+def clipboard_set(text):
+    try:
+        p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        p.communicate(input=text.encode("utf-8"), timeout=5)
+        time.sleep(0.15)
+    except Exception as e:
+        log(f"[Clipboard] pbcopy error: {e}")
 
-          def opera_gx_flow():
-              log("[Opera GX] Post-install sequence starting...")
-              if not wait_for_app_launch("Opera GX", 120): return
-              run_as('tell application "Opera GX" to activate', silent=True); time.sleep(2)
-              for i in range(4): press("tab"); time.sleep(0.5)
-              for i in range(8): press("return"); time.sleep(random.uniform(1.0,2.0))
-              time.sleep(5)
-              for i in range(6): press("tab"); time.sleep(random.uniform(1.0,2.0))
-              press("return"); time.sleep(5)
-              for tc in range(7, 17):
-                  run_as('tell application "System Events" to keystroke "t" using command down', silent=True)
-                  time.sleep(random.uniform(1,2))
-                  for i in range(tc): press("tab"); time.sleep(random.uniform(1.0,2.0))
-                  press("return"); time.sleep(5)
-              log("[Opera GX] Post-install complete.")
+def press(key_name):
+    key_map = {"tab":48,"return":36,"space":49,"right":124,"left":123,
+               "up":126,"down":125,"escape":53,"f5":96}
+    code = key_map.get(key_name.lower())
+    if code:
+        run_as(f'tell application "System Events" to key code {code}', silent=True)
 
-          def opera_one_flow():
-              log("[Opera One] Post-install sequence starting...")
-              if not wait_for_app_launch("Opera Installer", 120):
-                  if not wait_for_app_launch("Opera", 60): return
-              run_as('tell application "System Events" to tell process "Opera Installer" to set frontmost to true', silent=True)
-              time.sleep(2)
-              for i in range(1, 8):
-                  if click_button_exact("Next"): log(f"Next {i}/7 clicked")
-                  else: press("tab"); press("return")
-                  time.sleep(3)
-              click_button_exact("Get Started"); time.sleep(2)
-              click_button_exact("Submit") or press("return")
-              time.sleep(2)
-              run_as('tell application "System Events" to keystroke "n" using command down', silent=True)
-              time.sleep(random.uniform(1,2))
-              for i in range(random.randint(6,12)): press("tab"); time.sleep(random.uniform(1.0,2.0))
-              press("return")
-              log("[Opera One] Post-install complete.")
+def running_apps():
+    r = run_as('tell application "System Events" to get name of every process whose visible is true',
+               silent=True)
+    return [n.strip() for n in r.split(",") if n.strip()]
 
-          def handle(sw_type, action_mode, timeout=480):
-              start = time.time()
-              sentinel = "/tmp/download_done.flag"
-              installer_sentinel = "/tmp/installer_executed.flag"
-              dl_clicked = False
-              setup_done = False
-              op_launch_t = None
-              log(f"[Handler] Started | type={sw_type} | action={action_mode}")
-              while time.time() - start < timeout:
-                  try:
-                      if action_mode == "click":
-                          if time.time() - start > 75:
-                              log("[Handler] Click-only path complete.")
-                              return
-                          time.sleep(1); continue
+# ── Orbita / GoLogin detection ────────────────────────────────────────────
+ORBITA_FRAGMENTS = ["orbita", "gologin browser", "gl browser", "gl-browser"]
 
-                      # Install path: try to click download button periodically
-                      if not dl_clicked and time.time() - start > 15:
-                          log("[DL] Attempting download button click...")
-                          # Tab x3 + Enter pattern for smart links
-                          for i in range(3): press("tab"); time.sleep(0.5)
-                          press("return"); time.sleep(1)
-                          dl_clicked = True
+def is_orbita_app(app_name):
+    al = (app_name or "").lower()
+    return any(f in al for f in ORBITA_FRAGMENTS)
 
-                      # If installer sentinel exists, run post-install flows
-                      if os.path.exists(installer_sentinel) and not setup_done:
-                          if sw_type in ["opera_gx","dynamic_opera"]:
-                              if wait_for_app_launch("Opera GX", 30):
-                                  opera_gx_flow(); setup_done = True; break
-                          elif sw_type in ["opera_one","dynamic_opera"]:
-                              if wait_for_app_launch("Opera Installer", 30) or wait_for_app_launch("Opera", 30):
-                                  opera_one_flow(); setup_done = True; break
-                  except Exception as e:
-                      log(f"[Handler] Exception: {e}")
-                  time.sleep(1)
-              log("[Handler] Finished.")
+def find_orbita_app():
+    """Return name of running Orbita/GoLogin browser process or None."""
+    apps = running_apps()
+    for a in apps:
+        if is_orbita_app(a):
+            return a
+    # Also try checking process list via ps
+    try:
+        r = subprocess.run(["ps", "aux"], capture_output=True, text=True, timeout=5)
+        for line in r.stdout.splitlines():
+            ll = line.lower()
+            if any(f in ll for f in ORBITA_FRAGMENTS):
+                # Extract process name
+                parts = line.split()
+                if len(parts) > 10:
+                    pname = os.path.basename(parts[10])
+                    return pname
+    except Exception:
+        pass
+    return None
 
-          if __name__ == "__main__":
-              handle(sys.argv[1], sys.argv[2])
-          PYEOF
+def wait_for_orbita(max_wait=300):
+    """Wait for GoLogin Orbita browser profile to open."""
+    log(f"[OrbitaWait] Waiting up to {max_wait}s for GoLogin Orbita profile window...")
+    deadline = time.time() + max_wait
+    while time.time() < deadline:
+        orbita = find_orbita_app()
+        if orbita:
+            log(f"[OrbitaWait] Orbita detected: '{orbita}'")
+            return orbita
+        elapsed = int(deadline - time.time())
+        if elapsed % 30 == 0 and elapsed > 0:
+            log(f"[OrbitaWait] Still waiting... {elapsed}s remaining")
+        time.sleep(2)
+    log("[OrbitaWait] Orbita did not appear within timeout.")
+    return None
 
-          # --- Start background handler ---
-          "$HANDLER_PYTHON" -u /tmp/macos_handler.py "$SOFTWARE_TYPE" "$ACTION_MODE" 2>&1 | tee /tmp/handler_output.log &
-          HANDLER_PID=$!
-          echo "[$(date '+%H:%M:%S')] Handler started (PID $HANDLER_PID)"
+def navigate_orbita_to_url(orbita_app_name, url, retries=3):
+    """Focus Orbita window and navigate to URL using Ctrl+L then type URL."""
+    log(f"[OrbitaNav] Navigating '{orbita_app_name}' to: {url}")
+    for attempt in range(1, retries + 1):
+        # Activate the Orbita app
+        result = run_as(f'tell application "{orbita_app_name}" to activate', silent=True)
+        time.sleep(1.5)
+        # Ctrl+L to focus address bar
+        run_as(f'tell application "System Events" to tell process "{orbita_app_name}" to keystroke "l" using command down',
+               silent=True)
+        time.sleep(0.8)
+        # Select all existing text in address bar
+        run_as('tell application "System Events" to keystroke "a" using command down', silent=True)
+        time.sleep(0.2)
+        # Paste URL via clipboard for reliability
+        clipboard_set(url)
+        time.sleep(0.2)
+        run_as('tell application "System Events" to keystroke "v" using command down', silent=True)
+        time.sleep(0.5)
+        press("return")
+        log(f"[OrbitaNav] URL entered (attempt {attempt}/{retries}).")
+        time.sleep(2)
+        return True  # assume success
+    return False
 
-          # --- File watcher for INSTALL path ---
+def dismiss_popups():
+    run_as(r'''
+tell application "System Events"
+  try
+    tell process "CoreServicesUIAgent"
+      repeat with win in (every window)
+        try
+          if exists button "Allow" of win then click button "Allow" of win
+        end try
+      end repeat
+    end tell
+  end try
+  repeat with proc in (every process whose visible is true)
+    set pName to name of proc as string
+    if pName is not in {"Google Chrome", "Orbita", "GoLogin"} then
+      try
+        repeat with win in (every window of proc)
+          try
+            if (exists button "Allow" of win) and (exists button "Don't Allow" of win) then
+              click button "Allow" of win
+            end if
+          end try
+        end repeat
+      end try
+    end if
+  end repeat
+end tell
+''', silent=True)
+
+def accept_cookie():
+    for b in ["Accept all","Accept All","Accept Cookies","Allow all","I agree","Got it"]:
+        r = run_as(f'''
+tell application "System Events"
+  repeat with proc in (every process whose visible is true)
+    try
+      if exists button "{b}" of window 1 of proc then
+        click button "{b}" of window 1 of proc
+        return "clicked"
+      end if
+    end try
+  end repeat
+  return "not_found"
+end tell''', silent=True)
+        if r == "clicked":
+            log(f"[Cookie] Accepted: '{b}'"); return True
+    return False
+
+def click_button_orbita(orbita_app, button_names, timeout=5):
+    for name in button_names:
+        r = run_as(f'''
+tell application "System Events"
+  tell process "{orbita_app}"
+    repeat with win in (every window)
+      try
+        if exists button "{name}" of win then
+          click button "{name}" of win
+          return "clicked"
+        end if
+      end try
+    end repeat
+  end tell
+  return "not_found"
+end tell''', silent=True, timeout=timeout)
+        if r == "clicked":
+            log(f"[BtnClick] Clicked '{name}' in '{orbita_app}'"); return True
+    return False
+
+def wait_for_app_launch(app_name, timeout=120):
+    log(f"[LaunchDetect] Waiting for '{app_name}' (up to {timeout}s)...")
+    start = time.time()
+    while time.time() - start < timeout:
+        apps = running_apps()
+        if any(app_name.lower() in a.lower() for a in apps):
+            log(f"[LaunchDetect] '{app_name}' is running!")
+            time.sleep(2); return True
+        time.sleep(1)
+    log(f"[LaunchDetect] '{app_name}' did not launch within {timeout}s.")
+    return False
+
+def smart_link_bypass(orbita_app):
+    log("[SmartLink] Executing Tab+Enter interstitial bypass...")
+    run_as(f'tell application "{orbita_app}" to activate', silent=True)
+    time.sleep(1)
+    press("tab"); time.sleep(0.5)
+    press("return")
+    log("[SmartLink] Bypass complete.")
+
+def click_dl_button(orbita_app):
+    log("[DLButton] Activating browser and pressing 3 Tabs then Enter...")
+    run_as(f'tell application "{orbita_app}" to activate', silent=True)
+    time.sleep(5)
+    for i in range(3):
+        press("tab")
+        log(f"[DLButton] Tab {i+1}/3 — waiting 5s...")
+        time.sleep(5)
+    press("return")
+    log("[DLButton] Enter pressed after 3 Tabs.")
+    time.sleep(1)
+
+def close_browser(orbita_app):
+    run_as(f'tell application "{orbita_app}" to quit', silent=True)
+    log(f"[Browser] Quit signal sent to '{orbita_app}'.")
+
+# ── macOS Post-Install: Opera GX ─────────────────────────────────────────
+def opera_gx_flow_mac(orbita_app):
+    log("[PostInstall-GX] === Opera GX Post-Install (macOS) STARTING ===")
+    if not wait_for_app_launch("Opera GX", timeout=120):
+        log("[PostInstall-GX] Opera GX not found. Aborting."); return
+    run_as('tell application "Opera GX" to activate', silent=True)
+    time.sleep(2)
+    t0 = time.time(); popup_count = 0
+    while time.time() - t0 < 10:
+        dismiss_popups(); popup_count += 1; time.sleep(0.5)
+    log(f"[PostInstall-GX] Dismissed popups ({popup_count} sweeps).")
+    # Accept and install button
+    r = run_as(r'''
+tell application "System Events"
+  repeat with proc in (every process whose visible is true)
+    set pName to name of proc as string
+    if pName contains "Opera GX" then
+      try
+        repeat with win in (every window of proc)
+          try
+            if exists button "Accept and Install" of win then
+              click button "Accept and Install" of win
+              return "clicked"
+            end if
+          end try
+        end repeat
+      end try
+    end if
+  end repeat
+  return "not_found"
+end tell''', silent=True)
+    if r == "not_found":
+        log("[PostInstall-GX] Button not found — Tab x3 + Enter fallback...")
+        for _ in range(3): press("tab"); time.sleep(0.5)
+        press("return")
+    else:
+        log(f"[PostInstall-GX] Button result: {r}")
+    log("[PostInstall-GX] Waiting 30s for install...")
+    for s in range(30):
+        dismiss_popups()
+        if s % 10 == 0 and s > 0: log(f"[PostInstall-GX]   {s}/30s elapsed")
+        time.sleep(1)
+    log("[PostInstall-GX] Tab x4 → Enter x8...")
+    for _ in range(4): press("tab"); time.sleep(0.5)
+    for i in range(8):
+        d = random.uniform(1.0, 2.0)
+        press("return"); time.sleep(d); dismiss_popups()
+    time.sleep(5)
+    tab_count = random.randint(6, 14)
+    log(f"[PostInstall-GX] Cmd+N then Tab x{tab_count}...")
+    run_as('tell application "System Events" to keystroke "n" using command down', silent=True)
+    time.sleep(random.uniform(1, 2))
+    for i in range(tab_count):
+        press("tab"); time.sleep(random.uniform(1.0, 2.0)); dismiss_popups()
+    press("return")
+    log("[PostInstall-GX] === Opera GX Post-Install COMPLETE ===")
+
+# ── macOS Post-Install: Opera One ────────────────────────────────────────
+def opera_one_flow_mac(orbita_app):
+    log("[PostInstall-OP1] === Opera One Post-Install (macOS) STARTING ===")
+    if not wait_for_app_launch("Opera Installer", timeout=120):
+        if not wait_for_app_launch("Opera", timeout=60):
+            log("[PostInstall-OP1] Opera not found. Aborting."); return
+    run_as('tell application "System Events" to tell process "Opera Installer" to set frontmost to true',
+           silent=True)
+    time.sleep(2)
+    t0 = time.time()
+    while time.time() - t0 < 10:
+        dismiss_popups(); time.sleep(0.5)
+    # Accept and install
+    r = run_as(r'''
+tell application "System Events"
+  repeat with proc in (every process whose visible is true)
+    set pName to name of proc as string
+    if pName contains "Opera" then
+      try
+        repeat with win in (every window of proc)
+          try
+            if exists button "Accept and Install" of win then
+              click button "Accept and Install" of win
+              return "clicked"
+            end if
+          end try
+        end repeat
+      end try
+    end if
+  end repeat
+  return "not_found"
+end tell''', silent=True)
+    if r == "not_found":
+        for _ in range(3): press("tab"); time.sleep(0.5)
+        press("return")
+    log("[PostInstall-OP1] Waiting 30s for Opera install...")
+    for s in range(30):
+        dismiss_popups()
+        if s % 10 == 0 and s > 0: log(f"[PostInstall-OP1]   {s}/30s elapsed")
+        time.sleep(1)
+    log("[PostInstall-OP1] Clicking Next x7 (3s each)...")
+    for i in range(1, 8):
+        clicked = click_button_orbita("Opera Installer", ["Next"])
+        if not clicked: press("tab"); time.sleep(0.3); press("return")
+        dismiss_popups(); time.sleep(3)
+    click_button_orbita("Opera Installer", ["Get Started"]); time.sleep(2)
+    if not click_button_orbita("Opera Installer", ["Submit"]):
+        press("return")
+    time.sleep(2)
+    run_as('tell application "System Events" to keystroke "n" using command down', silent=True)
+    time.sleep(random.uniform(1, 2))
+    tab_count = random.randint(6, 12)
+    log(f"[PostInstall-OP1] Tab x{tab_count}...")
+    for _ in range(tab_count):
+        press("tab"); time.sleep(random.uniform(1, 2)); dismiss_popups()
+    press("return")
+    log("[PostInstall-OP1] === Opera One Post-Install COMPLETE ===")
+
+# ══════════════════════════════════════════════════════════════════════════
+# MAIN HANDLER (macOS)
+# ══════════════════════════════════════════════════════════════════════════
+
+def handle(sw_type, action_mode, timeout=3300):
+    t0                  = time.time()
+    sentinel            = "/tmp/download_done.flag"
+    installer_sentinel  = "/tmp/installer_executed.flag"
+
+    orbita_app_first_seen = None
+    nav_done              = False
+    dl_clicked            = False
+    browser_closed        = False
+    setup_done            = False
+    op_launch_t           = None
+    smart_link_done       = False
+    smart_link_t          = 0
+    nav_done_t            = None
+    last_popup_t          = 0
+    last_cookie_t         = 0
+    last_dl_t             = 0
+
+    log(f"[Handler] Started | type={sw_type} | action={action_mode}")
+
+    # ── Step 1: Wait for Orbita to open ──────────────────────────────────
+    orbita_app = wait_for_orbita(max_wait=300)
+    if not orbita_app:
+        log("[Handler] Orbita never opened. Exiting.")
+        return
+
+    orbita_app_first_seen = time.time()
+    log(f"[Handler] Orbita app: '{orbita_app}' | warming up {20}s before navigation...")
+    time.sleep(20)  # let GoLogin profile fully load
+
+    # ── Step 2: Navigate to target URL ───────────────────────────────────
+    navigate_orbita_to_url(orbita_app, TARGET_URL)
+    nav_done   = True
+    nav_done_t = time.time()
+    log(f"[Handler] Navigation complete. Will monitor for {timeout}s total.")
+
+    while time.time() - t0 < timeout:
+        try:
+            elapsed = int(time.time() - t0)
+            apps    = running_apps()
+            has_orbita = any(is_orbita_app(a) for a in apps)
+            op_gx  = any("Opera GX" in a for a in apps)
+            op_one = any(("Opera" in a and "Opera GX" not in a) or
+                         "Opera Installer" in a for a in apps)
+
+            now = time.time()
+
+            # Popup dismissal
+            if now - last_popup_t > 3:
+                dismiss_popups(); last_popup_t = now
+
+            # Cookie acceptance
+            if has_orbita and now - last_cookie_t > 12:
+                accept_cookie(); last_cookie_t = now
+
+            # ── Smart-link interstitial (Tab+Enter 20s after nav) ─────────
+            if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                if not smart_link_done and nav_done and nav_done_t:
+                    if now - nav_done_t >= 20:
+                        log("[Handler] 20s since nav — executing smart-link bypass...")
+                        smart_link_bypass(orbita_app)
+                        smart_link_done = True; smart_link_t = now
+
+            # ── CLICK-ONLY: exit after smart-link bypass ──────────────────
+            if action_mode == "click":
+                if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                    if not smart_link_done:
+                        time.sleep(1); continue
+                    if now - smart_link_t < 15:
+                        time.sleep(1); continue
+                    log("[Handler] CLICK-ONLY: interstitial done. Waiting 15s then closing.")
+                    time.sleep(15); close_browser(orbita_app)
+                    log("[Handler] CLICK-ONLY pathway complete."); return
+                else:
+                    if nav_done and elapsed > (20 + 30):
+                        log("[Handler] CLICK-ONLY: non-smart-link, page loaded. Closing.")
+                        close_browser(orbita_app)
+                        log("[Handler] CLICK-ONLY pathway complete."); return
+                time.sleep(1); continue
+
+            # ── INSTALL: download button click ────────────────────────────
+            if has_orbita and not dl_clicked:
+                ready = True
+                if sw_type in ["opera_smart_link","dynamic_opera","ad_mvn"]:
+                    ready = smart_link_done and (now - smart_link_t >= 10)
+                if ready and nav_done_t and (now - nav_done_t) > DL_WAIT_POST_NAV:
+                    if now - last_dl_t > 10:
+                        last_dl_t = now
+                        log(f"[Handler] Attempting download button click (t={elapsed}s)...")
+                        click_dl_button(orbita_app)
+                        dl_clicked = True
+
+            # ── Close browser once download detected ─────────────────────
+            if not browser_closed and os.path.exists(sentinel):
+                log("[Handler] Download sentinel found — closing browser...")
+                close_browser(orbita_app); time.sleep(2); browser_closed = True
+
+            # ── Opera GX post-install ─────────────────────────────────────
+            if sw_type in ["opera_gx","dynamic_opera","opera_smart_link","ad_mvn"]:
+                if op_gx and not setup_done:
+                    if not op_launch_t:
+                        op_launch_t = now
+                        log("[Handler] Opera GX detected — starting in 5s...")
+                        run_as('tell application "Opera GX" to activate', silent=True)
+                    if now - op_launch_t > 5:
+                        opera_gx_flow_mac(orbita_app); setup_done = True; break
+
+            # ── Opera One post-install ────────────────────────────────────
+            if sw_type in ["opera_one","dynamic_opera","opera_smart_link","ad_mvn"]:
+                if op_one and not op_gx and not setup_done:
+                    if not op_launch_t:
+                        op_launch_t = now
+                        log("[Handler] Opera One detected — starting in 5s...")
+                        run_as('tell application "System Events" to tell process "Opera Installer" to set frontmost to true',
+                               silent=True)
+                    if now - op_launch_t > 5:
+                        opera_one_flow_mac(orbita_app); setup_done = True; break
+
+            if elapsed % 30 == 0 and elapsed > 0:
+                log(f"[Handler] Status t={elapsed}s | nav={nav_done} | sl={smart_link_done} | dl={dl_clicked} | sentinel={os.path.exists(sentinel)}")
+
+        except Exception as e:
+            log(f"[Handler] Loop exception: {e}")
+        time.sleep(1)
+
+    if setup_done:
+        log("[Handler] === HANDLER FINISHED SUCCESSFULLY ===")
+    else:
+        log(f"[Handler] === TIMEOUT after {int(time.time()-t0)}s ===")
+
+if __name__ == "__main__":
+    handle(SOFTWARE_TYPE, ACTION_MODE)
+PYEOF
+
+          # ── Background popup dismisser ─────────────────────────────────
+          cat > /tmp/popup_dismisser.sh << 'DISMISSEOF'
+#!/bin/bash
+while true; do
+  osascript << 'ASEOF' 2>/dev/null || true
+tell application "System Events"
+  try
+    tell process "CoreServicesUIAgent"
+      repeat with win in (every window)
+        try
+          if exists button "Allow" of win then click button "Allow" of win
+        end try
+      end repeat
+    end tell
+  end try
+  repeat with proc in (every process whose visible is true)
+    set pName to name of proc as string
+    if pName is not in {"GoLogin", "Orbita"} then
+      try
+        repeat with win in (every window of proc)
+          set wT to ""
+          try; set wT to (title of win) as string; end try
+          if wT contains "local network" or wT contains "hosted-compute" or wT contains "Allow" then
+            try
+              if (exists button "Allow" of win) then click button "Allow" of win
+            end try
+          end if
+        end repeat
+      end try
+    end if
+  end repeat
+end tell
+ASEOF
+  sleep 2
+done
+DISMISSEOF
+          chmod +x /tmp/popup_dismisser.sh
+          /tmp/popup_dismisser.sh > /tmp/popup_dismisser.log 2>&1 &
+          DISMISSER_PID=$!
+          echo "[*] Background popup dismisser PID: $DISMISSER_PID"
+
+          # ── INSTALL PATH: file watcher for DMG download ─────────────────
           if [ "$ACTION_MODE" = "install" ]; then
-            DL_FOLDER="$HOME/Downloads"
-            SENTINEL_PATH="/tmp/download_done.flag"
-            INSTALLER_SENTINEL="/tmp/installer_executed.flag"
-            TIMEOUT_SECS=420
+            echo "[Watcher] INSTALL path: Monitoring $DL_FOLDER..."
             touch /tmp/watcher_start_marker
             (
               DEADLINE=$(($(date +%s) + TIMEOUT_SECS))
               INSTALLED=false
               while [ "$INSTALLED" = false ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
-                FILE=$(find "$DL_FOLDER" -maxdepth 1 \( -name "*.dmg" -o -name "*.zip" -o -name "*.pkg" \) ! -name "*.download" ! -name "*.crdownload" -newer /tmp/watcher_start_marker 2>/dev/null | head -n 1 || true)
+                FILE=$(find "$DL_FOLDER" -maxdepth 1 \
+                  \( -name "*.dmg" -o -name "*.zip" -o -name "*.pkg" \) \
+                  ! -name "*.download" ! -name "*.crdownload" ! -name "*.part" \
+                  -newer /tmp/watcher_start_marker 2>/dev/null | head -n 1 || true)
                 if [ -n "$FILE" ]; then
-                  echo "[$(date '+%H:%M:%S')] [Watcher] Download detected: $FILE"
+                  echo "[Watcher] Download found: $FILE"
                   touch "$SENTINEL_PATH"
-                  BASENAME=$(basename "$FILE")
-                  EXT="${BASENAME##*.}"
-                  if [ "$EXT" != "app" ]; then
-                    PREV=0
-                    for i in $(seq 1 30); do
-                      SZ=$(stat -f%z "$FILE" 2>/dev/null || stat -c%s "$FILE" 2>/dev/null || echo 0)
-                      [ "$SZ" = "$PREV" ] && [ "$SZ" -gt 500000 ] && break
-                      PREV=$SZ; sleep 2
-                    done
-                  fi
+                  BASENAME=$(basename "$FILE"); EXT="${BASENAME##*.}"
                   xattr -dr com.apple.quarantine "$FILE" 2>/dev/null || true
                   sleep 4
-                  INSTALLED_APP_NAME=""
+                  INSTALLED_APP=""
                   if [ "$EXT" = "dmg" ]; then
-                    MNT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null | awk '/\/Volumes\// {print $NF}' | head -n 1 || true)
+                    MNT=$(hdiutil attach "$FILE" -nobrowse -quiet 2>/dev/null | awk '/\/Volumes\//{print $NF}' | head -n 1)
                     if [ -n "$MNT" ]; then
-                      APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -n 1 || true)
+                      APP_SRC=$(find "$MNT" -maxdepth 2 -name "*.app" | head -n 1)
                       if [ -n "$APP_SRC" ]; then
                         AN=$(basename "$APP_SRC")
                         sudo cp -R "$APP_SRC" /Applications/ || true
                         sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
-                        INSTALLED_APP_NAME="$AN"
+                        INSTALLED_APP="$AN"
+                        echo "[Installer] Installed: $AN"
                       fi
                       hdiutil detach "$MNT" -quiet || true
                     fi
@@ -1322,57 +1861,88 @@ EOF
                     EXTRACT_DIR="${DL_FOLDER}/extracted_$(date +%s)"
                     mkdir -p "$EXTRACT_DIR"
                     ditto -xk "$FILE" "$EXTRACT_DIR" 2>/dev/null || unzip -q -o "$FILE" -d "$EXTRACT_DIR" 2>/dev/null || true
-                    find "$EXTRACT_DIR" -name "__MACOSX" -exec rm -rf {} + 2>/dev/null || true
-                    APP_IN_ZIP=$(find "$EXTRACT_DIR" -maxdepth 4 -name "*.app" ! -path "*/__MACOSX/*" | head -n 1 || true)
+                    APP_IN_ZIP=$(find "$EXTRACT_DIR" -maxdepth 4 -name "*.app" ! -path "*/__MACOSX/*" | head -n 1)
                     if [ -n "$APP_IN_ZIP" ]; then
                       AN=$(basename "$APP_IN_ZIP")
                       sudo cp -R "$APP_IN_ZIP" /Applications/ || true
                       sudo xattr -dr com.apple.quarantine "/Applications/$AN" 2>/dev/null || true
-                      sudo codesign --force --deep --sign - "/Applications/$AN" 2>/dev/null || true
-                      INSTALLED_APP_NAME="$AN"
-                      rm -rf "$EXTRACT_DIR" 2>/dev/null || true
+                      INSTALLED_APP="$AN"
+                      echo "[Installer] Installed from ZIP: $AN"
                     fi
+                    rm -rf "$EXTRACT_DIR" 2>/dev/null || true
                   elif [ "$EXT" = "pkg" ]; then
                     sudo installer -pkg "$FILE" -target / -verboseR || true
                   fi
                   touch "$INSTALLER_SENTINEL"
-                  # Launch installed app
-                  if [ -n "$INSTALLED_APP_NAME" ]; then
-                    sleep 3
-                    open "/Applications/$INSTALLED_APP_NAME" || true
+                  echo "[Watcher] Installer sentinel written."
+                  # Determine actual software type
+                  ACTUAL="$SOFTWARE_TYPE"
+                  if [ "$ACTUAL" = "dynamic_opera" ] || [ "$ACTUAL" = "opera_smart_link" ] || [ "$ACTUAL" = "ad_mvn" ]; then
+                    echo "$INSTALLED_APP$BASENAME" | grep -qi "gx" && ACTUAL="opera_gx" || ACTUAL="opera_one"
+                  fi
+                  # Close GoLogin/Orbita browser
+                  osascript -e 'tell application "Orbita" to quit' >/dev/null 2>&1 || true
+                  sleep 2
+                  # Find and open installed app
+                  if [ "$ACTUAL" = "opera_gx" ]; then
+                    SEARCH_PATHS=("/Applications/$INSTALLED_APP" "/Applications/Opera GX.app" "$HOME/Applications/Opera GX.app")
                   else
+                    SEARCH_PATHS=("/Applications/$INSTALLED_APP" "/Applications/Opera.app" "/Applications/Opera Installer.app" "$HOME/Applications/Opera Installer.app")
+                  fi
+                  echo "[Watcher] Looking for app to launch..."
+                  LAUNCHED=false
+                  for i in $(seq 1 60); do
+                    for P in "${SEARCH_PATHS[@]}"; do
+                      if [ -d "$P" ]; then
+                        sleep 3; echo "[Watcher] Launching: $P"
+                        open "$P" || true; sleep 5; LAUNCHED=true; break 2
+                      fi
+                    done
+                    sleep 2
+                  done
+                  if [ "$LAUNCHED" = false ]; then
                     FOUND=$(find /Applications "$HOME/Applications" -maxdepth 2 -name "Opera*.app" 2>/dev/null | head -n 1 || true)
                     [ -n "$FOUND" ] && open "$FOUND" || true
                   fi
                   INSTALLED=true
-                  echo "[$(date '+%H:%M:%S')] [Watcher] Install complete."
+                  echo "[Watcher] Install + launch complete."
                 else
                   sleep 5
                 fi
               done
+              echo "[Watcher] Exiting."
             ) &
             WATCHER_PID=$!
-            echo "[$(date '+%H:%M:%S')] Watcher started (PID $WATCHER_PID)"
+            echo "[*] Watcher PID: $WATCHER_PID"
+          else
+            echo "[*] CLICK-ONLY: Watcher not started."
+            WATCHER_PID=""
           fi
 
-          # --- Poll handler until done ---
-          HANDLER_TIMEOUT=500
+          # ── Start Python handler ──────────────────────────────────────
+          HANDLER_PYTHON="${UIENV_PYTHON:-python3}"
+          echo "[*] Starting macOS automation handler..."
+          "$HANDLER_PYTHON" -u /tmp/macos_handler.py 2>&1 | tee /tmp/handler_output.log &
+          HANDLER_PID=$!
+          echo "[*] Handler PID: $HANDLER_PID"
+
+          # ── Monitor handler ────────────────────────────────────────────
           POLL_START=$(date +%s)
           while kill -0 $HANDLER_PID 2>/dev/null; do
-            ELAPSED=$(($(date +%s) - POLL_START))
-            [ $ELAPSED -gt $HANDLER_TIMEOUT ] && { kill $HANDLER_PID 2>/dev/null || true; break; }
+            if [ $(($(date +%s) - POLL_START)) -gt $TIMEOUT_SECS ]; then
+              echo "[*] Handler timeout — killing."
+              kill $HANDLER_PID 2>/dev/null || true; break
+            fi
             sleep 5
           done
-          echo "[$(date '+%H:%M:%S')] Handler finished."
+          echo "[*] Handler finished."
           [ -n "$WATCHER_PID" ] && kill $WATCHER_PID 2>/dev/null || true
-          echo "[$(date '+%H:%M:%S')] === macOS workflow complete ==="
+          kill $DISMISSER_PID 2>/dev/null || true
+          echo "=== macOS automation workflow complete ==="
 
-      # ======================================================================
-      # KEEP ALIVE (both OS)
-      # ======================================================================
-      - name: Keep Runner Alive
-        if: always()
-        shell: bash
+      # ── 8-M: Keep Runner Alive ─────────────────────────────────────────
+      - name: Keep Runner Alive (macOS)
+        if: always() && runner.os == 'macOS'
         run: |
-          echo "[$(date '+%H:%M:%S')] Session active. Runner stays online until timeout."
+          echo "Session complete. Runner stays online to exhaust timeout."
           sleep 3600
