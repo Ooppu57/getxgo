@@ -39,7 +39,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '2'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -64,7 +64,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera - Oliver'
+        default: 'Opera - Fatradez'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -110,7 +110,7 @@ on:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: true
+        default: false
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
