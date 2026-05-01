@@ -79,7 +79,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'ca8d8179-d8a7-426a-9e94-73584dfb730a'
+        default: 'f6e8a289-2523-440f-bff4-62005d3feb4f'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
