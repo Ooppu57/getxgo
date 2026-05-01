@@ -1324,149 +1324,265 @@ jobs:
           ]
 
           # ══════════════════════════════════════════════════════════════════════
-          # MULTILINGUAL PROXY AUTH DETECTION
-          # Covers all proxy auth dialog titles and field labels across every
-          # language that the supported proxy countries may show (FR, BR, DE,
-          # ES, IT, NL, PL, VN, ID, and more). Matched case-insensitively.
+          # MULTILINGUAL DOWNLOAD BUTTON KEYWORDS
+          #
+          # Covers ALL proxy country languages in the supported country list:
+          # USA (en), UK (en), Canada (en/fr), Australia (en), Germany (de),
+          # France (fr), Brazil (pt-BR), Mexico (es), Spain (es), Vietnam (vi),
+          # Switzerland (de/fr/it), Indonesia (id), Italy (it),
+          # Netherlands (nl), Poland (pl)
+          #
+          # Organized by software type for precise matching, with a universal
+          # fallback list covering any page that has a download CTA.
           # ══════════════════════════════════════════════════════════════════════
 
-          # Window title keywords that indicate a proxy auth dialog
-          # (English + French + Portuguese/BR + German + Spanish + Italian +
-          #  Dutch + Polish + Vietnamese + Indonesian + others)
-          PROXY_AUTH_TITLE_KEYWORDS = [
+          # ── OPERA / OPERA ONE / OPERA GX download button keywords ─────────────
+          # These appear on opera.com landing pages, interstitial pages, and
+          # localized regional mirror pages.
+          OPERA_DOWNLOAD_KEYWORDS = [
               # English
+              "download opera", "download opera gx", "download opera one",
+              "download now", "download free", "get opera", "get opera gx",
+              "free download", "download for free", "download for windows",
+              "get for free", "get it free", "install opera", "install now",
+              "download browser", "get browser",
+              # French (France + Canada + Switzerland + Belgium)
+              "télécharger opera", "télécharger maintenant", "télécharger gratuitement",
+              "télécharger", "obtenir opera", "installer maintenant",
+              "téléchargement gratuit", "télécharger pour windows",
+              "télécharger le navigateur", "obtenir gratuitement",
+              # Portuguese / Brazilian (Brazil)
+              "baixar opera", "baixar agora", "baixar grátis", "baixar gratis",
+              "baixar gratuitamente", "baixar para windows", "baixe agora",
+              "baixe grátis", "baixe gratis", "obter opera", "instalar agora",
+              "download grátis", "download gratis", "baixar navegador",
+              # German (Germany + Switzerland + Austria)
+              "opera herunterladen", "jetzt herunterladen", "kostenlos herunterladen",
+              "herunterladen", "opera holen", "für windows herunterladen",
+              "kostenlos holen", "browser herunterladen", "jetzt installieren",
+              "gratis herunterladen",
+              # Spanish (Mexico + Spain)
+              "descargar opera", "descargar ahora", "descargar gratis",
+              "descargar gratuitamente", "descargar para windows",
+              "obtener opera", "instalar ahora", "descargar navegador",
+              "gratis descargar", "descarga gratis",
+              # Italian (Italy + Switzerland)
+              "scarica opera", "scarica ora", "scarica gratis",
+              "scarica gratuitamente", "scarica per windows",
+              "ottieni opera", "installa ora", "download gratuito",
+              "scarica il browser", "scarica gratis",
+              # Dutch (Netherlands + Belgium)
+              "opera downloaden", "nu downloaden", "gratis downloaden",
+              "opera ophalen", "voor windows downloaden", "installeer nu",
+              "gratis ophalen", "browser downloaden",
+              # Polish (Poland)
+              "pobierz operę", "pobierz opere", "pobierz teraz",
+              "pobierz za darmo", "pobierz opera", "zainstaluj teraz",
+              "darmowe pobieranie", "pobierz przeglądarkę", "pobierz przegladarke",
+              # Vietnamese (Vietnam)
+              "tải opera", "tải xuống", "tải về", "tải miễn phí",
+              "tải ngay", "cài đặt ngay", "tải cho windows",
+              "tải trình duyệt", "nhận opera",
+              # Indonesian (Indonesia)
+              "unduh opera", "unduh sekarang", "unduh gratis",
+              "download opera", "pasang opera", "instal sekarang",
+              "dapatkan opera", "unduh browser", "gratis unduh",
+          ]
+
+          # ── AVG download button keywords ──────────────────────────────────────
+          # Covers avg.com landing pages and localized variants
+          AVG_DOWNLOAD_KEYWORDS = [
+              # English
+              "download avg", "free download", "download free", "get avg free",
+              "download for free", "download avg free", "download now",
+              "get avg", "install avg", "download for windows",
+              "get protection", "download avg antivirus",
+              # French
+              "télécharger avg", "télécharger gratuitement", "téléchargement gratuit",
+              "obtenir avg", "télécharger maintenant",
+              # Portuguese / Brazilian
+              "baixar avg", "baixar grátis", "baixar gratis", "baixe avg",
+              "baixar agora", "obter avg", "baixar antivírus avg",
+              # German
+              "avg herunterladen", "kostenlos herunterladen", "jetzt herunterladen",
+              "avg holen", "gratis herunterladen",
+              # Spanish
+              "descargar avg", "descargar gratis", "descargar ahora",
+              "obtener avg", "descargar antivirus avg",
+              # Italian
+              "scarica avg", "scarica gratis", "scarica ora",
+              "ottieni avg", "download gratuito avg",
+              # Dutch
+              "avg downloaden", "gratis downloaden", "nu downloaden",
+              # Polish
+              "pobierz avg", "pobierz za darmo", "pobierz teraz",
+              # Vietnamese
+              "tải avg", "tải xuống", "tải miễn phí", "tải về avg",
+              # Indonesian
+              "unduh avg", "unduh gratis", "unduh sekarang",
+          ]
+
+          # ── UNIVERSAL fallback download keywords ──────────────────────────────
+          # These match any generic download CTA regardless of software brand,
+          # used as a last resort when brand-specific keywords don't match.
+          UNIVERSAL_DOWNLOAD_KEYWORDS = [
+              # English
+              "download", "download now", "free download", "get it free",
+              "install now", "get now", "download for free",
+              # French
+              "télécharger", "téléchargement", "obtenir",
+              # Portuguese
+              "baixar", "baixe", "baixe agora", "obter",
+              # German
+              "herunterladen", "downloaden", "holen",
+              # Spanish
+              "descargar", "descarga", "obtener",
+              # Italian
+              "scarica", "scaricare", "ottieni",
+              # Dutch
+              "downloaden", "ophalen",
+              # Polish
+              "pobierz", "pobieranie",
+              # Vietnamese
+              "tải xuống", "tải về", "tải ngay",
+              # Indonesian
+              "unduh", "unduh sekarang",
+          ]
+
+          # ── INTERSTITIAL / redirect page link keywords ────────────────────────
+          # These appear on smart-link interstitial pages and affiliate redirect pages
+          # where a text link (not a button) triggers the download.
+          INTERSTITIAL_LINK_KEYWORDS = [
+              "opera gx", "opera one", "opera browser", "opera for windows",
+              "download opera", "click here", "click to download",
+              "start download", "get started",
+              # French
+              "cliquez ici", "commencer le téléchargement",
+              # Portuguese
+              "clique aqui", "iniciar download", "começar download",
+              # German
+              "hier klicken", "download starten",
+              # Spanish
+              "haga clic aquí", "haz clic aquí", "iniciar descarga",
+              # Italian
+              "clicca qui", "avvia download",
+              # Dutch
+              "klik hier", "download starten",
+              # Polish
+              "kliknij tutaj", "rozpocznij pobieranie",
+              # Vietnamese
+              "bấm vào đây", "nhấn vào đây", "bắt đầu tải",
+              # Indonesian
+              "klik di sini", "mulai unduh",
+          ]
+
+          # ── COOKIE CONSENT button keywords ───────────────────────────────────
+          COOKIE_CONSENT_KEYWORDS = [
+              # English
+              "accept all", "accept cookies", "allow all", "accept selection",
+              "i accept", "agree", "i agree", "ok", "accept",
+              # French
+              "accepter tout", "tout accepter", "j'accepte", "accepter",
+              "j'accepte tout", "autoriser tout",
+              # Portuguese
+              "aceitar tudo", "aceitar todos", "aceitar", "concordar",
+              # German
+              "alle akzeptieren", "akzeptieren", "zustimmen", "einverstanden",
+              "alle annehmen", "ich stimme zu",
+              # Spanish
+              "aceptar todo", "aceptar todos", "aceptar", "de acuerdo",
+              # Italian
+              "accetta tutto", "accetta tutti", "accetta", "sono d'accordo",
+              # Dutch
+              "alles accepteren", "accepteren", "akkoord", "ik ga akkoord",
+              # Polish
+              "zaakceptuj wszystko", "zaakceptuj", "zgadzam się",
+              # Vietnamese
+              "chấp nhận tất cả", "chấp nhận", "đồng ý",
+              # Indonesian
+              "terima semua", "terima", "setuju",
+          ]
+
+          # ══════════════════════════════════════════════════════════════════════
+          # MULTILINGUAL PROXY AUTH DETECTION
+          # ══════════════════════════════════════════════════════════════════════
+
+          PROXY_AUTH_TITLE_KEYWORDS = [
               "sign in", "authentication required", "proxy authentication",
               "connect to", "enter credentials", "network authentication",
               "proxy auth", "enter network credentials", "authentication",
               "proxy", "credential",
-              # French
               "connexion", "authentification", "se connecter", "identifiants",
               "s'identifier", "saisir les informations", "informations d'identification",
-              # Portuguese / Brazilian
               "entrar", "autenticação", "autenticacao", "conectar",
               "credenciais", "fazer login", "identificação", "identificacao",
-              # German
               "anmelden", "anmeldung", "authentifizierung", "verbinden",
               "anmeldedaten", "zugangsdaten", "netzwerkauthentifizierung",
-              # Spanish
               "iniciar sesión", "iniciar sesion", "autenticación", "autenticacion",
               "conectarse", "credenciales", "identificarse",
-              # Italian
               "accedi", "accesso", "autenticazione", "connetti",
               "credenziali", "immettere le credenziali",
-              # Dutch
               "aanmelden", "inloggen", "authenticatie", "verbinding maken",
               "referenties", "netwerkauthenticatie",
-              # Polish
               "zaloguj", "uwierzytelnianie", "połącz", "polacz",
               "dane logowania", "poświadczenia", "poswiadczenia",
-              # Vietnamese
               "đăng nhập", "xác thực", "kết nối", "thông tin xác thực",
-              # Indonesian
               "masuk", "autentikasi", "sambungkan", "kredensial",
-              # Russian
               "войти", "аутентификация", "подключиться", "учётные данные",
-              # Turkish
               "giriş", "kimlik doğrulama", "bağlan", "kimlik bilgileri",
-              # Chinese simplified
               "登录", "身份验证", "连接", "凭据",
-              # Japanese
               "サインイン", "認証", "接続", "資格情報",
-              # Korean
               "로그인", "인증", "연결", "자격 증명",
           ]
 
-          # Input field title/name/placeholder keywords for username fields
-          # across all languages
           USERNAME_FIELD_KEYWORDS = [
-              # English
               "username", "user name", "user", "login", "account", "email",
-              # French
               "nom d'utilisateur", "nom d utilisateur", "utilisateur", "identifiant",
               "courriel", "adresse e-mail",
-              # Portuguese
               "nome de usuário", "nome de usuario", "usuário", "usuario",
               "utilizador", "nome de utilizador",
-              # German
               "benutzername", "benutzer", "anmeldename", "kennung",
-              # Spanish
               "nombre de usuario", "usuario", "nombre usuario",
-              # Italian
               "nome utente", "utente", "nome d'utente",
-              # Dutch
               "gebruikersnaam", "gebruiker",
-              # Polish
               "nazwa użytkownika", "nazwa uzytkownika", "użytkownik", "uzytkownik",
-              # Vietnamese
               "tên người dùng", "tài khoản",
-              # Indonesian
               "nama pengguna", "pengguna",
-              # Russian
               "имя пользователя", "логин",
-              # Turkish
               "kullanıcı adı", "kullanici adi",
           ]
 
-          # Input field title/name/placeholder keywords for password fields
           PASSWORD_FIELD_KEYWORDS = [
-              # English
               "password", "pass", "passwd", "secret", "pin",
-              # French
               "mot de passe", "mdp",
-              # Portuguese
               "senha", "palavra-passe",
-              # German
               "passwort", "kennwort", "geheimwort",
-              # Spanish
               "contraseña", "contrasena", "clave",
-              # Italian
               "parola d'ordine", "parola chiave", "codice",
-              # Dutch
               "wachtwoord",
-              # Polish
               "hasło", "haslo",
-              # Vietnamese
               "mật khẩu",
-              # Indonesian
               "kata sandi",
-              # Russian
               "пароль",
-              # Turkish
               "şifre", "sifre", "parola",
           ]
 
-          # Submit / OK button title keywords across all languages
           SUBMIT_BUTTON_KEYWORDS = [
-              # English
               "sign in", "ok", "connect", "login", "submit", "authenticate",
               "continue", "proceed", "confirm", "accept",
-              # French
               "connexion", "se connecter", "continuer", "confirmer", "accepter", "valider",
-              # Portuguese
               "entrar", "continuar", "confirmar", "aceitar", "conectar",
-              # German
               "anmelden", "verbinden", "weiter", "bestätigen", "bestatigen", "akzeptieren",
-              # Spanish
               "iniciar sesión", "iniciar sesion", "continuar", "aceptar", "confirmar",
-              # Italian
               "accedi", "continua", "conferma", "accetta",
-              # Dutch
               "aanmelden", "inloggen", "doorgaan", "bevestigen",
-              # Polish
               "zaloguj", "połącz", "polacz", "kontynuuj", "potwierdź", "potwierdz",
-              # Vietnamese
               "đăng nhập", "tiếp tục", "xác nhận",
-              # Indonesian
               "masuk", "lanjutkan", "konfirmasi",
-              # Russian
               "войти", "подключиться", "продолжить",
-              # Turkish
               "giriş yap", "bağlan", "devam", "onayla",
           ]
 
-          # ── ADDRESS BAR / URL BAR EXCLUSION PATTERNS ─────────────────────────
-          # These control-type + name combos identify the browser address bar.
-          # We NEVER inject credentials into these even if they contain Edit fields.
           ADDRESS_BAR_NAMES = [
               "address and search bar", "address bar", "search bar",
               "omnibox", "location bar", "url bar", "address",
@@ -1475,17 +1591,12 @@ jobs:
               "adresbalk", "pasek adresu", "thanh địa chỉ", "bilah alamat",
           ]
 
-          # Control automation IDs that correspond to address bars in Edge / Chrome
           ADDRESS_BAR_AUTOMATION_IDS = [
               "addressEditBox", "addressField", "locationBar",
-              "view_1", "omnibox",  # Edge Chromium IDs
+              "view_1", "omnibox",
           ]
 
           def _is_address_bar_control(ctrl):
-              """
-              Return True if the given pywinauto control is a browser address / URL bar.
-              Checks window_text, automation_id, and class_name to be safe.
-              """
               try:
                   wt  = (ctrl.window_text() or "").lower().strip()
                   aid = ""
@@ -1498,14 +1609,12 @@ jobs:
                       cls = (ctrl.element_info.class_name or "").lower()
                   except Exception:
                       pass
-
                   for name in ADDRESS_BAR_NAMES:
                       if name in wt or name in aid:
                           return True
                   for aid_kw in ADDRESS_BAR_AUTOMATION_IDS:
                       if aid_kw.lower() in aid:
                           return True
-                  # Edge address bar has class "Chrome_OmniboxView" or similar
                   if "omnibox" in cls or "addressbar" in cls:
                       return True
               except Exception:
@@ -1513,26 +1622,29 @@ jobs:
               return False
 
           def _matches_any(text, keyword_list):
-              """Case-insensitive substring match against a list of keywords."""
               if not text:
                   return False
               tl = text.lower().strip()
               return any(kw.lower() in tl for kw in keyword_list)
 
+          def _matches_any_exact_start(text, keyword_list):
+              """Match where the button text STARTS WITH or exactly equals a keyword.
+              Useful for short button labels like 'Download' vs longer page text."""
+              if not text:
+                  return False
+              tl = text.lower().strip()
+              for kw in keyword_list:
+                  kwl = kw.lower().strip()
+                  if tl == kwl or tl.startswith(kwl):
+                      return True
+              return False
+
           def _is_proxy_auth_dialog(window_text):
-              """
-              Check if a window title matches known proxy auth dialog patterns
-              in ANY supported language.
-              """
               if not window_text:
                   return False
               return _matches_any(window_text, PROXY_AUTH_TITLE_KEYWORDS)
 
           def _find_username_fields(container):
-              """
-              Find username Edit fields in a container using multilingual title matching.
-              Skips address bars. Returns list of matching controls.
-              """
               results = []
               try:
                   all_edits = container.descendants(control_type="Edit")
@@ -1555,12 +1667,6 @@ jobs:
               return results
 
           def _find_password_fields(container):
-              """
-              Find password Edit fields in a container using multilingual title matching.
-              Also detects password fields by checking if the control is a password-type
-              (PasswordEdit / IsPassword property). Skips address bars.
-              Returns list of matching controls.
-              """
               results = []
               try:
                   all_edits = container.descendants(control_type="Edit")
@@ -1576,14 +1682,9 @@ jobs:
                       except Exception:
                           name = ""
                       label = (wt + " " + name).lower()
-
-                      # Match by localized label
                       if _matches_any(label, PASSWORD_FIELD_KEYWORDS):
                           results.append(ctrl)
                           continue
-
-                      # Detect password fields by UIA IsPassword property
-                      # (works regardless of language — the field just masks input)
                       try:
                           is_pwd = ctrl.get_property("IsPassword")
                           if is_pwd:
@@ -1591,24 +1692,17 @@ jobs:
                               continue
                       except Exception:
                           pass
-
-                      # Fallback: check legacy class name "PasswordBox"
                       try:
                           cls = ctrl.element_info.class_name or ""
                           if "password" in cls.lower():
                               results.append(ctrl)
                       except Exception:
                           pass
-
               except Exception:
                   pass
               return results
 
           def _find_submit_button(container):
-              """
-              Find a submit/OK/Sign-in button in a container using multilingual
-              title matching. Returns the first matching button control, or None.
-              """
               try:
                   for btn in container.descendants(control_type="Button"):
                       try:
@@ -1627,12 +1721,6 @@ jobs:
               return None
 
           def _is_auth_dialog_by_structure(window):
-              """
-              Structural detection: a dialog that has exactly 2 Edit fields
-              (and neither is an address bar) is almost certainly a
-              username + password dialog, regardless of language.
-              Returns (user_field, pass_field) or (None, None).
-              """
               try:
                   all_edits = [
                       c for c in window.descendants(control_type="Edit")
@@ -1670,6 +1758,182 @@ jobs:
                   return ("opera" in tl and "gx" in tl) or "opera gx" in tl
               elif software_type in ["opera_one", "opera_smart_link", "dynamic_opera", "ad_mvn"]:
                   return "opera" in tl and "edge" not in tl and "chrome web store" not in tl
+              return False
+
+          # ══════════════════════════════════════════════════════════════════════
+          # MULTILINGUAL DOWNLOAD BUTTON FINDER
+          #
+          # Tries multiple strategies in order of specificity:
+          #   1. Brand-specific keyword match on Button control type
+          #   2. Universal keyword match on Button control type
+          #   3. Hyperlink / Text / Image controls with interstitial keywords
+          #   4. Any clickable element whose text contains the word for "download"
+          #      in any supported language (last-resort scan)
+          #
+          # Returns (element, match_strategy_label) or (None, None)
+          # ══════════════════════════════════════════════════════════════════════
+          def find_download_button_multilingual(edge_window, software_type, label=""):
+              """
+              Robustly find and return the download button/link in any language.
+              Scans buttons, hyperlinks, text nodes, and image controls.
+              Returns the clickable element or None.
+              """
+              if edge_window is None:
+                  return None, None
+
+              # Determine which brand keyword list to use first
+              if software_type in ["opera_gx", "opera_one", "opera_smart_link",
+                                    "dynamic_opera", "ad_mvn"]:
+                  primary_keywords = OPERA_DOWNLOAD_KEYWORDS
+                  brand_label = "Opera"
+              elif software_type == "avg":
+                  primary_keywords = AVG_DOWNLOAD_KEYWORDS
+                  brand_label = "AVG"
+              else:
+                  primary_keywords = UNIVERSAL_DOWNLOAD_KEYWORDS
+                  brand_label = "Generic"
+
+              # ── Strategy 1: Brand-specific Button match ───────────────────────
+              try:
+                  for btn in edge_window.descendants(control_type="Button"):
+                      try:
+                          txt = (btn.window_text() or "").strip()
+                      except Exception:
+                          txt = ""
+                      try:
+                          name = (btn.element_info.name or "").strip()
+                      except Exception:
+                          name = ""
+                      combined = (txt + " " + name).strip()
+                      if combined and _matches_any(combined, primary_keywords):
+                          log_msg("DL-Find", f"[{label}] Strategy1 ({brand_label} Button): '{combined[:60]}'")
+                          return btn, f"s1-{brand_label}-button"
+              except Exception as e:
+                  log_msg("DL-Find", f"[{label}] Strategy1 scan error: {e}")
+
+              # ── Strategy 2: Universal Button keyword match ────────────────────
+              try:
+                  for btn in edge_window.descendants(control_type="Button"):
+                      try:
+                          txt = (btn.window_text() or "").strip()
+                      except Exception:
+                          txt = ""
+                      try:
+                          name = (btn.element_info.name or "").strip()
+                      except Exception:
+                          name = ""
+                      combined = (txt + " " + name).strip()
+                      if combined and _matches_any(combined, UNIVERSAL_DOWNLOAD_KEYWORDS):
+                          # Skip very short generic labels that might be nav buttons
+                          if len(combined) > 2:
+                              log_msg("DL-Find", f"[{label}] Strategy2 (Universal Button): '{combined[:60]}'")
+                              return btn, "s2-universal-button"
+              except Exception as e:
+                  log_msg("DL-Find", f"[{label}] Strategy2 scan error: {e}")
+
+              # ── Strategy 3: Hyperlink / Text / Image with interstitial keywords ─
+              try:
+                  for el in edge_window.descendants():
+                      try:
+                          ctrl_type = el.element_info.control_type
+                      except Exception:
+                          continue
+                      if ctrl_type not in ["Hyperlink", "Text", "Image"]:
+                          continue
+                      try:
+                          wt = (el.window_text() or "").strip()
+                      except Exception:
+                          wt = ""
+                      if not wt or len(wt) > 200:
+                          continue
+                      # Must not be a URL string or a long paragraph
+                      if "http" in wt.lower() or "www." in wt.lower():
+                          continue
+                      if _matches_any(wt, primary_keywords + INTERSTITIAL_LINK_KEYWORDS):
+                          # Extra guard: skip if it looks like plain page text (>80 chars)
+                          if len(wt) <= 80:
+                              log_msg("DL-Find", f"[{label}] Strategy3 ({ctrl_type} link): '{wt[:60]}'")
+                              return el, f"s3-{ctrl_type.lower()}-link"
+              except Exception as e:
+                  log_msg("DL-Find", f"[{label}] Strategy3 scan error: {e}")
+
+              # ── Strategy 4: Any clickable element whose text contains a
+              #    download keyword in ANY language (very broad last-resort) ──────
+              try:
+                  all_keywords_combined = list(set(
+                      primary_keywords + UNIVERSAL_DOWNLOAD_KEYWORDS + INTERSTITIAL_LINK_KEYWORDS
+                  ))
+                  for el in edge_window.descendants():
+                      try:
+                          ctrl_type = el.element_info.control_type
+                      except Exception:
+                          continue
+                      if ctrl_type not in ["Button", "Hyperlink", "Text", "Image", "Custom"]:
+                          continue
+                      try:
+                          wt = (el.window_text() or "").strip()
+                      except Exception:
+                          wt = ""
+                      if not wt or len(wt) > 100:
+                          continue
+                      if "http" in wt.lower() or "www." in wt.lower():
+                          continue
+                      if _matches_any_exact_start(wt, all_keywords_combined):
+                          log_msg("DL-Find", f"[{label}] Strategy4 (broad scan, {ctrl_type}): '{wt[:60]}'")
+                          return el, f"s4-broad-{ctrl_type.lower()}"
+              except Exception as e:
+                  log_msg("DL-Find", f"[{label}] Strategy4 scan error: {e}")
+
+              log_msg("DL-Find", f"[{label}] No download element found in any language after all 4 strategies.")
+              return None, None
+
+          def click_download_button_multilingual(edge_window, software_type, label=""):
+              """
+              Find and click the download button/link using multilingual detection.
+              Returns True if a click was executed, False otherwise.
+              Tries click_input() first, falls back to invoke() pattern, then
+              pyautogui coordinate click as last resort.
+              """
+              element, strategy = find_download_button_multilingual(edge_window, software_type, label=label)
+              if element is None:
+                  return False
+
+              try:
+                  edge_window.set_focus()
+                  time.sleep(0.4)
+              except Exception:
+                  pass
+
+              # Attempt 1: click_input() — standard pywinauto click
+              try:
+                  element.click_input()
+                  log_msg("DL-Click", f"[{label}] click_input() succeeded via {strategy}.")
+                  return True
+              except Exception as e1:
+                  log_msg("DL-Click", f"[{label}] click_input() failed: {e1}")
+
+              # Attempt 2: invoke() — works on some UIA elements that resist click_input
+              try:
+                  element.invoke()
+                  log_msg("DL-Click", f"[{label}] invoke() succeeded via {strategy}.")
+                  return True
+              except Exception as e2:
+                  log_msg("DL-Click", f"[{label}] invoke() failed: {e2}")
+
+              # Attempt 3: pyautogui coordinate click using element bounding rect
+              try:
+                  rect = element.rectangle()
+                  cx = (rect.left + rect.right) // 2
+                  cy = (rect.top + rect.bottom) // 2
+                  pyautogui.moveTo(cx, cy, duration=0.25)
+                  time.sleep(0.15)
+                  pyautogui.click(cx, cy)
+                  log_msg("DL-Click", f"[{label}] pyautogui click at ({cx},{cy}) succeeded via {strategy}.")
+                  return True
+              except Exception as e3:
+                  log_msg("DL-Click", f"[{label}] pyautogui click failed: {e3}")
+
+              log_msg("DL-Click", f"[{label}] All click strategies exhausted for element via {strategy}.")
               return False
 
           def dismiss_interference_windows(desktop, software_type, label=""):
@@ -1982,33 +2246,15 @@ jobs:
 
           # ══════════════════════════════════════════════════════════════════════
           # ROBUST MULTILINGUAL PROXY AUTH INJECTION
-          #
-          # Detection order (most specific → most general):
-          #   1. Multilingual label matching on Edit fields
-          #   2. IsPassword UIA property for password field fallback
-          #   3. Structural detection: exactly 2 non-address-bar Edit fields
-          #   4. Keyboard-only Tab-navigation fallback
-          #
-          # Address-bar guard: every candidate Edit field is checked against
-          # _is_address_bar_control() before any interaction.
           # ══════════════════════════════════════════════════════════════════════
           def inject_proxy_auth(window, label=""):
-              """
-              Fill proxy authentication dialogs in any language.
-              Tries pywinauto field injection first (multilingual label match +
-              structural fallback), then keyboard Tab navigation as last resort.
-              Returns True if credentials were injected.
-              Never writes into browser address bars.
-              """
               if not USE_PROXY or not PROXY_USER or not PROXY_PASS:
                   return False
 
               try:
-                  # ── Strategy 1: Multilingual label matching ───────────────────
                   user_fields = _find_username_fields(window)
                   pass_fields = _find_password_fields(window)
 
-                  # ── Strategy 2: Structural fallback (2 Edit fields = user+pass) ─
                   if not user_fields or not pass_fields:
                       u_struct, p_struct = _is_auth_dialog_by_structure(window)
                       if u_struct and p_struct:
@@ -2017,7 +2263,6 @@ jobs:
                           pass_fields = [p_struct]
 
                   if user_fields and pass_fields:
-                      # Final safety guard: never inject into address bar
                       if _is_address_bar_control(user_fields[0]) or _is_address_bar_control(pass_fields[0]):
                           log_msg("ProxyAuth", f"[{label}] BLOCKED — detected fields are address/URL bars. Skipping.")
                           return False
@@ -2027,7 +2272,6 @@ jobs:
                       window.set_focus()
                       time.sleep(0.5)
 
-                      # Clear then type username
                       try:
                           user_fields[0].click_input()
                           time.sleep(0.2)
@@ -2040,7 +2284,6 @@ jobs:
                       except Exception as eu:
                           log_msg("ProxyAuth", f"[{label}] Username field type failed: {eu}")
 
-                      # Clear then type password
                       try:
                           pass_fields[0].click_input()
                           time.sleep(0.2)
@@ -2053,7 +2296,6 @@ jobs:
                       except Exception as ep:
                           log_msg("ProxyAuth", f"[{label}] Password field type failed: {ep}")
 
-                      # Click submit button (multilingual)
                       signed_in = False
                       submit_btn = _find_submit_button(window)
                       if submit_btn:
@@ -2066,7 +2308,6 @@ jobs:
                               log_msg("ProxyAuth", f"[{label}] Submit button click failed: {eb}")
 
                       if not signed_in:
-                          # Fallback: press Enter from password field
                           try:
                               pass_fields[0].click_input()
                               time.sleep(0.2)
@@ -2079,9 +2320,6 @@ jobs:
                       return signed_in
 
                   else:
-                      # ── Strategy 3: Keyboard-only Tab navigation ──────────────
-                      # Only fires for dialogs confirmed to NOT be the browser itself
-                      # (we check the window title again before proceeding).
                       wt = ""
                       try:
                           wt = window.window_text() or ""
@@ -2476,7 +2714,12 @@ jobs:
               INTERFERENCE_SWEEP_INTERVAL = 2
 
               last_auth_inject_time = 0
-              AUTH_INJECT_COOLDOWN = 8   # seconds between re-injection attempts
+              AUTH_INJECT_COOLDOWN = 8
+
+              # Cooldown tracker for multilingual download button clicks
+              # Prevents hammering the same button repeatedly
+              last_dl_multilingual_time = 0
+              DL_MULTILINGUAL_COOLDOWN = 5
 
               while time.time() - start_time < timeout:
                   try:
@@ -2503,26 +2746,15 @@ jobs:
 
                       # ══════════════════════════════════════════════════════════
                       # UNIVERSAL MULTILINGUAL PROXY AUTH DETECTION
-                      #
-                      # Scans ALL visible top-level windows for auth dialogs using
-                      # multilingual title keywords. Also scans inside Edge for
-                      # embedded auth prompts. Works for all proxy types and all
-                      # proxy country languages.
                       # ══════════════════════════════════════════════════════════
                       if USE_PROXY and (now - last_auth_inject_time > AUTH_INJECT_COOLDOWN):
                           try:
                               for auth_window in desktop.windows(visible_only=True):
                                   awt = auth_window.window_text() or ""
-
-                                  # Skip the main browser window and target software —
-                                  # auth dialogs are always separate popup windows.
                                   if "Microsoft Edge" in awt and awt != "Microsoft Edge":
-                                      # This is Edge with a page title — not an auth popup.
-                                      # Only scan its children below, not as the top-level target.
                                       continue
                                   if _is_target_software_window(awt, software_type):
                                       continue
-
                                   if _is_proxy_auth_dialog(awt):
                                       log_msg("ProxyAuth", f"[TopLevel] Auth dialog detected: '{awt}' "
                                               f"— injecting {PROXY_TYPE} credentials...")
@@ -2535,7 +2767,6 @@ jobs:
                           except Exception as auth_ex:
                               log_msg("ProxyAuth", f"Auth scan error: {auth_ex}")
 
-                          # Scan inside Edge window for embedded / child auth prompts
                           if edge_window and (now - last_auth_inject_time > AUTH_INJECT_COOLDOWN):
                               try:
                                   for child in edge_window.children():
@@ -2550,14 +2781,10 @@ jobs:
                               except Exception:
                                   pass
 
-                          # Structural scan inside Edge: look for exactly-2-Edit-field
-                          # dialogs that may not have a recognized title in any language
-                          # (e.g. a blank-titled OS credential dialog).
                           if edge_window and (now - last_auth_inject_time > AUTH_INJECT_COOLDOWN):
                               try:
                                   u_struct, p_struct = _is_auth_dialog_by_structure(edge_window)
                                   if u_struct and p_struct:
-                                      # Extra guard: make sure neither field is the address bar
                                       if (not _is_address_bar_control(u_struct) and
                                               not _is_address_bar_control(p_struct)):
                                           log_msg("ProxyAuth", "[EdgeStructural] 2-field dialog found inside Edge — "
@@ -2621,15 +2848,27 @@ jobs:
                               avg_post_install_sequence(avg_window)
                               avg_post_install_done = True
 
+                      # ══════════════════════════════════════════════════════════
+                      # MULTILINGUAL COOKIE CONSENT
+                      # Clicks cookie accept buttons in any supported language
+                      # ══════════════════════════════════════════════════════════
                       if edge_window:
-                          for cookie_btn in ["Accept all", "Accepter tout", "Tout accepter", "Accept Cookies", "Allow all", "Accept selection"]:
-                              btns = edge_window.descendants(control_type="Button", title=cookie_btn)
-                              if btns:
+                          try:
+                              for btn in edge_window.descendants(control_type="Button"):
                                   try:
-                                      log_msg("Cookies", f"Found consent button: '{cookie_btn}'. Clicking...")
-                                      btns[0].click_input()
-                                      time.sleep(1)
-                                  except: pass
+                                      btn_txt = (btn.window_text() or "").strip()
+                                  except Exception:
+                                      btn_txt = ""
+                                  if btn_txt and _matches_any(btn_txt, COOKIE_CONSENT_KEYWORDS):
+                                      try:
+                                          log_msg("Cookies", f"Found consent button: '{btn_txt}'. Clicking...")
+                                          btn.click_input()
+                                          time.sleep(1)
+                                          break
+                                      except Exception:
+                                          pass
+                          except Exception:
+                              pass
 
                       if edge_window and software_type == "opera_smart_link":
                           elapsed = time.time() - proxy_auth_time
@@ -2678,59 +2917,60 @@ jobs:
                           if not smart_link_interstitial_done or (time.time() - smart_link_interstitial_time < 15):
                               can_click_download = False
 
-                      if edge_window and action_mode == "install" and can_click_download and software_type in ["opera_gx", "opera_one", "ad_mvn", "dynamic_opera", "opera_smart_link"]:
-                          if time.time() - last_dl_click_time > 5:
-                              clicked_something = False
-                              dl_keywords = ["download opera", "download now", "télécharger", "baixar", "herunterladen", "descargar", "download"]
-                              for btn in edge_window.descendants(control_type="Button"):
-                                  btntxt = btn.window_text()
-                                  if btntxt and any(k in btntxt.lower() for k in dl_keywords):
-                                      try:
-                                          log_msg("Download", f"Targeting Final Download Button: '{btntxt}'...")
-                                          edge_window.set_focus()
-                                          time.sleep(0.5)
-                                          btn.click_input()
-                                          last_dl_click_time = time.time()
-                                          clicked_something = True
-                                          log_msg("Download", "Button clicked successfully.")
-                                          break
-                                      except Exception as e:
-                                          log_msg("Download", f"Failed to click button: {e}")
-                              if not clicked_something:
-                                  for el in edge_window.descendants():
-                                      if el.element_info.control_type in ["Hyperlink", "Text", "Image"]:
-                                          wt = el.window_text()
-                                          if wt and "opera" in wt.lower() and len(wt) < 150:
-                                              if "smart link" not in wt.lower() and "http" not in wt.lower() and "playabledownloads" not in wt.lower():
-                                                  try:
-                                                      log_msg("Download", f"Targeting Interstitial Link: '{wt}'...")
-                                                      edge_window.set_focus()
-                                                      el.click_input()
-                                                      last_dl_click_time = time.time()
-                                                      log_msg("Download", "Link clicked successfully.")
-                                                      break
-                                                  except Exception as e:
-                                                      log_msg("Download", f"Failed to click link: {e}")
+                      # ══════════════════════════════════════════════════════════
+                      # MULTILINGUAL DOWNLOAD BUTTON CLICK
+                      #
+                      # Replaces the old English-only download button detection.
+                      # Uses find_download_button_multilingual() which covers all
+                      # 4 strategies across all supported country languages.
+                      #
+                      # Applies to: Opera GX, Opera One, Ad-MVN, dynamic_opera,
+                      #             opera_smart_link, and AVG.
+                      # ══════════════════════════════════════════════════════════
+                      if (edge_window and action_mode == "install" and can_click_download
+                              and software_type in ["opera_gx", "opera_one", "ad_mvn",
+                                                    "dynamic_opera", "opera_smart_link"]):
+                          if now - last_dl_multilingual_time > DL_MULTILINGUAL_COOLDOWN:
+                              log_msg("DL-Engine", f"Opera download scan triggered (type={software_type})...")
+                              clicked = click_download_button_multilingual(
+                                  edge_window, software_type, label=f"opera-dl-{software_type}"
+                              )
+                              if clicked:
+                                  last_dl_multilingual_time = now
+                                  last_dl_click_time = now
+                                  log_msg("DL-Engine", "Opera download button clicked successfully (multilingual).")
+                              else:
+                                  log_msg("DL-Engine", "Opera download button not found this cycle. Will retry.")
 
                       if edge_window and action_mode == "install" and software_type == "avg":
                           elapsed = time.time() - proxy_auth_time
                           if not avg_download_clicked and elapsed > 20:
-                              log_msg("AVG", f"{elapsed:.1f}s elapsed. Initiating AVG TAB+ENTER download trigger.")
-                              try:
-                                  edge_window.set_focus()
-                                  time.sleep(0.5)
-                                  send_keys('{TAB}')
-                                  delay = random.uniform(1.0, 2.0)
-                                  time.sleep(delay)
-                                  send_keys('{ENTER}')
-                                  log_msg("AVG", "TAB+ENTER sent. Waiting 10s...")
-                                  for w in range(1, 11):
-                                      log_msg("AVG", f"Download init wait: {w}/10 seconds...")
-                                      time.sleep(1)
-                                  log_msg("AVG", "10s init wait complete.")
-                              except Exception as e:
-                                  log_msg("AVG", f"Keyboard sequence error: {e}")
-                              avg_download_clicked = True
+                              log_msg("AVG", f"{elapsed:.1f}s elapsed. Initiating multilingual AVG download click.")
+                              # First try multilingual button detection
+                              clicked = click_download_button_multilingual(
+                                  edge_window, software_type, label="avg-dl-multilingual"
+                              )
+                              if clicked:
+                                  log_msg("AVG", "Multilingual AVG download button clicked successfully.")
+                                  avg_download_clicked = True
+                              else:
+                                  # Fallback to original TAB+ENTER keyboard method
+                                  log_msg("AVG", "Multilingual button not found — falling back to TAB+ENTER keyboard method.")
+                                  try:
+                                      edge_window.set_focus()
+                                      time.sleep(0.5)
+                                      send_keys('{TAB}')
+                                      delay = random.uniform(1.0, 2.0)
+                                      time.sleep(delay)
+                                      send_keys('{ENTER}')
+                                      log_msg("AVG", "TAB+ENTER fallback sent. Waiting 10s...")
+                                      for w in range(1, 11):
+                                          log_msg("AVG", f"Download init wait: {w}/10 seconds...")
+                                          time.sleep(1)
+                                      log_msg("AVG", "10s init wait complete.")
+                                  except Exception as e:
+                                      log_msg("AVG", f"Keyboard sequence error: {e}")
+                                  avg_download_clicked = True
 
                       if edge_window and action_mode == "install":
                           add_ext_btns = edge_window.descendants(control_type="Button", title="Add extension")
