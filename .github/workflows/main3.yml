@@ -74,7 +74,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera - Techx'
+        default: 'Opera - James'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -89,7 +89,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '5c97a76e-baa8-449d-817f-843a7ddf5b8d'
+        default: '8815e474-bd0e-43de-a46b-f25bd4cfeee5'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -835,7 +835,6 @@ jobs:
                       region     = proxy.get('region', '')
                       proxy_type = proxy.get('proxy_type_label', 'unknown')
 
-                      # ── KEY FIX: always carry username/password into matrix ──
                       proxy_user = proxy.get('username', '')
                       proxy_pass = proxy.get('password', '')
 
@@ -1259,10 +1258,6 @@ jobs:
           $credObj | ConvertTo-Json -Depth 2 | Out-File -FilePath $credFile -Encoding utf8
           Write-Host "[Proxy] Credentials written to secure temp file: $credFile" -ForegroundColor DarkGray
 
-          # ══════════════════════════════════════════════════════════════════════
-          # LANGUAGE-AGNOSTIC PROXY AUTH DIALOG DETECTION & INJECTION
-          # Now works with ANY locale (English, French, Portuguese, German, etc.)
-          # ══════════════════════════════════════════════════════════════════════
           $handlerPy = @'
           import time, sys, subprocess, random, os, tempfile, ctypes, json
           from pywinauto import Desktop
@@ -1328,6 +1323,327 @@ jobs:
               "user account control",
           ]
 
+          # ══════════════════════════════════════════════════════════════════════
+          # MULTILINGUAL PROXY AUTH DETECTION
+          # Covers all proxy auth dialog titles and field labels across every
+          # language that the supported proxy countries may show (FR, BR, DE,
+          # ES, IT, NL, PL, VN, ID, and more). Matched case-insensitively.
+          # ══════════════════════════════════════════════════════════════════════
+
+          # Window title keywords that indicate a proxy auth dialog
+          # (English + French + Portuguese/BR + German + Spanish + Italian +
+          #  Dutch + Polish + Vietnamese + Indonesian + others)
+          PROXY_AUTH_TITLE_KEYWORDS = [
+              # English
+              "sign in", "authentication required", "proxy authentication",
+              "connect to", "enter credentials", "network authentication",
+              "proxy auth", "enter network credentials", "authentication",
+              "proxy", "credential",
+              # French
+              "connexion", "authentification", "se connecter", "identifiants",
+              "s'identifier", "saisir les informations", "informations d'identification",
+              # Portuguese / Brazilian
+              "entrar", "autenticação", "autenticacao", "conectar",
+              "credenciais", "fazer login", "identificação", "identificacao",
+              # German
+              "anmelden", "anmeldung", "authentifizierung", "verbinden",
+              "anmeldedaten", "zugangsdaten", "netzwerkauthentifizierung",
+              # Spanish
+              "iniciar sesión", "iniciar sesion", "autenticación", "autenticacion",
+              "conectarse", "credenciales", "identificarse",
+              # Italian
+              "accedi", "accesso", "autenticazione", "connetti",
+              "credenziali", "immettere le credenziali",
+              # Dutch
+              "aanmelden", "inloggen", "authenticatie", "verbinding maken",
+              "referenties", "netwerkauthenticatie",
+              # Polish
+              "zaloguj", "uwierzytelnianie", "połącz", "polacz",
+              "dane logowania", "poświadczenia", "poswiadczenia",
+              # Vietnamese
+              "đăng nhập", "xác thực", "kết nối", "thông tin xác thực",
+              # Indonesian
+              "masuk", "autentikasi", "sambungkan", "kredensial",
+              # Russian
+              "войти", "аутентификация", "подключиться", "учётные данные",
+              # Turkish
+              "giriş", "kimlik doğrulama", "bağlan", "kimlik bilgileri",
+              # Chinese simplified
+              "登录", "身份验证", "连接", "凭据",
+              # Japanese
+              "サインイン", "認証", "接続", "資格情報",
+              # Korean
+              "로그인", "인증", "연결", "자격 증명",
+          ]
+
+          # Input field title/name/placeholder keywords for username fields
+          # across all languages
+          USERNAME_FIELD_KEYWORDS = [
+              # English
+              "username", "user name", "user", "login", "account", "email",
+              # French
+              "nom d'utilisateur", "nom d utilisateur", "utilisateur", "identifiant",
+              "courriel", "adresse e-mail",
+              # Portuguese
+              "nome de usuário", "nome de usuario", "usuário", "usuario",
+              "utilizador", "nome de utilizador",
+              # German
+              "benutzername", "benutzer", "anmeldename", "kennung",
+              # Spanish
+              "nombre de usuario", "usuario", "nombre usuario",
+              # Italian
+              "nome utente", "utente", "nome d'utente",
+              # Dutch
+              "gebruikersnaam", "gebruiker",
+              # Polish
+              "nazwa użytkownika", "nazwa uzytkownika", "użytkownik", "uzytkownik",
+              # Vietnamese
+              "tên người dùng", "tài khoản",
+              # Indonesian
+              "nama pengguna", "pengguna",
+              # Russian
+              "имя пользователя", "логин",
+              # Turkish
+              "kullanıcı adı", "kullanici adi",
+          ]
+
+          # Input field title/name/placeholder keywords for password fields
+          PASSWORD_FIELD_KEYWORDS = [
+              # English
+              "password", "pass", "passwd", "secret", "pin",
+              # French
+              "mot de passe", "mdp",
+              # Portuguese
+              "senha", "palavra-passe",
+              # German
+              "passwort", "kennwort", "geheimwort",
+              # Spanish
+              "contraseña", "contrasena", "clave",
+              # Italian
+              "parola d'ordine", "parola chiave", "codice",
+              # Dutch
+              "wachtwoord",
+              # Polish
+              "hasło", "haslo",
+              # Vietnamese
+              "mật khẩu",
+              # Indonesian
+              "kata sandi",
+              # Russian
+              "пароль",
+              # Turkish
+              "şifre", "sifre", "parola",
+          ]
+
+          # Submit / OK button title keywords across all languages
+          SUBMIT_BUTTON_KEYWORDS = [
+              # English
+              "sign in", "ok", "connect", "login", "submit", "authenticate",
+              "continue", "proceed", "confirm", "accept",
+              # French
+              "connexion", "se connecter", "continuer", "confirmer", "accepter", "valider",
+              # Portuguese
+              "entrar", "continuar", "confirmar", "aceitar", "conectar",
+              # German
+              "anmelden", "verbinden", "weiter", "bestätigen", "bestatigen", "akzeptieren",
+              # Spanish
+              "iniciar sesión", "iniciar sesion", "continuar", "aceptar", "confirmar",
+              # Italian
+              "accedi", "continua", "conferma", "accetta",
+              # Dutch
+              "aanmelden", "inloggen", "doorgaan", "bevestigen",
+              # Polish
+              "zaloguj", "połącz", "polacz", "kontynuuj", "potwierdź", "potwierdz",
+              # Vietnamese
+              "đăng nhập", "tiếp tục", "xác nhận",
+              # Indonesian
+              "masuk", "lanjutkan", "konfirmasi",
+              # Russian
+              "войти", "подключиться", "продолжить",
+              # Turkish
+              "giriş yap", "bağlan", "devam", "onayla",
+          ]
+
+          # ── ADDRESS BAR / URL BAR EXCLUSION PATTERNS ─────────────────────────
+          # These control-type + name combos identify the browser address bar.
+          # We NEVER inject credentials into these even if they contain Edit fields.
+          ADDRESS_BAR_NAMES = [
+              "address and search bar", "address bar", "search bar",
+              "omnibox", "location bar", "url bar", "address",
+              "barre d'adresse", "barra de endereços", "adressleiste",
+              "barra de direcciones", "barra degli indirizzi",
+              "adresbalk", "pasek adresu", "thanh địa chỉ", "bilah alamat",
+          ]
+
+          # Control automation IDs that correspond to address bars in Edge / Chrome
+          ADDRESS_BAR_AUTOMATION_IDS = [
+              "addressEditBox", "addressField", "locationBar",
+              "view_1", "omnibox",  # Edge Chromium IDs
+          ]
+
+          def _is_address_bar_control(ctrl):
+              """
+              Return True if the given pywinauto control is a browser address / URL bar.
+              Checks window_text, automation_id, and class_name to be safe.
+              """
+              try:
+                  wt  = (ctrl.window_text() or "").lower().strip()
+                  aid = ""
+                  cls = ""
+                  try:
+                      aid = (ctrl.element_info.automation_id or "").lower()
+                  except Exception:
+                      pass
+                  try:
+                      cls = (ctrl.element_info.class_name or "").lower()
+                  except Exception:
+                      pass
+
+                  for name in ADDRESS_BAR_NAMES:
+                      if name in wt or name in aid:
+                          return True
+                  for aid_kw in ADDRESS_BAR_AUTOMATION_IDS:
+                      if aid_kw.lower() in aid:
+                          return True
+                  # Edge address bar has class "Chrome_OmniboxView" or similar
+                  if "omnibox" in cls or "addressbar" in cls:
+                      return True
+              except Exception:
+                  pass
+              return False
+
+          def _matches_any(text, keyword_list):
+              """Case-insensitive substring match against a list of keywords."""
+              if not text:
+                  return False
+              tl = text.lower().strip()
+              return any(kw.lower() in tl for kw in keyword_list)
+
+          def _is_proxy_auth_dialog(window_text):
+              """
+              Check if a window title matches known proxy auth dialog patterns
+              in ANY supported language.
+              """
+              if not window_text:
+                  return False
+              return _matches_any(window_text, PROXY_AUTH_TITLE_KEYWORDS)
+
+          def _find_username_fields(container):
+              """
+              Find username Edit fields in a container using multilingual title matching.
+              Skips address bars. Returns list of matching controls.
+              """
+              results = []
+              try:
+                  all_edits = container.descendants(control_type="Edit")
+                  for ctrl in all_edits:
+                      if _is_address_bar_control(ctrl):
+                          continue
+                      try:
+                          wt = ctrl.window_text() or ""
+                      except Exception:
+                          wt = ""
+                      try:
+                          name = ctrl.element_info.name or ""
+                      except Exception:
+                          name = ""
+                      label = (wt + " " + name).lower()
+                      if _matches_any(label, USERNAME_FIELD_KEYWORDS):
+                          results.append(ctrl)
+              except Exception:
+                  pass
+              return results
+
+          def _find_password_fields(container):
+              """
+              Find password Edit fields in a container using multilingual title matching.
+              Also detects password fields by checking if the control is a password-type
+              (PasswordEdit / IsPassword property). Skips address bars.
+              Returns list of matching controls.
+              """
+              results = []
+              try:
+                  all_edits = container.descendants(control_type="Edit")
+                  for ctrl in all_edits:
+                      if _is_address_bar_control(ctrl):
+                          continue
+                      try:
+                          wt = ctrl.window_text() or ""
+                      except Exception:
+                          wt = ""
+                      try:
+                          name = ctrl.element_info.name or ""
+                      except Exception:
+                          name = ""
+                      label = (wt + " " + name).lower()
+
+                      # Match by localized label
+                      if _matches_any(label, PASSWORD_FIELD_KEYWORDS):
+                          results.append(ctrl)
+                          continue
+
+                      # Detect password fields by UIA IsPassword property
+                      # (works regardless of language — the field just masks input)
+                      try:
+                          is_pwd = ctrl.get_property("IsPassword")
+                          if is_pwd:
+                              results.append(ctrl)
+                              continue
+                      except Exception:
+                          pass
+
+                      # Fallback: check legacy class name "PasswordBox"
+                      try:
+                          cls = ctrl.element_info.class_name or ""
+                          if "password" in cls.lower():
+                              results.append(ctrl)
+                      except Exception:
+                          pass
+
+              except Exception:
+                  pass
+              return results
+
+          def _find_submit_button(container):
+              """
+              Find a submit/OK/Sign-in button in a container using multilingual
+              title matching. Returns the first matching button control, or None.
+              """
+              try:
+                  for btn in container.descendants(control_type="Button"):
+                      try:
+                          wt = btn.window_text() or ""
+                      except Exception:
+                          wt = ""
+                      try:
+                          name = btn.element_info.name or ""
+                      except Exception:
+                          name = ""
+                      label = (wt + " " + name).strip()
+                      if _matches_any(label, SUBMIT_BUTTON_KEYWORDS):
+                          return btn
+              except Exception:
+                  pass
+              return None
+
+          def _is_auth_dialog_by_structure(window):
+              """
+              Structural detection: a dialog that has exactly 2 Edit fields
+              (and neither is an address bar) is almost certainly a
+              username + password dialog, regardless of language.
+              Returns (user_field, pass_field) or (None, None).
+              """
+              try:
+                  all_edits = [
+                      c for c in window.descendants(control_type="Edit")
+                      if not _is_address_bar_control(c)
+                  ]
+                  if len(all_edits) == 2:
+                      return all_edits[0], all_edits[1]
+              except Exception:
+                  pass
+              return None, None
+
           def _is_download_done_window(text):
               t = text.lower()
               return any(frag.lower() in t for frag in DOWNLOAD_DONE_TITLES)
@@ -1355,86 +1671,6 @@ jobs:
               elif software_type in ["opera_one", "opera_smart_link", "dynamic_opera", "ad_mvn"]:
                   return "opera" in tl and "edge" not in tl and "chrome web store" not in tl
               return False
-
-          # ── NEW: language-agnostic auth dialog detector ─────────────────
-          def _is_auth_dialog(window):
-              """Return True if window looks like an authentication dialog
-              (contains a password field and at least two edit controls)."""
-              try:
-                  edits = window.descendants(control_type="Edit")
-                  password_edit = None
-                  other_edit = None
-                  for edit in edits:
-                      try:
-                          props = edit.element_info.get_properties()
-                          if props.get("IsPassword", False):
-                              password_edit = edit
-                          elif other_edit is None:
-                              other_edit = edit
-                      except:
-                          pass
-                  if password_edit is not None and other_edit is not None:
-                      # At least one password and one username field present
-                      buttons = window.descendants(control_type="Button")
-                      if len(buttons) > 0:
-                          return True
-                  return False
-              except:
-                  return False
-
-          # ── NEW: language-agnostic credential injector ─────────────────
-          def inject_proxy_auth(window, label=""):
-              """Inject proxy credentials using UI field detection,
-              regardless of dialog language."""
-              if not USE_PROXY or not PROXY_USER or not PROXY_PASS:
-                  return False
-              try:
-                  window.set_focus()
-                  time.sleep(0.5)
-                  # Identify username (first non-password) and password
-                  edits = window.descendants(control_type="Edit")
-                  username_edit = None
-                  password_edit = None
-                  for edit in edits:
-                      try:
-                          props = edit.element_info.get_properties()
-                          if props.get("IsPassword", False):
-                              password_edit = edit
-                          elif username_edit is None:
-                              username_edit = edit
-                      except:
-                          pass
-                  if username_edit is None or password_edit is None:
-                      # Fallback: assume first two edits are user/pass
-                      if len(edits) >= 2:
-                          username_edit = edits[0]
-                          password_edit = edits[1]
-                      else:
-                          log_msg("ProxyAuth", f"[{label}] Could not identify username/password fields.")
-                          return False
-
-                  log_msg("ProxyAuth", f"[{label}] Injecting {PROXY_TYPE} credentials.")
-                  # Clear & type username
-                  username_edit.click_input()
-                  time.sleep(0.2)
-                  send_keys('^a{DELETE}')
-                  time.sleep(0.1)
-                  username_edit.type_keys(PROXY_USER, with_spaces=True, pause=0.02)
-                  time.sleep(0.3)
-                  # Clear & type password
-                  password_edit.click_input()
-                  time.sleep(0.2)
-                  send_keys('^a{DELETE}')
-                  time.sleep(0.1)
-                  password_edit.type_keys(PROXY_PASS, with_spaces=True, pause=0.02)
-                  time.sleep(0.3)
-                  # Submit with Enter (universal)
-                  send_keys('{ENTER}')
-                  log_msg("ProxyAuth", f"[{label}] Credentials submitted via Enter.")
-                  return True
-              except Exception as e:
-                  log_msg("ProxyAuth", f"[{label}] Exception: {e}")
-                  return False
 
           def dismiss_interference_windows(desktop, software_type, label=""):
               dismissed_any = False
@@ -1742,6 +1978,144 @@ jobs:
                   return False
               except Exception as e:
                   log_msg("ButtonClick", f"[{label}] Exception during button click: {e}")
+                  return False
+
+          # ══════════════════════════════════════════════════════════════════════
+          # ROBUST MULTILINGUAL PROXY AUTH INJECTION
+          #
+          # Detection order (most specific → most general):
+          #   1. Multilingual label matching on Edit fields
+          #   2. IsPassword UIA property for password field fallback
+          #   3. Structural detection: exactly 2 non-address-bar Edit fields
+          #   4. Keyboard-only Tab-navigation fallback
+          #
+          # Address-bar guard: every candidate Edit field is checked against
+          # _is_address_bar_control() before any interaction.
+          # ══════════════════════════════════════════════════════════════════════
+          def inject_proxy_auth(window, label=""):
+              """
+              Fill proxy authentication dialogs in any language.
+              Tries pywinauto field injection first (multilingual label match +
+              structural fallback), then keyboard Tab navigation as last resort.
+              Returns True if credentials were injected.
+              Never writes into browser address bars.
+              """
+              if not USE_PROXY or not PROXY_USER or not PROXY_PASS:
+                  return False
+
+              try:
+                  # ── Strategy 1: Multilingual label matching ───────────────────
+                  user_fields = _find_username_fields(window)
+                  pass_fields = _find_password_fields(window)
+
+                  # ── Strategy 2: Structural fallback (2 Edit fields = user+pass) ─
+                  if not user_fields or not pass_fields:
+                      u_struct, p_struct = _is_auth_dialog_by_structure(window)
+                      if u_struct and p_struct:
+                          log_msg("ProxyAuth", f"[{label}] Using structural detection (2-field dialog).")
+                          user_fields = [u_struct]
+                          pass_fields = [p_struct]
+
+                  if user_fields and pass_fields:
+                      # Final safety guard: never inject into address bar
+                      if _is_address_bar_control(user_fields[0]) or _is_address_bar_control(pass_fields[0]):
+                          log_msg("ProxyAuth", f"[{label}] BLOCKED — detected fields are address/URL bars. Skipping.")
+                          return False
+
+                      log_msg("ProxyAuth", f"[{label}] Auth dialog — injecting {PROXY_TYPE} credentials. "
+                              f"User={PROXY_USER[:25]}... | Fields found via multilingual match.")
+                      window.set_focus()
+                      time.sleep(0.5)
+
+                      # Clear then type username
+                      try:
+                          user_fields[0].click_input()
+                          time.sleep(0.2)
+                          send_keys('^a')
+                          time.sleep(0.1)
+                          send_keys('{DELETE}')
+                          time.sleep(0.1)
+                          user_fields[0].type_keys(PROXY_USER, with_spaces=True, pause=0.02)
+                          time.sleep(0.3)
+                      except Exception as eu:
+                          log_msg("ProxyAuth", f"[{label}] Username field type failed: {eu}")
+
+                      # Clear then type password
+                      try:
+                          pass_fields[0].click_input()
+                          time.sleep(0.2)
+                          send_keys('^a')
+                          time.sleep(0.1)
+                          send_keys('{DELETE}')
+                          time.sleep(0.1)
+                          pass_fields[0].type_keys(PROXY_PASS, with_spaces=True, pause=0.02)
+                          time.sleep(0.3)
+                      except Exception as ep:
+                          log_msg("ProxyAuth", f"[{label}] Password field type failed: {ep}")
+
+                      # Click submit button (multilingual)
+                      signed_in = False
+                      submit_btn = _find_submit_button(window)
+                      if submit_btn:
+                          try:
+                              submit_btn.click_input()
+                              btn_text = submit_btn.window_text() or "?"
+                              log_msg("ProxyAuth", f"[{label}] Clicked submit button: '{btn_text}'. Auth submitted.")
+                              signed_in = True
+                          except Exception as eb:
+                              log_msg("ProxyAuth", f"[{label}] Submit button click failed: {eb}")
+
+                      if not signed_in:
+                          # Fallback: press Enter from password field
+                          try:
+                              pass_fields[0].click_input()
+                              time.sleep(0.2)
+                              send_keys('{ENTER}')
+                              log_msg("ProxyAuth", f"[{label}] Submitted via ENTER key fallback.")
+                              signed_in = True
+                          except Exception as ek:
+                              log_msg("ProxyAuth", f"[{label}] ENTER fallback also failed: {ek}")
+
+                      return signed_in
+
+                  else:
+                      # ── Strategy 3: Keyboard-only Tab navigation ──────────────
+                      # Only fires for dialogs confirmed to NOT be the browser itself
+                      # (we check the window title again before proceeding).
+                      wt = ""
+                      try:
+                          wt = window.window_text() or ""
+                      except Exception:
+                          pass
+
+                      if not _is_proxy_auth_dialog(wt):
+                          log_msg("ProxyAuth", f"[{label}] No auth fields found and window '{wt}' "
+                                  "does not look like an auth dialog. Skipping keyboard injection.")
+                          return False
+
+                      log_msg("ProxyAuth", f"[{label}] No Edit fields found — trying keyboard Tab injection "
+                              f"(window='{wt}').")
+                      window.set_focus()
+                      time.sleep(0.5)
+                      send_keys('^a{DELETE}')
+                      time.sleep(0.1)
+                      for ch in PROXY_USER:
+                          send_keys(ch if ch.isalnum() or ch in '.-_=@' else '{%s}' % ch)
+                          time.sleep(0.01)
+                      send_keys('{TAB}')
+                      time.sleep(0.3)
+                      send_keys('^a{DELETE}')
+                      time.sleep(0.1)
+                      for ch in PROXY_PASS:
+                          send_keys(ch if ch.isalnum() or ch in '.-_=@' else '{%s}' % ch)
+                          time.sleep(0.01)
+                      time.sleep(0.2)
+                      send_keys('{ENTER}')
+                      log_msg("ProxyAuth", f"[{label}] Keyboard-only auth submitted.")
+                      return True
+
+              except Exception as e:
+                  log_msg("ProxyAuth", f"[{label}] inject_proxy_auth exception: {e}")
                   return False
 
           def opera_one_post_install_sequence(opera_window, software_type="opera_one"):
@@ -2101,7 +2475,6 @@ jobs:
               last_interference_sweep = 0
               INTERFERENCE_SWEEP_INTERVAL = 2
 
-              # Track last auth injection time to avoid re-injecting too fast
               last_auth_inject_time = 0
               AUTH_INJECT_COOLDOWN = 8   # seconds between re-injection attempts
 
@@ -2128,35 +2501,71 @@ jobs:
                           dismiss_interference_windows(desktop, software_type, label="continuous")
                           last_interference_sweep = now
 
-                      # ── UNIVERSAL PROXY AUTH DETECTION (LANGUAGE-AGNOSTIC) ────
+                      # ══════════════════════════════════════════════════════════
+                      # UNIVERSAL MULTILINGUAL PROXY AUTH DETECTION
+                      #
+                      # Scans ALL visible top-level windows for auth dialogs using
+                      # multilingual title keywords. Also scans inside Edge for
+                      # embedded auth prompts. Works for all proxy types and all
+                      # proxy country languages.
+                      # ══════════════════════════════════════════════════════════
                       if USE_PROXY and (now - last_auth_inject_time > AUTH_INJECT_COOLDOWN):
                           try:
                               for auth_window in desktop.windows(visible_only=True):
-                                  # Skip main Edge browser windows (huge windows that may have login forms)
-                                  if "Microsoft Edge" in auth_window.window_text() and "sign in" not in auth_window.window_text().lower():
+                                  awt = auth_window.window_text() or ""
+
+                                  # Skip the main browser window and target software —
+                                  # auth dialogs are always separate popup windows.
+                                  if "Microsoft Edge" in awt and awt != "Microsoft Edge":
+                                      # This is Edge with a page title — not an auth popup.
+                                      # Only scan its children below, not as the top-level target.
                                       continue
-                                  if _is_auth_dialog(auth_window):
-                                      log_msg("ProxyAuth", f"Auth dialog detected (UI pattern): '{auth_window.window_text()}'")
-                                      injected = inject_proxy_auth(auth_window, label=auth_window.window_text()[:30])
+                                  if _is_target_software_window(awt, software_type):
+                                      continue
+
+                                  if _is_proxy_auth_dialog(awt):
+                                      log_msg("ProxyAuth", f"[TopLevel] Auth dialog detected: '{awt}' "
+                                              f"— injecting {PROXY_TYPE} credentials...")
+                                      injected = inject_proxy_auth(auth_window, label=f"toplevel-{awt[:30]}")
                                       if injected:
                                           proxy_auth_time = time.time()
                                           last_auth_inject_time = now
-                                          log_msg("ProxyAuth", "Credentials injected successfully.")
+                                          log_msg("ProxyAuth", f"[TopLevel] Credentials injected for '{awt}'.")
                                           break
                           except Exception as auth_ex:
                               log_msg("ProxyAuth", f"Auth scan error: {auth_ex}")
 
-                          # Also check inside Edge branches
+                          # Scan inside Edge window for embedded / child auth prompts
                           if edge_window and (now - last_auth_inject_time > AUTH_INJECT_COOLDOWN):
                               try:
                                   for child in edge_window.children():
-                                      if _is_auth_dialog(child):
-                                          log_msg("ProxyAuth", f"Embedded Edge auth dialog detected: '{child.window_text()}'")
-                                          injected = inject_proxy_auth(child, label="edge-child")
+                                      cwt = child.window_text() or ""
+                                      if _is_proxy_auth_dialog(cwt):
+                                          log_msg("ProxyAuth", f"[EdgeChild] Embedded auth dialog: '{cwt}'")
+                                          injected = inject_proxy_auth(child, label=f"edge-child-{cwt[:20]}")
                                           if injected:
                                               proxy_auth_time = time.time()
                                               last_auth_inject_time = now
                                               break
+                              except Exception:
+                                  pass
+
+                          # Structural scan inside Edge: look for exactly-2-Edit-field
+                          # dialogs that may not have a recognized title in any language
+                          # (e.g. a blank-titled OS credential dialog).
+                          if edge_window and (now - last_auth_inject_time > AUTH_INJECT_COOLDOWN):
+                              try:
+                                  u_struct, p_struct = _is_auth_dialog_by_structure(edge_window)
+                                  if u_struct and p_struct:
+                                      # Extra guard: make sure neither field is the address bar
+                                      if (not _is_address_bar_control(u_struct) and
+                                              not _is_address_bar_control(p_struct)):
+                                          log_msg("ProxyAuth", "[EdgeStructural] 2-field dialog found inside Edge — "
+                                                  "attempting structural credential injection.")
+                                          injected = inject_proxy_auth(edge_window, label="edge-structural")
+                                          if injected:
+                                              proxy_auth_time = time.time()
+                                              last_auth_inject_time = now
                               except Exception:
                                   pass
 
