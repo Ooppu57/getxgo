@@ -32,7 +32,7 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '3'
+        default: '10'
       num_clicks:
         description: 'Number of Clicks'
         required: true
@@ -49,7 +49,7 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '1'
+        default: '4'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -74,7 +74,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera - Techx'
+        default: 'Opera - James'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -89,7 +89,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '1IFG1IFjMPZi4DcrQ16KF2ku_fbxeCXI'
+        default: '8815e474-bd0e-43de-a46b-f25bd4cfeee5'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -585,6 +585,7 @@ jobs:
               for idx, p in enumerate(parsed):
                   result = validate_proxy_and_locale(p, label=f"manual-{idx+1}")
                   if result['working']:
+                      result['proxy_type_label'] = 'manual'  # <-- FIX: Explicitly tag as manual
                       active_proxies.append(result)
                   else:
                       print(f"[Proxy] DEAD -> {result.get('server','?')}")
@@ -1249,13 +1250,22 @@ jobs:
           Write-Host " Category  : $env:SOFTWARE_TYPE" -ForegroundColor Cyan
           Write-Host " Action    : $($env:ACTION_MODE.ToUpper()) PATHWAY ASSIGNED" -ForegroundColor Magenta
           Write-Host " Locale    : $env:WINDOWS_LOCALE | Country: $env:PROXY_COUNTRY_CODE | TZ: $env:TIMEZONE_WINDOWS" -ForegroundColor DarkCyan
+
+          # ── ROBUST PROXY MODE DETECTION ─────────────────────────────────────
           if ($useProxy) {
-              if ($env:PROXY_TYPE -eq "manual") {
-                  Write-Host " Mode      : Manual Proxy ($env:PROXY_SERVER)" -ForegroundColor Cyan
-              } elseif ($env:PROXY_TYPE -eq "floppydata") {
-                  Write-Host " Mode      : FloppyData Proxy ($env:PROXY_SERVER)" -ForegroundColor Cyan
+              $proxyType = $env:PROXY_TYPE
+              if ($proxyType -eq "manual") {
+                  $proxyServer = $env:PROXY_SERVER
+                  Write-Host " Mode      : Manual Proxy ($proxyServer)" -ForegroundColor Cyan
+              } elseif ($proxyType -eq "floppydata") {
+                  $proxyServer = $env:PROXY_SERVER
+                  Write-Host " Mode      : FloppyData Proxy ($proxyServer)" -ForegroundColor Cyan
+              } elseif ($proxyType -eq "scrapeops") {
+                  $proxyServer = "residential-proxy.scrapeops.io:8181"
+                  Write-Host " Mode      : ScrapeOps Proxy ($proxyServer)" -ForegroundColor Cyan
               } else {
-                  Write-Host " Mode      : ScrapeOps Proxy" -ForegroundColor Cyan
+                  Write-Host " Mode      : ERROR — Unrecognized proxy type '$proxyType'. Aborting." -ForegroundColor Red
+                  exit 1
               }
           } else {
               Write-Host " Mode      : Direct (Proxy Completely Bypassed)" -ForegroundColor Yellow
@@ -2455,13 +2465,6 @@ jobs:
           )
 
           if ($useProxy) {
-              if ($env:PROXY_TYPE -eq "manual" -or $env:PROXY_TYPE -eq "floppydata") {
-                  $proxyServer = $env:PROXY_SERVER
-                  Write-Host "[System] Using $($env:PROXY_TYPE) proxy (auth via dialog): $proxyServer" -ForegroundColor Cyan
-              } else {
-                  $proxyServer = "residential-proxy.scrapeops.io:8181"
-                  Write-Host "[System] Using ScrapeOps proxy: $proxyServer" -ForegroundColor Cyan
-              }
               $edgeArgs += "--proxy-server=`"http://$proxyServer`""
           }
           $edgeArgs += "`"$env:TARGET_URL`""
