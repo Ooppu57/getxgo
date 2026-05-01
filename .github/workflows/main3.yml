@@ -39,7 +39,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '0'
+        default: '1'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -64,7 +64,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera - Fatradez'
+        default: 'Opera - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -79,7 +79,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '6f9a1b1e-3733-4996-89df-11bbc6fce359'
+        default: '0d73ea93-f576-45d3-bbd2-d98b8580c6d6'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
