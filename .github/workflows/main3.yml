@@ -74,22 +74,22 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera - Techx'
+        default: 'Opera - James'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
         type: string
-        default: 'https://appchecker.space/sl/v1nrr'
+        default: ''
       run_manual_link:
         description: 'Run manual link'
         required: true
         type: boolean
-        default: true
+        default: false
       scrapeops_api_key:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '5c97a76e-baa8-449d-817f-843a7ddf5b8d'
+        default: '8815e474-bd0e-43de-a46b-f25bd4cfeee5'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -115,12 +115,12 @@ on:
           - 'Italy'
           - 'Netherlands'
           - 'Poland'
-        default: 'USA'
+        default: 'Brazil'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: true
+        default: false
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
@@ -1270,18 +1270,26 @@ jobs:
               print(f"[{t}][{tag}] {msg}", flush=True)
 
           # ── Load proxy credentials from the JSON file written by PowerShell ──
-          # This is the robust approach: avoids all shell quoting/escaping issues
-          # that affect ScrapeOps (long dotted username) and FloppyData (token-style user)
           _CRED_FILE = os.path.join(tempfile.gettempdir(), "proxy_creds.json")
           _CREDS = {}
           try:
               with open(_CRED_FILE, "r", encoding="utf-8") as _f:
                   _CREDS = json.load(_f)
               log_msg("ProxyCreds", f"Credentials loaded from file. Type={_CREDS.get('proxy_type','?')} | "
-                      f"User={str(_CREDS.get('proxy_user',''))[:25]}... | "
+                      f"User={str(_CREDS.get('proxy_user',''))[:30]}... | "
                       f"Server={_CREDS.get('proxy_server','?')}")
           except Exception as _e:
               log_msg("ProxyCreds", f"WARNING: Could not load credential file: {_e}")
+              # Fallback: try to read from environment variables passed by PowerShell
+              import os as _os
+              _CREDS = {
+                  "proxy_user": _os.environ.get("PROXY_USER", ""),
+                  "proxy_pass": _os.environ.get("PROXY_PASS", ""),
+                  "proxy_server": _os.environ.get("PROXY_SERVER", ""),
+                  "proxy_type": _os.environ.get("PROXY_TYPE", "none"),
+                  "use_proxy": _os.environ.get("USE_PROXY", "false")
+              }
+              log_msg("ProxyCreds", "Fell back to environment variables for credentials.")
 
           PROXY_USER   = _CREDS.get("proxy_user",   "")
           PROXY_PASS   = _CREDS.get("proxy_pass",   "")
@@ -1324,16 +1332,6 @@ jobs:
               "how do you want to open",
               "administrator: c:\\",
               "user account control",
-          ]
-
-          # ── Known proxy auth dialog titles (covers Edge, Chrome, system dialogs) ──
-          PROXY_AUTH_DIALOG_TITLES = [
-              "Sign in",
-              "Authentication Required",
-              "Proxy Authentication Required",
-              "Connect to",
-              "Enter credentials",
-              "Network Authentication",
           ]
 
           def _is_download_done_window(text):
@@ -1673,136 +1671,259 @@ jobs:
                   return False
 
           # ══════════════════════════════════════════════════════════════════════
-          # ROBUST PROXY AUTH INJECTION
-          # Works for: manual, floppydata, scrapeops — all use the same
-          # credential file so long usernames are never truncated by shell args.
+          # ROBUST MULTILINGUAL PROXY AUTH DETECTION & INJECTION
           # ══════════════════════════════════════════════════════════════════════
+          
+          def _is_proxy_auth_dialog(window_text):
+              """Check if a window title matches known proxy auth dialog patterns in any language."""
+              if not window_text:
+                  return False
+              wl = window_text.lower().strip()
+              auth_keywords = [
+                  # English
+                  "sign in", "authentication required", "proxy authentication",
+                  "connect to", "enter credentials", "network authentication",
+                  "proxy auth", "authentication", "enter network credentials",
+                  "windows security", "security", "credential", "log in", "login",
+                  # Portuguese (BR)
+                  "autenticação", "autenticar", "credenciais", "conectar", 
+                  "acesso", "senha", "usuário", "nome de usuário", "autenticação de proxy",
+                  # Spanish (ES/MX/AR/CL/CO)
+                  "autenticación", "credenciales", "contraseña", "usuario", 
+                  "iniciar sesión", "acceso", "autentificar", "clave", "inicio de sesión",
+                  # German (DE/CH/AT)
+                  "authentifizierung", "anmeldung", "kennwort", "benutzername", 
+                  "anmelden", "zugang", "passwort", "anmeldung erforderlich",
+                  "proxy-authentifizierung", "authentifizierung erforderlich",
+                  # French (FR/CH/BE)
+                  "authentification", "identifiants", "mot de passe", 
+                  "nom d'utilisateur", "connexion", "s'authentifier",
+                  "authentification requise", "accès", "authentification proxy",
+                  # Vietnamese (VN)
+                  "xác thực", "đăng nhập", "mật khẩu", "tên người dùng", "xác thực proxy",
+                  # Italian (IT)
+                  "autenticazione", "credenziali", "password", "nome utente", 
+                  "accesso", "autenticazione richiesta", "autenticazione proxy",
+                  # Polish (PL)
+                  "uwierzytelnianie", "poświadczenia", "hasło", "nazwa użytkownika",
+                  "logowanie", "uwierzytelnianie wymagane", "uwierzytelnianie proxy",
+                  # Dutch (NL/BE)
+                  "verificatie", "inloggegevens", "wachtwoord", "gebruikersnaam", 
+                  "aanmelden", "authenticatie", "proxyverificatie",
+                  # Indonesian (ID)
+                  "autentikasi", "kredensial", "kata sandi", "nama pengguna", "masuk",
+                  # Russian (RU)
+                  "аутентификация", "учетные данные", "пароль", "имя пользователя",
+                  # Turkish (TR)
+                  "kimlik doğrulama", "kimlik bilgileri", "şifre", "kullanıcı adı",
+                  # Arabic (SA/AE)
+                  "مصادقة", "بيانات الاعتماد", "كلمة المرور", "اسم المستخدم",
+                  # Hindi (IN)
+                  "प्रमाणीकरण", "क्रेडेंशियल", "पासवर्ड", "उपयोगकर्ता नाम",
+                  # Japanese (JP)
+                  "認証", "資格情報", "パスワード", "ユーザー名",
+                  # Korean (KR)
+                  "인증", "자격 증명", "비밀번호", "사용자 이름",
+                  # Chinese (CN/TW/HK)
+                  "认证", "驗證", "凭据", "密碼", "密码", "用户名", "用戶名",
+                  # Nordic (SE/NO/DK/FI)
+                  "autentisering", "legitimation", "lösenord", "användarnamn",
+                  "godkjenning", "påloggingsinformasjon", "passord", "brukernavn",
+                  "autentificering", "legitimationsoplysninger", "adgangskode", "brugernavn",
+                  "todennus", "tunnistetiedot", "salasana", "käyttäjätunnus",
+                  # Greek (GR)
+                  "πιστοποίηση", "διαπιστευτήρια", "κωδικός πρόσβασης", "όνομα χρήστη",
+                  # Czech/Slovak/Hungarian/Romanian (CZ/SK/HU/RO)
+                  "ověření", "přihlašovací údaje", "heslo", "uživatelské jméno",
+                  "overenie", "prihlasovacie údaje", "heslo", "používateľské meno",
+                  "hitelesítés", "hitelesítő adatok", "jelszó", "felhasználónév",
+                  "autentificare", "acreditări", "parolă", "nume utilizator",
+                  # Hebrew
+                  "אימות", "אישורים", "סיסמה", "שם משתמש",
+                  # Thai (TH)
+                  "การตรวจสอบสิทธิ์", "ข้อมูลประจำตัว", "รหัสผ่าน", "ชื่อผู้ใช้",
+                  # Malay (MY)
+                  "pengesahan", "kelayakan", "kata laluan", "nama pengguna",
+                  # Filipino (PH)
+                  "pagpapatunay", "kredensyal", "password", "pangalan ng gumagamit",
+                  # Ukrainian (UA)
+                  "автентифікація", "облікові дані", "пароль", "ім'я користувача",
+              ]
+              return any(kw in wl for kw in auth_keywords)
+
+          def _is_auth_dialog_by_structure(window):
+              """Detect proxy auth dialog by UI structure (2+ input fields + button) regardless of language."""
+              try:
+                  edits = window.descendants(control_type="Edit")
+                  combos = window.descendants(control_type="ComboBox")
+                  input_count = len(edits) + len(combos)
+                  if input_count >= 2:
+                      buttons = window.descendants(control_type="Button")
+                      if len(buttons) >= 1:
+                          # Ensure it's not a main browser window (auth dialogs are small)
+                          all_controls = window.descendants()
+                          if len(all_controls) < 60:
+                              return True
+                  # Some auth dialogs have 1 edit + 1 combo (username dropdown + password)
+                  if len(edits) >= 1 and len(combos) >= 1:
+                      buttons = window.descendants(control_type="Button")
+                      if len(buttons) >= 1:
+                          all_controls = window.descendants()
+                          if len(all_controls) < 60:
+                              return True
+              except Exception:
+                  pass
+              return False
+
+          def _type_via_keyboard(text, delay=0.005):
+              """Type text reliably using send_keys with special character handling."""
+              for ch in text:
+                  if ch == ' ':
+                      send_keys(' ')
+                  elif ch == '\t':
+                      send_keys('{TAB}')
+                  elif ch == '\n':
+                      send_keys('{ENTER}')
+                  elif ch.isalnum() or ch in '.-_=@:;[]{}|<>?/\\~`!#$%^&*()+,':
+                      send_keys(ch)
+                  else:
+                      # Escape special pywinauto keys
+                      send_keys('{%s}' % ch)
+                  if delay > 0:
+                      time.sleep(delay)
+
           def inject_proxy_auth(window, label=""):
               """
               Attempt to fill proxy authentication dialogs in any window.
-              Tries pywinauto field injection first, then keyboard fallback.
+              Uses structural detection + multilingual title detection.
+              Always falls back to robust keyboard injection.
               Returns True if credentials were injected.
               """
               if not USE_PROXY or not PROXY_USER or not PROXY_PASS:
                   return False
 
+              # Ensure window is focused
               try:
-                  # ── Strategy 1: pywinauto Edit field injection ────────────────
-                  user_fields = window.descendants(control_type="Edit", title="Username")
-                  pass_fields = window.descendants(control_type="Edit", title="Password")
+                  window.set_focus()
+                  time.sleep(0.6)
+              except Exception as e:
+                  log_msg("ProxyAuth", f"[{label}] Failed to focus window: {e}")
 
-                  # Fallback titles used by different browsers/OS dialogs
-                  if not user_fields:
-                      user_fields = (
-                          window.descendants(control_type="Edit", title="User name") or
-                          window.descendants(control_type="Edit", title="user") or
-                          [f for f in window.descendants(control_type="Edit") if "user" in f.window_text().lower()] or
-                          []
-                      )
-                  if not pass_fields:
-                      pass_fields = (
-                          window.descendants(control_type="Edit", title="pass") or
-                          [f for f in window.descendants(control_type="Edit") if "pass" in f.window_text().lower()] or
-                          []
-                      )
-
-                  # Last resort: grab first two Edit fields (username then password)
-                  if not user_fields or not pass_fields:
-                      all_edits = window.descendants(control_type="Edit")
-                      if len(all_edits) >= 2:
-                          user_fields = [all_edits[0]]
-                          pass_fields = [all_edits[1]]
-
-                  if user_fields and pass_fields:
-                      log_msg("ProxyAuth", f"[{label}] Auth dialog found — injecting credentials. "
-                              f"Type={PROXY_TYPE} | User={PROXY_USER[:25]}...")
-                      window.set_focus()
-                      time.sleep(0.5)
-
-                      # Clear then type username
-                      user_fields[0].click_input()
-                      time.sleep(0.2)
-                      send_keys('^a')          # select all existing text
-                      time.sleep(0.1)
-                      send_keys('{DELETE}')    # clear it
-                      time.sleep(0.1)
-                      user_fields[0].type_keys(PROXY_USER, with_spaces=True, pause=0.02)
-                      time.sleep(0.3)
-
-                      # Clear then type password
-                      pass_fields[0].click_input()
-                      time.sleep(0.2)
-                      send_keys('^a')
-                      time.sleep(0.1)
-                      send_keys('{DELETE}')
-                      time.sleep(0.1)
-                      pass_fields[0].type_keys(PROXY_PASS, with_spaces=True, pause=0.02)
-                      time.sleep(0.3)
-
-                      # Click Sign In / OK button
-                      signed_in = False
-                      for btn_title in ["Sign in", "OK", "Connect", "Login", "Submit", "Authenticate"]:
-                          btns = window.descendants(control_type="Button", title=btn_title)
-                          if btns:
-                              try:
-                                  btns[0].click_input()
-                                  log_msg("ProxyAuth", f"[{label}] Clicked '{btn_title}' button. Auth submitted.")
-                                  signed_in = True
-                                  break
-                              except Exception as eb:
-                                  log_msg("ProxyAuth", f"[{label}] '{btn_title}' click failed: {eb}")
-
-                      if not signed_in:
-                          # Fallback: press Enter from the password field
+              try:
+                  # ── Strategy 1: pywinauto field injection via structure ─────────
+                  all_edits = window.descendants(control_type="Edit")
+                  combos = window.descendants(control_type="ComboBox")
+                  
+                  user_field = None
+                  pass_field = None
+                  
+                  if len(all_edits) >= 2:
+                      user_field = all_edits[0]
+                      pass_field = all_edits[1]
+                  elif len(all_edits) == 1 and len(combos) >= 1:
+                      user_field = combos[0]
+                      pass_field = all_edits[0]
+                  elif len(all_edits) == 1:
+                      # Only password visible, username pre-filled or needs dropdown
+                      pass_field = all_edits[0]
+                  
+                  if user_field or pass_field:
+                      log_msg("ProxyAuth", f"[{label}] Auth dialog detected by structure. "
+                              f"Type={PROXY_TYPE} | User={PROXY_USER[:30]}... | "
+                              f"Edits={len(all_edits)} | Combos={len(combos)}")
+                      
+                      # Fill username field
+                      if user_field:
                           try:
-                              pass_fields[0].click_input()
-                              time.sleep(0.2)
+                              user_field.click_input()
+                              time.sleep(0.3)
+                              send_keys('^a')
+                              time.sleep(0.1)
+                              send_keys('{DELETE}')
+                              time.sleep(0.1)
+                              user_field.type_keys(PROXY_USER, with_spaces=True, pause=0.01)
+                              time.sleep(0.3)
+                              log_msg("ProxyAuth", f"[{label}] Username injected via field.")
+                          except Exception as e:
+                              log_msg("ProxyAuth", f"[{label}] Username field injection failed: {e}")
+                              user_field = None  # Fall back to keyboard
+                      
+                      # Fill password field
+                      if pass_field:
+                          try:
+                              pass_field.click_input()
+                              time.sleep(0.3)
+                              send_keys('^a')
+                              time.sleep(0.1)
+                              send_keys('{DELETE}')
+                              time.sleep(0.1)
+                              pass_field.type_keys(PROXY_PASS, with_spaces=True, pause=0.01)
+                              time.sleep(0.3)
+                              log_msg("ProxyAuth", f"[{label}] Password injected via field.")
+                          except Exception as e:
+                              log_msg("ProxyAuth", f"[{label}] Password field injection failed: {e}")
+                              pass_field = None
+                      
+                      # Submit the form
+                      if user_field or pass_field:
+                          signed_in = False
+                          # Try clicking any button in the dialog
+                          for btn in window.descendants(control_type="Button"):
+                              try:
+                                  btn.click_input()
+                                  time.sleep(0.3)
+                                  signed_in = True
+                                  log_msg("ProxyAuth", f"[{label}] Clicked submit button.")
+                                  break
+                              except:
+                                  continue
+                          
+                          if not signed_in:
                               send_keys('{ENTER}')
-                              log_msg("ProxyAuth", f"[{label}] Submitted via ENTER key fallback.")
+                              time.sleep(0.3)
+                              log_msg("ProxyAuth", f"[{label}] Submitted via ENTER key.")
                               signed_in = True
-                          except Exception as ek:
-                              log_msg("ProxyAuth", f"[{label}] ENTER fallback also failed: {ek}")
-
-                      return signed_in
-
-                  else:
-                      # ── Strategy 2: Keyboard-only (Tab navigation) ────────────
-                      log_msg("ProxyAuth", f"[{label}] No Edit fields found — trying keyboard Tab injection.")
+                          
+                          return signed_in
+                  
+                  # ── Strategy 2: Robust keyboard-only injection ─────────────────
+                  log_msg("ProxyAuth", f"[{label}] Using keyboard-only injection method...")
+                  
+                  try:
                       window.set_focus()
                       time.sleep(0.5)
-                      send_keys('^a{DELETE}')
-                      time.sleep(0.1)
-                      # Type username char by char to avoid special char issues
-                      for ch in PROXY_USER:
-                          send_keys(ch if ch.isalnum() or ch in '.-_=@' else '{%s}' % ch)
-                          time.sleep(0.01)
-                      send_keys('{TAB}')
-                      time.sleep(0.3)
-                      send_keys('^a{DELETE}')
-                      time.sleep(0.1)
-                      for ch in PROXY_PASS:
-                          send_keys(ch if ch.isalnum() or ch in '.-_=@' else '{%s}' % ch)
-                          time.sleep(0.01)
-                      time.sleep(0.2)
-                      send_keys('{ENTER}')
-                      log_msg("ProxyAuth", f"[{label}] Keyboard-only auth submitted.")
-                      return True
-
+                  except:
+                      pass
+                  
+                  # Clear any existing text and type username
+                  send_keys('^a')
+                  time.sleep(0.1)
+                  send_keys('{DELETE}')
+                  time.sleep(0.1)
+                  _type_via_keyboard(PROXY_USER, delay=0.005)
+                  time.sleep(0.2)
+                  
+                  # Move to password field
+                  send_keys('{TAB}')
+                  time.sleep(0.3)
+                  
+                  # Clear and type password
+                  send_keys('^a')
+                  time.sleep(0.1)
+                  send_keys('{DELETE}')
+                  time.sleep(0.1)
+                  _type_via_keyboard(PROXY_PASS, delay=0.005)
+                  time.sleep(0.2)
+                  
+                  # Submit
+                  send_keys('{ENTER}')
+                  time.sleep(0.3)
+                  log_msg("ProxyAuth", f"[{label}] Keyboard-only auth submitted successfully.")
+                  return True
+                  
               except Exception as e:
                   log_msg("ProxyAuth", f"[{label}] inject_proxy_auth exception: {e}")
                   return False
-
-          def _is_proxy_auth_dialog(window_text):
-              """Check if a window title matches known proxy auth dialog patterns."""
-              if not window_text:
-                  return False
-              wl = window_text.lower().strip()
-              auth_keywords = [
-                  "sign in", "authentication required", "proxy authentication",
-                  "connect to", "enter credentials", "network authentication",
-                  "proxy auth", "authentication", "enter network credentials",
-              ]
-              return any(kw in wl for kw in auth_keywords)
 
           def opera_one_post_install_sequence(opera_window, software_type="opera_one"):
               log_msg("PostInstall-OP1", "=== Opera One Post-Install Sequence Starting ===")
@@ -2132,7 +2253,7 @@ jobs:
 
               log_msg("UI-Engine", f"Started monitoring. Action Mode: {action_mode.upper()} | "
                       f"Type: {software_type} | ProxyType: {PROXY_TYPE} | UseProxy: {USE_PROXY}")
-              log_msg("UI-Engine", f"Proxy credentials ready: User={PROXY_USER[:25]}... | "
+              log_msg("UI-Engine", f"Proxy credentials ready: User={PROXY_USER[:30]}... | "
                       f"Server={PROXY_SERVER}")
 
               last_ctrl_j_time = time.time()
@@ -2189,49 +2310,76 @@ jobs:
                           last_interference_sweep = now
 
                       # ── UNIVERSAL PROXY AUTH DETECTION ──────────────────────────
-                      # Scan ALL visible windows for proxy auth dialogs.
-                      # This covers manual, floppydata, AND scrapeops since they all
-                      # need credentials injected in exactly the same way.
+                      # Scan ALL visible windows for proxy auth dialogs using both
+                      # multilingual title matching AND structural detection.
+                      # This works for manual, floppydata, AND scrapeops regardless
+                      # of the dialog language.
                       if USE_PROXY and (now - last_auth_inject_time > AUTH_INJECT_COOLDOWN):
+                          auth_dialog_found = False
+                          
+                          # 1) Scan all top-level windows
                           try:
                               for auth_window in desktop.windows(visible_only=True):
-                                  awt = auth_window.window_text()
-                                  if awt and _is_proxy_auth_dialog(awt):
-                                      log_msg("ProxyAuth", f"Auth dialog detected: '{awt}' — injecting {PROXY_TYPE} credentials...")
-                                      injected = inject_proxy_auth(auth_window, label=f"dialog-{awt[:30]}")
-                                      if injected:
-                                          proxy_auth_time = time.time()
-                                          last_auth_inject_time = now
-                                          log_msg("ProxyAuth", f"Credentials injected successfully for '{awt}'.")
-                                          break
-                          except Exception as auth_ex:
-                              log_msg("ProxyAuth", f"Auth scan error: {auth_ex}")
-
-                          # Also check inside Edge window for embedded auth prompts
-                          if edge_window and (now - last_auth_inject_time > AUTH_INJECT_COOLDOWN):
-                              try:
-                                  for child in edge_window.children():
-                                      cwt = child.window_text()
-                                      if cwt and _is_proxy_auth_dialog(cwt):
-                                          log_msg("ProxyAuth", f"Embedded Edge auth dialog: '{cwt}'")
-                                          injected = inject_proxy_auth(child, label=f"edge-child-{cwt[:20]}")
+                                  try:
+                                      awt = auth_window.window_text()
+                                      is_auth = _is_proxy_auth_dialog(awt) or _is_auth_dialog_by_structure(auth_window)
+                                      
+                                      if is_auth:
+                                          log_msg("ProxyAuth", f"Detected auth dialog: '{awt}' — injecting {PROXY_TYPE} credentials...")
+                                          injected = inject_proxy_auth(auth_window, label=f"dialog-{awt[:30]}")
                                           if injected:
                                               proxy_auth_time = time.time()
                                               last_auth_inject_time = now
+                                              auth_dialog_found = True
+                                              log_msg("ProxyAuth", f"Credentials injected successfully for '{awt}'.")
                                               break
+                                  except Exception:
+                                      continue
+                          except Exception as auth_ex:
+                              log_msg("ProxyAuth", f"Top-level auth scan error: {auth_ex}")
+                          
+                          # 2) Scan inside Edge window for embedded auth prompts
+                          if not auth_dialog_found and edge_window and (now - last_auth_inject_time > AUTH_INJECT_COOLDOWN):
+                              try:
+                                  # Check direct children
+                                  for child in edge_window.children():
+                                      try:
+                                          cwt = child.window_text()
+                                          is_auth = _is_proxy_auth_dialog(cwt) or _is_auth_dialog_by_structure(child)
+                                          if is_auth:
+                                              log_msg("ProxyAuth", f"Embedded Edge auth dialog: '{cwt}'")
+                                              injected = inject_proxy_auth(child, label=f"edge-child-{cwt[:20]}")
+                                              if injected:
+                                                  proxy_auth_time = time.time()
+                                                  last_auth_inject_time = now
+                                                  auth_dialog_found = True
+                                                  break
+                                      except:
+                                          continue
+                                  
+                                  # Check descendants for auth structure
+                                  if not auth_dialog_found:
+                                      for desc in edge_window.descendants():
+                                          try:
+                                              if _is_auth_dialog_by_structure(desc):
+                                                  log_msg("ProxyAuth", f"Edge descendant auth structure detected.")
+                                                  injected = inject_proxy_auth(desc, label="edge-desc")
+                                                  if injected:
+                                                      proxy_auth_time = time.time()
+                                                      last_auth_inject_time = now
+                                                      auth_dialog_found = True
+                                                      break
+                                          except:
+                                              continue
                               except Exception:
                                   pass
-
-                          # Legacy fallback: check edge_window itself for Username/Password fields
-                          # (catches cases where Edge renders the dialog inside its own window tree)
-                          if edge_window and (now - last_auth_inject_time > AUTH_INJECT_COOLDOWN):
+                          
+                          # 3) Legacy fallback: if Edge has 2+ Edit fields, treat as auth
+                          if not auth_dialog_found and edge_window and (now - last_auth_inject_time > AUTH_INJECT_COOLDOWN):
                               try:
-                                  user_fields = edge_window.descendants(control_type="Edit", title="Username")
-                                  pass_fields = edge_window.descendants(control_type="Edit", title="Password")
-                                  if not user_fields:
-                                      user_fields = edge_window.descendants(control_type="Edit", title="User name")
-                                  if user_fields and pass_fields:
-                                      log_msg("ProxyAuth", f"Legacy: Found Username/Password in Edge window tree.")
+                                  all_edits = edge_window.descendants(control_type="Edit")
+                                  if len(all_edits) >= 2:
+                                      log_msg("ProxyAuth", f"Legacy: Found {len(all_edits)} Edit fields in Edge — injecting auth.")
                                       injected = inject_proxy_auth(edge_window, label="edge-legacy")
                                       if injected:
                                           proxy_auth_time = time.time()
