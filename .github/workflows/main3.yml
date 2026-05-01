@@ -166,6 +166,216 @@ jobs:
               subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "--quiet"])
               import requests
 
+          # ── ipinfo.io locale lookup ───────────────────────────────────────────
+          IPINFO_TOKEN = ""   # leave blank to use free tier (50k/mo)
+
+          def get_locale_info_from_proxy(proxy_url, device_label=""):
+              """
+              Query ipinfo.io through the proxy to get real IP geolocation,
+              timezone, and country info. Returns a dict with locale fields.
+              """
+              try:
+                  proxies_cfg = {"http": proxy_url, "https": proxy_url}
+                  url = "https://ipinfo.io/json"
+                  if IPINFO_TOKEN:
+                      url += f"?token={IPINFO_TOKEN}"
+                  resp = requests.get(url, proxies=proxies_cfg, timeout=20)
+                  data = resp.json()
+                  ip        = data.get("ip", "")
+                  city      = data.get("city", "")
+                  region    = data.get("region", "")
+                  country   = data.get("country", "US")   # ISO-2
+                  tz        = data.get("timezone", "UTC")
+                  org       = data.get("org", "")
+                  loc       = data.get("loc", "0,0")
+                  print(f"[ipinfo][{device_label}] IP={ip} | City={city} | Region={region} | Country={country} | TZ={tz}")
+                  return {
+                      "real_ip": ip, "city": city, "region": region,
+                      "country_code": country.upper(),
+                      "timezone": tz,
+                      "org": org, "loc": loc,
+                  }
+              except Exception as e:
+                  print(f"[ipinfo][{device_label}] FAILED to query ipinfo.io: {e}")
+                  return None
+
+          def country_code_to_locale(cc):
+              """
+              Map ISO-2 country code → Windows locale tag (used for
+              Set-WinUILanguageOverride / Set-WinSystemLocale etc.)
+              """
+              _map = {
+                  "US": "en-US", "GB": "en-GB", "CA": "en-CA", "AU": "en-AU",
+                  "DE": "de-DE", "FR": "fr-FR", "BR": "pt-BR", "MX": "es-MX",
+                  "ES": "es-ES", "VN": "vi-VN", "CH": "de-CH", "ID": "id-ID",
+                  "IT": "it-IT", "NL": "nl-NL", "PL": "pl-PL",
+                  "AR": "es-AR", "CL": "es-CL", "CO": "es-CO",
+                  "IN": "hi-IN", "JP": "ja-JP", "KR": "ko-KR",
+                  "CN": "zh-CN", "TW": "zh-TW", "RU": "ru-RU",
+                  "TR": "tr-TR", "SA": "ar-SA", "AE": "ar-AE",
+                  "ZA": "en-ZA", "NG": "en-NG", "KE": "en-KE",
+                  "PH": "fil-PH", "TH": "th-TH", "MY": "ms-MY",
+                  "SG": "en-SG", "HK": "zh-HK", "PT": "pt-PT",
+                  "RO": "ro-RO", "HU": "hu-HU", "CZ": "cs-CZ",
+                  "SK": "sk-SK", "UA": "uk-UA", "GR": "el-GR",
+                  "SE": "sv-SE", "NO": "nb-NO", "DK": "da-DK",
+                  "FI": "fi-FI", "BE": "nl-BE", "AT": "de-AT",
+                  "NZ": "en-NZ", "IE": "en-IE",
+              }
+              return _map.get(cc.upper(), "en-US")
+
+          def country_code_to_keyboard(cc):
+              """
+              Map ISO-2 country code → Windows keyboard input method ID
+              (used with Set-WinUserLanguageList).
+              """
+              _map = {
+                  "US": "0409:00000409", "GB": "0809:00000809", "CA": "1009:00000409",
+                  "AU": "0C09:00000409", "DE": "0407:00000407", "FR": "040C:0000040C",
+                  "BR": "0416:00000416", "MX": "080A:0000080A", "ES": "0C0A:0000080A",
+                  "VN": "042A:0000042A", "CH": "0807:00000807", "ID": "0421:00000409",
+                  "IT": "0410:00000410", "NL": "0413:00020409", "PL": "0415:00000415",
+                  "AR": "2C0A:0000080A", "IN": "0409:00000409", "JP": "0411:{03B5835F-F03C-411B-9CE2-AA23E1171E36}{A76C93D9-5523-4E90-AAFA-4DB112F9AC76}",
+                  "KR": "0412:{A028AE76-01B1-46C2-99C4-ACD9858AE02F}{B5FE1F02-D5F2-4445-9C03-C568F23C99A1}",
+                  "RU": "0419:00000419", "TR": "041F:0000041F",
+                  "SA": "0401:00000401", "AE": "3801:00000401",
+                  "PT": "0816:00000816", "RO": "0418:00000418",
+                  "HU": "040E:0000040E", "CZ": "0405:00000405",
+                  "SK": "041B:0000041B", "UA": "0422:00000422",
+                  "GR": "0408:00000408", "SE": "041D:0000041D",
+                  "NO": "0414:00000414", "DK": "0406:00000406",
+                  "FI": "040B:0000040B", "NL_BE": "080C:0000080C",
+                  "BE": "080C:0000080C", "AT": "0C07:00000407",
+              }
+              return _map.get(cc.upper(), "0409:00000409")
+
+          def tz_to_windows_tz(iana_tz):
+              """
+              Convert IANA timezone (e.g. 'America/New_York') to Windows
+              timezone name (e.g. 'Eastern Standard Time').
+              """
+              _map = {
+                  "America/New_York":       "Eastern Standard Time",
+                  "America/Chicago":        "Central Standard Time",
+                  "America/Denver":         "Mountain Standard Time",
+                  "America/Phoenix":        "US Mountain Standard Time",
+                  "America/Los_Angeles":    "Pacific Standard Time",
+                  "America/Anchorage":      "Alaskan Standard Time",
+                  "America/Adak":           "Hawaiian Standard Time",
+                  "Pacific/Honolulu":       "Hawaiian Standard Time",
+                  "America/Toronto":        "Eastern Standard Time",
+                  "America/Vancouver":      "Pacific Standard Time",
+                  "America/Winnipeg":       "Central Standard Time",
+                  "America/Halifax":        "Atlantic Standard Time",
+                  "America/St_Johns":       "Newfoundland Standard Time",
+                  "America/Sao_Paulo":      "E. South America Standard Time",
+                  "America/Manaus":         "SA Western Standard Time",
+                  "America/Belem":          "SA Eastern Standard Time",
+                  "America/Fortaleza":      "SA Eastern Standard Time",
+                  "America/Recife":         "SA Eastern Standard Time",
+                  "America/Bahia":          "Bahia Standard Time",
+                  "America/Mexico_City":    "Central Standard Time (Mexico)",
+                  "America/Monterrey":      "Central Standard Time (Mexico)",
+                  "America/Tijuana":        "Pacific Standard Time (Mexico)",
+                  "America/Bogota":         "SA Pacific Standard Time",
+                  "America/Lima":           "SA Pacific Standard Time",
+                  "America/Santiago":       "Pacific SA Standard Time",
+                  "America/Buenos_Aires":   "Argentina Standard Time",
+                  "America/Argentina/Buenos_Aires": "Argentina Standard Time",
+                  "America/Caracas":        "Venezuela Standard Time",
+                  "America/La_Paz":         "SA Western Standard Time",
+                  "America/Asuncion":       "Paraguay Standard Time",
+                  "America/Montevideo":     "Montevideo Standard Time",
+                  "America/Guayaquil":      "SA Pacific Standard Time",
+                  "Europe/London":          "GMT Standard Time",
+                  "Europe/Dublin":          "GMT Standard Time",
+                  "Europe/Lisbon":          "GMT Standard Time",
+                  "Atlantic/Reykjavik":     "Greenwich Standard Time",
+                  "Europe/Paris":           "Romance Standard Time",
+                  "Europe/Berlin":          "W. Europe Standard Time",
+                  "Europe/Amsterdam":       "W. Europe Standard Time",
+                  "Europe/Brussels":        "Romance Standard Time",
+                  "Europe/Madrid":          "Romance Standard Time",
+                  "Europe/Rome":            "W. Europe Standard Time",
+                  "Europe/Vienna":          "W. Europe Standard Time",
+                  "Europe/Zurich":          "W. Europe Standard Time",
+                  "Europe/Stockholm":       "W. Europe Standard Time",
+                  "Europe/Oslo":            "W. Europe Standard Time",
+                  "Europe/Copenhagen":      "Romance Standard Time",
+                  "Europe/Helsinki":        "FLE Standard Time",
+                  "Europe/Warsaw":          "Central European Standard Time",
+                  "Europe/Prague":          "Central Europe Standard Time",
+                  "Europe/Budapest":        "Central Europe Standard Time",
+                  "Europe/Bratislava":      "Central Europe Standard Time",
+                  "Europe/Bucharest":       "GTB Standard Time",
+                  "Europe/Athens":          "GTB Standard Time",
+                  "Europe/Sofia":           "FLE Standard Time",
+                  "Europe/Kiev":            "FLE Standard Time",
+                  "Europe/Kyiv":            "FLE Standard Time",
+                  "Europe/Riga":            "FLE Standard Time",
+                  "Europe/Tallinn":         "FLE Standard Time",
+                  "Europe/Vilnius":         "FLE Standard Time",
+                  "Europe/Minsk":           "Belarus Standard Time",
+                  "Europe/Moscow":          "Russia Time Zone 3",
+                  "Europe/Kaliningrad":     "Kaliningrad Standard Time",
+                  "Europe/Istanbul":        "Turkey Standard Time",
+                  "Asia/Dubai":             "Arabian Standard Time",
+                  "Asia/Riyadh":            "Arab Standard Time",
+                  "Asia/Kuwait":            "Arab Standard Time",
+                  "Asia/Baghdad":           "Arabic Standard Time",
+                  "Asia/Tehran":            "Iran Standard Time",
+                  "Asia/Kabul":             "Afghanistan Standard Time",
+                  "Asia/Karachi":           "Pakistan Standard Time",
+                  "Asia/Kolkata":           "India Standard Time",
+                  "Asia/Calcutta":          "India Standard Time",
+                  "Asia/Colombo":           "Sri Lanka Standard Time",
+                  "Asia/Kathmandu":         "Nepal Standard Time",
+                  "Asia/Dhaka":             "Bangladesh Standard Time",
+                  "Asia/Rangoon":           "Myanmar Standard Time",
+                  "Asia/Yangon":            "Myanmar Standard Time",
+                  "Asia/Bangkok":           "SE Asia Standard Time",
+                  "Asia/Ho_Chi_Minh":       "SE Asia Standard Time",
+                  "Asia/Jakarta":           "SE Asia Standard Time",
+                  "Asia/Singapore":         "Singapore Standard Time",
+                  "Asia/Kuala_Lumpur":      "Singapore Standard Time",
+                  "Asia/Manila":            "Singapore Standard Time",
+                  "Asia/Hong_Kong":         "China Standard Time",
+                  "Asia/Shanghai":          "China Standard Time",
+                  "Asia/Taipei":            "Taipei Standard Time",
+                  "Asia/Ulaanbaatar":       "Ulaanbaatar Standard Time",
+                  "Asia/Seoul":             "Korea Standard Time",
+                  "Asia/Tokyo":             "Tokyo Standard Time",
+                  "Asia/Yakutsk":           "Yakutsk Standard Time",
+                  "Asia/Vladivostok":       "Vladivostok Standard Time",
+                  "Asia/Magadan":           "Magadan Standard Time",
+                  "Asia/Kamchatka":         "Kamchatka Standard Time",
+                  "Pacific/Auckland":       "New Zealand Standard Time",
+                  "Pacific/Fiji":           "Fiji Standard Time",
+                  "Pacific/Guam":           "West Pacific Standard Time",
+                  "Pacific/Port_Moresby":   "West Pacific Standard Time",
+                  "Australia/Sydney":       "AUS Eastern Standard Time",
+                  "Australia/Melbourne":    "AUS Eastern Standard Time",
+                  "Australia/Brisbane":     "E. Australia Standard Time",
+                  "Australia/Adelaide":     "Cen. Australia Standard Time",
+                  "Australia/Perth":        "W. Australia Standard Time",
+                  "Australia/Darwin":       "AUS Central Standard Time",
+                  "Africa/Nairobi":         "E. Africa Standard Time",
+                  "Africa/Lagos":           "W. Central Africa Standard Time",
+                  "Africa/Cairo":           "Egypt Standard Time",
+                  "Africa/Johannesburg":    "South Africa Standard Time",
+                  "Africa/Casablanca":      "Morocco Standard Time",
+                  "Africa/Abidjan":         "Greenwich Standard Time",
+                  "UTC":                    "UTC",
+              }
+              result = _map.get(iana_tz)
+              if result:
+                  return result
+              # Fallback: try prefix match
+              for k, v in _map.items():
+                  if iana_tz.startswith(k.split("/")[0] + "/"):
+                      return v
+              return "UTC"
+
           email = os.environ.get("EMAIL", "").strip()
           num_devices = int(os.environ.get("NUM_DEVICES", "1"))
           os_version = os.environ.get("OS_VERSION", "windows-2025")
@@ -277,35 +487,76 @@ jobs:
 
               return None
 
-          def validate_proxy(pinfo):
+          def validate_proxy_and_locale(pinfo, label=""):
+              """
+              Validate proxy via ipinfo.io (primary) with ip-api.com fallback.
+              Returns enriched dict with locale/timezone fields on success,
+              or {'working': False} on failure.
+              """
+              # ── Primary: ipinfo.io ────────────────────────────────────────────
+              locale_data = get_locale_info_from_proxy(pinfo['url'], device_label=label)
+              if locale_data:
+                  cc  = locale_data["country_code"]
+                  tz  = locale_data["timezone"]
+                  win_tz    = tz_to_windows_tz(tz)
+                  win_locale = country_code_to_locale(cc)
+                  win_kb    = country_code_to_keyboard(cc)
+                  print(f"[ProxyCheck][{label}] ACTIVE -> {pinfo.get('server','?')} | "
+                        f"IP={locale_data['real_ip']} | {locale_data['city']}, {locale_data['region']}, {cc} | "
+                        f"TZ={tz} | WinTZ={win_tz} | Locale={win_locale}")
+                  return {
+                      'working': True,
+                      'country_code': cc,
+                      'country_name': locale_data.get('region') or cc,
+                      'ip': locale_data['real_ip'],
+                      'city': locale_data['city'],
+                      'region': locale_data['region'],
+                      'timezone_iana': tz,
+                      'timezone_windows': win_tz,
+                      'windows_locale': win_locale,
+                      'windows_keyboard': win_kb,
+                      **{k: v for k, v in pinfo.items()
+                         if k not in ['working','country_code','country_name','ip',
+                                      'city','region','timezone_iana','timezone_windows',
+                                      'windows_locale','windows_keyboard']}
+                  }
+
+              # ── Fallback: ip-api.com ──────────────────────────────────────────
+              print(f"[ProxyCheck][{label}] ipinfo.io failed, trying ip-api.com fallback...")
               try:
-                  proxies = {'http': pinfo['url'], 'https': pinfo['url']}
-                  resp = requests.get('http://ip-api.com/json/', proxies=proxies, timeout=15)
+                  proxies_cfg = {"http": pinfo['url'], "https": pinfo['url']}
+                  resp = requests.get('http://ip-api.com/json/', proxies=proxies_cfg, timeout=15)
                   data = resp.json()
                   if data.get('status') == 'success':
-                      cc = data.get('countryCode', 'US').lower()
-                      country = pinfo.get('country_name') or data.get('country', 'Unknown')
+                      cc  = data.get('countryCode', 'US').upper()
+                      tz  = data.get('timezone', 'UTC')
+                      win_tz    = tz_to_windows_tz(tz)
+                      win_locale = country_code_to_locale(cc)
+                      win_kb    = country_code_to_keyboard(cc)
+                      print(f"[ProxyCheck][{label}] ACTIVE (fallback) -> "
+                            f"IP={data.get('query','')} | {data.get('city','')}, {data.get('regionName','')}, {cc} | "
+                            f"TZ={tz} | WinTZ={win_tz} | Locale={win_locale}")
                       return {
                           'working': True,
-                          'country_name': country,
                           'country_code': cc,
+                          'country_name': data.get('country', cc),
                           'ip': data.get('query', ''),
-                          **{k: v for k, v in pinfo.items() if k not in ['working', 'country_name', 'country_code', 'ip']}
+                          'city': data.get('city', ''),
+                          'region': data.get('regionName', ''),
+                          'timezone_iana': tz,
+                          'timezone_windows': win_tz,
+                          'windows_locale': win_locale,
+                          'windows_keyboard': win_kb,
+                          **{k: v for k, v in pinfo.items()
+                             if k not in ['working','country_code','country_name','ip',
+                                          'city','region','timezone_iana','timezone_windows',
+                                          'windows_locale','windows_keyboard']}
                       }
               except Exception as e:
-                  print(f"[ProxyCheck] FAILED {pinfo.get('server','?')}: {e}")
-              return {'working': False, **pinfo}
+                  print(f"[ProxyCheck][{label}] ip-api.com fallback FAILED: {e}")
 
-          country_name_to_code = {
-              'united states': 'us', 'united kingdom': 'uk', 'canada': 'ca',
-              'australia': 'au', 'germany': 'de', 'france': 'fr',
-              'brazil': 'br', 'mexico': 'mx', 'spain': 'es',
-              'vietnam': 'vn', 'switzerland': 'ch', 'indonesia': 'id',
-              'italy': 'it', 'netherlands': 'nl', 'poland': 'pl',
-              'usa': 'us', 'uk': 'uk', 'ca': 'ca', 'au': 'au', 'de': 'de',
-              'fr': 'fr', 'br': 'br', 'mx': 'mx', 'es': 'es', 'vn': 'vn',
-              'ch': 'ch', 'id': 'id', 'it': 'it', 'nl': 'nl', 'pl': 'pl'
-          }
+              print(f"[ProxyCheck][{label}] DEAD -> {pinfo.get('server','?')}")
+              return {'working': False, **pinfo}
 
           country_map = {
               "USA": "us", "UK": "uk", "Canada": "ca",
@@ -318,6 +569,9 @@ jobs:
           active_proxies = []
           use_proxy = False
 
+          # ══════════════════════════════════════════════════════════════════════
+          # MANUAL PROXY BLOCK
+          # ══════════════════════════════════════════════════════════════════════
           if is_manual_proxy and not without_proxy:
               parsed = []
               for ps in manual_proxy_strings:
@@ -327,17 +581,13 @@ jobs:
                   else:
                       print(f"[ProxyParse] Could not parse: {ps[:60]}...")
 
-              print(f"[Proxy] Validating {len(parsed)} parsed proxies...")
+              print(f"[Proxy] Validating {len(parsed)} parsed proxies via ipinfo.io...")
               for idx, p in enumerate(parsed):
-                  result = validate_proxy(p)
+                  result = validate_proxy_and_locale(p, label=f"manual-{idx+1}")
                   if result['working']:
-                      if result.get('country_name'):
-                          cname = result['country_name'].lower()
-                          result['country_code'] = country_name_to_code.get(cname, result.get('country_code', 'us'))
                       active_proxies.append(result)
-                      print(f"[Proxy] ACTIVE  -> {result['server']} | {result['country_name']} ({result['country_code']}) | IP: {result['ip']}")
                   else:
-                      print(f"[Proxy] DEAD    -> {result.get('server','?')}")
+                      print(f"[Proxy] DEAD -> {result.get('server','?')}")
                   if idx < len(parsed) - 1:
                       time.sleep(1)
 
@@ -348,12 +598,15 @@ jobs:
               use_proxy = True
               print(f"[Proxy] Manual proxy pool ready: {len(active_proxies)} active for {num_devices} devices.")
 
+          # ══════════════════════════════════════════════════════════════════════
+          # FLOPPYDATA BLOCK
+          # ══════════════════════════════════════════════════════════════════════
           elif floppy_key and not without_proxy:
               use_proxy = True
               country_input = os.environ.get("COUNTRY", "USA")
               mobile = os.environ.get("MOBILE", "false").lower() == "true"
               sticky = os.environ.get("STICKY", "false").lower() == "true"
-              cc = country_map.get(country_input, "us").upper()
+              cc_input = country_map.get(country_input, "us").upper()
               proxy_type = "mobile" if mobile else "residential"
 
               FLOPPY_BASE = "https://client-api.floppy.host"
@@ -372,12 +625,13 @@ jobs:
                   print(f"[FloppyData] ERROR fetching credentials: {e}")
                   exit(1)
 
-              print(f"[FloppyData] Building {num_devices} device proxy configs (type={proxy_type}, country={cc})...")
+              print(f"[FloppyData] Building {num_devices} proxy configs (type={proxy_type}, country={cc_input})...")
+              raw_floppy_proxies = []
               for i in range(1, num_devices + 1):
                   session_id = str(uuid.uuid4())[:8] if sticky else ""
                   params = {
                       "type": proxy_type,
-                      "country": cc,
+                      "country": cc_input,
                       "protocol": "http",
                       "rotation": "0" if sticky else "-1",
                   }
@@ -398,25 +652,106 @@ jobs:
                       print(f"[FloppyData] ERROR building params for device {i}: {e}")
                       exit(1)
 
-                  active_proxies.append({
+                  raw_floppy_proxies.append({
                       'username': floppy_user,
                       'password': floppy_pass,
                       'host': floppy_host,
                       'port': int(floppy_port),
                       'server': f"{floppy_host}:{floppy_port}",
-                      'country_code': cc.lower(),
+                      'country_code': cc_input.lower(),
                       'country_name': country_input,
                       'proxy_type_label': "floppydata",
                       'url': f"http://{floppy_user}:{floppy_pass}@{floppy_host}:{floppy_port}"
                   })
                   time.sleep(0.3)
 
-              print(f"[FloppyData] Proxy pool ready: {len(active_proxies)} entries.")
+              # ── Validate each FloppyData proxy via ipinfo.io ──────────────────
+              print(f"[FloppyData] Validating {len(raw_floppy_proxies)} proxies via ipinfo.io...")
+              for idx, p in enumerate(raw_floppy_proxies):
+                  result = validate_proxy_and_locale(p, label=f"floppy-{idx+1}")
+                  if result['working']:
+                      result['proxy_type_label'] = 'floppydata'
+                      active_proxies.append(result)
+                  else:
+                      print(f"[FloppyData] DEAD proxy at index {idx+1} — skipping.")
+                  if idx < len(raw_floppy_proxies) - 1:
+                      time.sleep(0.5)
 
+              if len(active_proxies) < num_devices:
+                  print(f"[FloppyData] ERROR: Only {len(active_proxies)} active proxies for {num_devices} devices.")
+                  exit(1)
+
+              print(f"[FloppyData] Proxy pool ready: {len(active_proxies)} active entries.")
+
+          # ══════════════════════════════════════════════════════════════════════
+          # SCRAPEOPS BLOCK
+          # ══════════════════════════════════════════════════════════════════════
           elif scrapeops_key and not without_proxy:
               use_proxy = True
-              print("[Proxy] ScrapeOps proxy pool ready.")
+              country_input = os.environ.get("COUNTRY", "USA")
+              mobile = os.environ.get("MOBILE", "false").lower() == "true"
+              sticky = os.environ.get("STICKY", "false").lower() == "true"
+              cc_input = country_map.get(country_input, "us")
 
+              print(f"[ScrapeOps] Building & validating {num_devices} proxy configs (country={cc_input})...")
+              for i in range(1, num_devices + 1):
+                  proxy_user = f"scrapeops.country={cc_input}"
+                  if mobile:
+                      proxy_user += ".mobile=true"
+                  if sticky:
+                      session_id = str(uuid.uuid4())[:8]
+                      proxy_user += f".sticky_session={session_id}"
+
+                  proxy_url = f"http://{proxy_user}:{scrapeops_key}@residential-proxy.scrapeops.io:8181"
+                  pinfo = {
+                      'username': proxy_user,
+                      'password': scrapeops_key,
+                      'host': 'residential-proxy.scrapeops.io',
+                      'port': 8181,
+                      'server': 'residential-proxy.scrapeops.io:8181',
+                      'proxy_type_label': 'scrapeops',
+                      'url': proxy_url
+                  }
+
+                  result = validate_proxy_and_locale(pinfo, label=f"scrapeops-{i}")
+                  if result['working']:
+                      result['proxy_type_label'] = 'scrapeops'
+                      active_proxies.append(result)
+                      print(f"[ScrapeOps] Device {i}: ACTIVE | IP={result['ip']} | "
+                            f"{result['city']}, {result['region']}, {result['country_code']} | "
+                            f"TZ={result['timezone_iana']}")
+                  else:
+                      # ScrapeOps rotating: generate fallback locale from requested country
+                      print(f"[ScrapeOps] Device {i}: Could not verify via ipinfo.io — using requested country ({cc_input}) locale.")
+                      fallback_cc = cc_input.upper()
+                      fallback_tz_map = {
+                          "US": "America/New_York", "GB": "Europe/London", "CA": "America/Toronto",
+                          "AU": "Australia/Sydney", "DE": "Europe/Berlin", "FR": "Europe/Paris",
+                          "BR": "America/Sao_Paulo", "MX": "America/Mexico_City", "ES": "Europe/Madrid",
+                          "VN": "Asia/Ho_Chi_Minh", "CH": "Europe/Zurich", "ID": "Asia/Jakarta",
+                          "IT": "Europe/Rome", "NL": "Europe/Amsterdam", "PL": "Europe/Warsaw",
+                      }
+                      fallback_iana = fallback_tz_map.get(fallback_cc, "UTC")
+                      result = {
+                          'working': True,
+                          'country_code': fallback_cc,
+                          'country_name': country_input,
+                          'ip': 'unknown',
+                          'city': '', 'region': '',
+                          'timezone_iana': fallback_iana,
+                          'timezone_windows': tz_to_windows_tz(fallback_iana),
+                          'windows_locale': country_code_to_locale(fallback_cc),
+                          'windows_keyboard': country_code_to_keyboard(fallback_cc),
+                          **pinfo
+                      }
+                      active_proxies.append(result)
+                  time.sleep(0.5)
+
+              print(f"[ScrapeOps] Proxy pool ready: {len(active_proxies)} entries.")
+
+          # ══════════════════════════════════════════════════════════════════════
+          # ACTION MATRIX
+          # ══════════════════════════════════════════════════════════════════════
           num_clicks_raw = int(os.environ.get("NUM_CLICKS", "0"))
           num_clicks = min(num_clicks_raw, num_devices)
           num_installs = num_devices - num_clicks
@@ -511,75 +846,71 @@ jobs:
           if email:
               for i in range(1, num_devices + 1):
                   action_mode = action_list[i - 1]
-                  action_cap = action_mode.capitalize()
+                  action_cap  = action_mode.capitalize()
 
-                  if is_manual_proxy and active_proxies:
+                  if use_proxy and active_proxies:
                       proxy = active_proxies[i - 1]
-                      cc = proxy['country_code'].upper()
+                      cc    = proxy.get('country_code', 'US').upper()
+                      win_tz     = proxy.get('timezone_windows', 'UTC')
+                      win_locale = proxy.get('windows_locale', 'en-US')
+                      win_kb     = proxy.get('windows_keyboard', '0409:00000409')
+                      iana_tz    = proxy.get('timezone_iana', 'UTC')
+                      real_ip    = proxy.get('ip', 'unknown')
+                      city       = proxy.get('city', '')
+                      region     = proxy.get('region', '')
+                      proxy_type = proxy.get('proxy_type_label', 'unknown')
+
                       device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{cc}"
                       includes.append({
-                          "device": device_name, "email": email, "os": os_version,
-                          "use_proxy": "true",
-                          "proxy_server": proxy['server'],
-                          "proxy_user": proxy['username'],
-                          "proxy_pass": proxy['password'],
-                          "proxy_type": "manual",
-                          "target_url": target_url, "software_type": software_type,
-                          "exe_filter": exe_filter, "action_mode": action_mode
+                          "device":          device_name,
+                          "email":           email,
+                          "os":              os_version,
+                          "use_proxy":       "true",
+                          "proxy_server":    proxy['server'],
+                          "proxy_user":      proxy['username'],
+                          "proxy_pass":      proxy['password'],
+                          "proxy_type":      proxy_type,
+                          "target_url":      target_url,
+                          "software_type":   software_type,
+                          "exe_filter":      exe_filter,
+                          "action_mode":     action_mode,
+                          # ── NEW: locale fields ──────────────────────────────
+                          "proxy_country_code":    cc,
+                          "proxy_city":            city,
+                          "proxy_region":          region,
+                          "proxy_real_ip":         real_ip,
+                          "timezone_windows":      win_tz,
+                          "timezone_iana":         iana_tz,
+                          "windows_locale":        win_locale,
+                          "windows_keyboard":      win_kb,
                       })
-                      print(f"[Device Added] {device_name} | Proxy: {proxy['server']} ({cc}) | Auth: {'YES' if proxy['username'] else 'NO'}")
-
-                  elif floppy_key and active_proxies:
-                      proxy = active_proxies[i - 1]
-                      cc = proxy['country_code'].upper()
-                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{cc}"
-                      includes.append({
-                          "device": device_name, "email": email, "os": os_version,
-                          "use_proxy": "true",
-                          "proxy_server": proxy['server'],
-                          "proxy_user": proxy['username'],
-                          "proxy_pass": proxy['password'],
-                          "proxy_type": "floppydata",
-                          "target_url": target_url, "software_type": software_type,
-                          "exe_filter": exe_filter, "action_mode": action_mode
-                      })
-                      print(f"[Device Added] {device_name} | Proxy: FloppyData ({proxy['server']}) ({cc})")
-
-                  elif use_proxy and scrapeops_key:
-                      country_input = os.environ.get("COUNTRY", "USA")
-                      mobile = os.environ.get("MOBILE", "false").lower() == "true"
-                      sticky = os.environ.get("STICKY", "false").lower() == "true"
-                      cc = country_map.get(country_input, "us")
-                      country_cap = cc.upper()
-                      device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{country_cap}"
-                      proxy_user = f"scrapeops.country={cc}"
-                      if mobile: proxy_user += ".mobile=true"
-                      if sticky:
-                          session_id = str(uuid.uuid4())[:8]
-                          proxy_user += f".sticky_session={session_id}"
-                      includes.append({
-                          "device": device_name, "email": email, "os": os_version,
-                          "use_proxy": "true",
-                          "proxy_server": "residential-proxy.scrapeops.io:8181",
-                          "proxy_user": proxy_user,
-                          "proxy_pass": scrapeops_key,
-                          "proxy_type": "scrapeops",
-                          "target_url": target_url, "software_type": software_type,
-                          "exe_filter": exe_filter, "action_mode": action_mode
-                      })
-                      print(f"[Device Added] {device_name} | Proxy: ScrapeOps ({cc})")
+                      print(f"[Device Added] {device_name} | Proxy={proxy['server']} ({cc}) | "
+                            f"IP={real_ip} | TZ={win_tz} | Locale={win_locale} | KB={win_kb}")
 
                   else:
                       device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-DIRECT"
                       includes.append({
-                          "device": device_name, "email": email, "os": os_version,
-                          "use_proxy": "false",
-                          "proxy_server": "", "proxy_user": "", "proxy_pass": "",
-                          "proxy_type": "none",
-                          "target_url": target_url, "software_type": software_type,
-                          "exe_filter": exe_filter, "action_mode": action_mode
+                          "device":          device_name,
+                          "email":           email,
+                          "os":              os_version,
+                          "use_proxy":       "false",
+                          "proxy_server":    "", "proxy_user": "", "proxy_pass": "",
+                          "proxy_type":      "none",
+                          "target_url":      target_url,
+                          "software_type":   software_type,
+                          "exe_filter":      exe_filter,
+                          "action_mode":     action_mode,
+                          # ── Default US locale for direct (no proxy) ─────────
+                          "proxy_country_code":    "US",
+                          "proxy_city":            "",
+                          "proxy_region":          "",
+                          "proxy_real_ip":         "direct",
+                          "timezone_windows":      "UTC",
+                          "timezone_iana":         "UTC",
+                          "windows_locale":        "en-US",
+                          "windows_keyboard":      "0409:00000409",
                       })
-                      print(f"[Device Added] {device_name} | Proxy: NONE")
+                      print(f"[Device Added] {device_name} | Proxy: NONE | Locale: en-US")
 
           if not includes:
               print("Error: Valid configuration could not be generated. Exiting.")
@@ -735,6 +1066,134 @@ jobs:
           Set-ItemProperty -Path $exemptPath -Name "1" -Value '{"domains":["*"],"file_extension":"exe"}'
           Write-Host "[Registry] Edge EXEs whitelisted from all warnings." -ForegroundColor Green
 
+      # ══════════════════════════════════════════════════════════════════════════
+      # NEW STEP: Apply Locale / Timezone / Language / Keyboard based on proxy IP
+      # ══════════════════════════════════════════════════════════════════════════
+      - name: Apply Proxy-Matched Locale, Timezone & Language
+        shell: pwsh
+        env:
+          TIMEZONE_WINDOWS: ${{ matrix.timezone_windows }}
+          WINDOWS_LOCALE:   ${{ matrix.windows_locale }}
+          WINDOWS_KEYBOARD: ${{ matrix.windows_keyboard }}
+          PROXY_COUNTRY:    ${{ matrix.proxy_country_code }}
+          PROXY_CITY:       ${{ matrix.proxy_city }}
+          PROXY_REGION:     ${{ matrix.proxy_region }}
+          PROXY_REAL_IP:    ${{ matrix.proxy_real_ip }}
+          TIMEZONE_IANA:    ${{ matrix.timezone_iana }}
+        run: |
+          $tz      = $env:TIMEZONE_WINDOWS
+          $locale  = $env:WINDOWS_LOCALE
+          $kb      = $env:WINDOWS_KEYBOARD
+          $country = $env:PROXY_COUNTRY
+          $city    = $env:PROXY_CITY
+          $region  = $env:PROXY_REGION
+          $realIp  = $env:PROXY_REAL_IP
+          $tzIana  = $env:TIMEZONE_IANA
+
+          Write-Host "============================================================" -ForegroundColor Cyan
+          Write-Host " Locale Alignment Engine" -ForegroundColor Cyan
+          Write-Host " Real Proxy IP   : $realIp" -ForegroundColor Gray
+          Write-Host " Location        : $city, $region, $country" -ForegroundColor Gray
+          Write-Host " IANA Timezone   : $tzIana" -ForegroundColor Gray
+          Write-Host " Windows TZ      : $tz" -ForegroundColor Gray
+          Write-Host " Windows Locale  : $locale" -ForegroundColor Gray
+          Write-Host " Keyboard Layout : $kb" -ForegroundColor Gray
+          Write-Host "============================================================" -ForegroundColor Cyan
+
+          # ── 1. Set System Timezone ────────────────────────────────────────────
+          if ($tz -and $tz -ne "UTC") {
+              try {
+                  Set-TimeZone -Id $tz -ErrorAction Stop
+                  Write-Host "[Locale] Timezone set to: $tz" -ForegroundColor Green
+              } catch {
+                  Write-Host "[Locale] WARNING: Could not set timezone '$tz': $_" -ForegroundColor Yellow
+                  try {
+                      tzutil /s "$tz"
+                      Write-Host "[Locale] Timezone set via tzutil: $tz" -ForegroundColor Green
+                  } catch {
+                      Write-Host "[Locale] tzutil also failed. Skipping timezone change." -ForegroundColor Red
+                  }
+              }
+          } else {
+              Write-Host "[Locale] Timezone is UTC or unset — skipping." -ForegroundColor DarkGray
+          }
+
+          # ── 2. Set System Locale (formats: date, time, currency, numbers) ────
+          try {
+              Set-WinSystemLocale -SystemLocale $locale -ErrorAction Stop
+              Write-Host "[Locale] System locale set to: $locale" -ForegroundColor Green
+          } catch {
+              Write-Host "[Locale] WARNING: Set-WinSystemLocale failed for '$locale': $_" -ForegroundColor Yellow
+          }
+
+          # ── 3. Set UI Culture / Display Language ─────────────────────────────
+          try {
+              Set-WinUILanguageOverride -Language $locale -ErrorAction Stop
+              Write-Host "[Locale] UI language override set to: $locale" -ForegroundColor Green
+          } catch {
+              Write-Host "[Locale] WARNING: Set-WinUILanguageOverride failed for '$locale': $_" -ForegroundColor Yellow
+          }
+
+          # ── 4. Set Home Location (GeoID) ─────────────────────────────────────
+          # Map ISO-2 country code → Windows GeoID
+          $geoMap = @{
+              "US"="244"; "GB"="242"; "CA"="39"; "AU"="12"; "DE"="94";
+              "FR"="84"; "BR"="32"; "MX"="166"; "ES"="217"; "VN"="251";
+              "CH"="223"; "ID"="111"; "IT"="118"; "NL"="176"; "PL"="191";
+              "AR"="11"; "CL"="46"; "CO"="51"; "IN"="113"; "JP"="122";
+              "KR"="134"; "CN"="45"; "TW"="237"; "RU"="203"; "TR"="235";
+              "SA"="205"; "AE"="224"; "ZA"="209"; "NG"="178"; "KE"="129";
+              "PH"="185"; "TH"="227"; "MY"="167"; "SG"="215"; "HK"="104";
+              "PT"="193"; "RO"="200"; "HU"="109"; "CZ"="75"; "SK"="214";
+              "UA"="241"; "GR"="98"; "SE"="221"; "NO"="177"; "DK"="61";
+              "FI"="77"; "BE"="21"; "AT"="14"; "NZ"="183"; "IE"="110";
+          }
+          $geoId = $geoMap[$country]
+          if ($geoId) {
+              try {
+                  Set-WinHomeLocation -GeoId ([int]$geoId) -ErrorAction Stop
+                  Write-Host "[Locale] Home location (GeoID) set to: $country ($geoId)" -ForegroundColor Green
+              } catch {
+                  Write-Host "[Locale] WARNING: Set-WinHomeLocation failed: $_" -ForegroundColor Yellow
+              }
+          } else {
+              Write-Host "[Locale] No GeoID mapping found for '$country' — skipping home location." -ForegroundColor DarkGray
+          }
+
+          # ── 5. Set User Language List with Keyboard Layout ───────────────────
+          try {
+              $langList = New-WinUserLanguageList $locale -ErrorAction Stop
+              if ($kb -and $kb -ne "") {
+                  $langList[0].InputMethodTips.Clear()
+                  $langList[0].InputMethodTips.Add($kb)
+              }
+              Set-WinUserLanguageList $langList -Force -ErrorAction Stop
+              Write-Host "[Locale] User language list set: $locale | Keyboard: $kb" -ForegroundColor Green
+          } catch {
+              Write-Host "[Locale] WARNING: Set-WinUserLanguageList failed: $_" -ForegroundColor Yellow
+          }
+
+          # ── 6. Sync system clock via w32tm ────────────────────────────────────
+          try {
+              w32tm /resync /force 2>&1 | Out-Null
+              Write-Host "[Locale] System clock synced via w32tm." -ForegroundColor Green
+          } catch {
+              Write-Host "[Locale] w32tm sync failed (non-critical)." -ForegroundColor DarkGray
+          }
+
+          # ── 7. Write locale metadata to env file (for Edge launch args) ──────
+          $localeEnvPath = "$env:TEMP\proxy_locale.env"
+          @"
+          LOCALE=$locale
+          KEYBOARD=$kb
+          COUNTRY=$country
+          TIMEZONE_WIN=$tz
+          REAL_IP=$realIp
+          "@ | Out-File -FilePath $localeEnvPath -Encoding utf8
+          Write-Host "[Locale] Locale metadata written to: $localeEnvPath" -ForegroundColor DarkGray
+
+          Write-Host "[Locale] ✓ All locale adjustments applied for $country ($locale / $tz)" -ForegroundColor Green
+
       - name: Install and Start Getscreen.me (Windows)
         shell: pwsh
         run: |
@@ -777,6 +1236,10 @@ jobs:
           SOFTWARE_TYPE: ${{ matrix.software_type }}
           EXE_FILTER: ${{ matrix.exe_filter }}
           ACTION_MODE: ${{ matrix.action_mode }}
+          WINDOWS_LOCALE: ${{ matrix.windows_locale }}
+          WINDOWS_KEYBOARD: ${{ matrix.windows_keyboard }}
+          PROXY_COUNTRY_CODE: ${{ matrix.proxy_country_code }}
+          TIMEZONE_WINDOWS: ${{ matrix.timezone_windows }}
         run: |
           $useProxy = $env:USE_PROXY -eq "true"
 
@@ -785,6 +1248,7 @@ jobs:
           Write-Host " Target URL: $env:TARGET_URL" -ForegroundColor Gray
           Write-Host " Category  : $env:SOFTWARE_TYPE" -ForegroundColor Cyan
           Write-Host " Action    : $($env:ACTION_MODE.ToUpper()) PATHWAY ASSIGNED" -ForegroundColor Magenta
+          Write-Host " Locale    : $env:WINDOWS_LOCALE | Country: $env:PROXY_COUNTRY_CODE | TZ: $env:TIMEZONE_WINDOWS" -ForegroundColor DarkCyan
           if ($useProxy) {
               if ($env:PROXY_TYPE -eq "manual") {
                   Write-Host " Mode      : Manual Proxy ($env:PROXY_SERVER)" -ForegroundColor Cyan
@@ -935,19 +1399,12 @@ jobs:
               return dismissed_any
 
           def robust_maximize_opera_window(desktop, software_type, label=""):
-              """
-              Robustly find, maximize and focus the Opera window to cover the complete screen.
-              Tries multiple strategies to ensure full maximization.
-              Returns the found window or None.
-              """
               import ctypes
               found_window = None
 
-              # Step 1: Dismiss interference windows first
               dismiss_interference_windows(desktop, software_type, label=f"{label}-pre-dismiss")
               time.sleep(0.3)
 
-              # Step 2: Find the Opera window
               for attempt in range(1, 6):
                   log_msg("MaximizeOp", f"[{label}] Window search attempt {attempt}/5...")
                   try:
@@ -971,7 +1428,6 @@ jobs:
 
               log_msg("MaximizeOp", f"[{label}] Starting robust maximize sequence...")
 
-              # Strategy 1: set_focus + maximize via pywinauto
               try:
                   found_window.set_focus()
                   time.sleep(0.4)
@@ -981,7 +1437,6 @@ jobs:
               except Exception as e:
                   log_msg("MaximizeOp", f"[{label}] Strategy 1 failed: {e}")
 
-              # Strategy 2: Win+Up then Win+Up (maximize via keyboard shortcut)
               try:
                   found_window.set_focus()
                   time.sleep(0.3)
@@ -993,22 +1448,19 @@ jobs:
               except Exception as e:
                   log_msg("MaximizeOp", f"[{label}] Strategy 2 failed: {e}")
 
-              # Strategy 3: ShowWindow via ctypes with SW_MAXIMIZE (9)
               try:
                   hwnd = found_window.handle
-                  ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_MAXIMIZE = 9
+                  ctypes.windll.user32.ShowWindow(hwnd, 9)
                   time.sleep(0.4)
                   log_msg("MaximizeOp", f"[{label}] Strategy 3 (ctypes SW_MAXIMIZE): Applied.")
               except Exception as e:
                   log_msg("MaximizeOp", f"[{label}] Strategy 3 failed: {e}")
 
-              # Strategy 4: SetWindowPos to cover full screen using screen resolution
               try:
                   user32 = ctypes.windll.user32
-                  sw = user32.GetSystemMetrics(0)  # SM_CXSCREEN
-                  sh = user32.GetSystemMetrics(1)  # SM_CYSCREEN
+                  sw = user32.GetSystemMetrics(0)
+                  sh = user32.GetSystemMetrics(1)
                   hwnd = found_window.handle
-                  # SWP_SHOWWINDOW=0x0040, SWP_FRAMECHANGED=0x0020
                   user32.SetWindowPos(hwnd, -1, 0, 0, sw, sh, 0x0040 | 0x0020)
                   time.sleep(0.3)
                   user32.SetWindowPos(hwnd, -2, 0, 0, sw, sh, 0x0040 | 0x0020)
@@ -1017,7 +1469,6 @@ jobs:
               except Exception as e:
                   log_msg("MaximizeOp", f"[{label}] Strategy 4 failed: {e}")
 
-              # Strategy 5: Final focus + pywinauto maximize + set_focus
               try:
                   found_window.set_focus()
                   time.sleep(0.2)
@@ -1144,7 +1595,6 @@ jobs:
               return result if result else target_window
 
           def click_opera_button(desktop, opera_window, software_type, button_names, label=""):
-              """Robustly find and click a button in the Opera window by name. Falls back to False if not found."""
               try:
                   target = opera_window
                   if target is None or not target.is_visible():
@@ -1160,7 +1610,6 @@ jobs:
                   target.set_focus()
                   time.sleep(0.3)
 
-                  # Strategy 1: Exact title match via descendants filter
                   for name in button_names:
                       btns = target.descendants(control_type="Button", title=name)
                       if btns:
@@ -1171,7 +1620,6 @@ jobs:
                           except Exception as e:
                               log_msg("ButtonClick", f"[{label}] click_input on '{name}' failed: {e}")
 
-                  # Strategy 2: Partial case-insensitive match across all buttons
                   for btn in target.descendants(control_type="Button"):
                       try:
                           txt = btn.window_text()
@@ -1184,7 +1632,6 @@ jobs:
                       except:
                           continue
 
-                  # Strategy 3: Generic descendant text exact match
                   for el in target.descendants():
                       try:
                           txt = el.window_text()
@@ -1202,21 +1649,16 @@ jobs:
                   log_msg("ButtonClick", f"[{label}] Exception during button click: {e}")
                   return False
 
-          # ══════════════════════════════════════════════════════════════════════
-          # OPERA ONE POST-INSTALL SEQUENCE (FULLY REWRITTEN)
-          # ══════════════════════════════════════════════════════════════════════
           def opera_one_post_install_sequence(opera_window, software_type="opera_one"):
               log_msg("PostInstall-OP1", "=== Opera One Post-Install Sequence Starting ===")
               desktop = Desktop(backend="uia")
 
-              # ── STEP 1: Wait 50 seconds after installer executed ──────────────
               log_msg("PostInstall-OP1", "STEP 1: Waiting 50 seconds for Opera One to fully initialize...")
               for s in range(1, 51):
                   log_msg("PostInstall-OP1", f"  Initialization wait: {s}/50 seconds...")
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 1 COMPLETE: 50-second initialization wait finished.")
 
-              # ── STEP 2: Find window, maximize to full screen (robust) ─────────
               log_msg("PostInstall-OP1", "STEP 2: Locating Opera One window and applying full-screen maximize...")
               desktop = Desktop(backend="uia")
               opera_window = robust_maximize_opera_window(desktop, software_type, label="step2-fullscreen")
@@ -1225,21 +1667,18 @@ jobs:
               else:
                   log_msg("PostInstall-OP1", f"STEP 2 COMPLETE: Opera window maximized -> '{opera_window.window_text()}'")
 
-              # ── STEP 3: Wait 5 seconds ────────────────────────────────────────
               log_msg("PostInstall-OP1", "STEP 3: Waiting 5 seconds after maximize...")
               for s in range(1, 6):
                   log_msg("PostInstall-OP1", f"  Post-maximize wait: {s}/5 seconds...")
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 3 COMPLETE.")
 
-              # ── STEP 4: Wait 5 seconds (additional settle time) ───────────────
               log_msg("PostInstall-OP1", "STEP 4: Additional 5-second settle wait...")
               for s in range(1, 6):
                   log_msg("PostInstall-OP1", f"  Settle wait: {s}/5 seconds...")
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 4 COMPLETE.")
 
-              # ── STEP 5: 1 mouse click on center of screen ─────────────────────
               sw, sh = pyautogui.size()
               cx, cy = sw // 2, sh // 2
               log_msg("PostInstall-OP1", f"STEP 5: Clicking center of screen at ({cx}, {cy}) using mouse...")
@@ -1253,15 +1692,13 @@ jobs:
               except Exception as e:
                   log_msg("PostInstall-OP1", f"STEP 5 ERROR: Mouse click failed: {e}")
 
-              # ── STEP 6: Wait 5 seconds ────────────────────────────────────────
               log_msg("PostInstall-OP1", "STEP 6: Waiting 5 seconds after center click...")
               for s in range(1, 6):
                   log_msg("PostInstall-OP1", f"  Post-click wait: {s}/5 seconds...")
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 6 COMPLETE.")
 
-              # ── STEP 7: Click "Next" 6 times (2s delay each) ──────────────────
-              log_msg("PostInstall-OP1", "STEP 7: Detecting and clicking 'Next' button 6 times (2 second delay between each)...")
+              log_msg("PostInstall-OP1", "STEP 7: Detecting and clicking 'Next' button 6 times (2 second delay each)...")
               for i in range(1, 7):
                   desktop = Desktop(backend="uia")
                   opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"step7-NEXT-{i}")
@@ -1283,7 +1720,6 @@ jobs:
                   time.sleep(2)
               log_msg("PostInstall-OP1", "STEP 7 COMPLETE: All 6 Next clicks attempted.")
 
-              # ── STEP 7b: Click "Done" (appears in same location after 6th Next) ──
               log_msg("PostInstall-OP1", "STEP 7b: Detecting and clicking 'Done' button...")
               desktop = Desktop(backend="uia")
               opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label="step7b-DONE")
@@ -1301,28 +1737,24 @@ jobs:
                   except Exception as e2:
                       log_msg("PostInstall-OP1", f"  Fallback click failed: {e2}")
 
-              # ── STEP 8: Wait 5 seconds ────────────────────────────────────────
               log_msg("PostInstall-OP1", "STEP 8: Waiting 5 seconds after Done click...")
               for s in range(1, 6):
                   log_msg("PostInstall-OP1", f"  Post-Done wait: {s}/5 seconds...")
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 8 COMPLETE.")
 
-              # ── STEP 9: Press ENTER ───────────────────────────────────────────
               log_msg("PostInstall-OP1", "STEP 9: Pressing ENTER key...")
               desktop = Desktop(backend="uia")
               opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label="step9-ENTER")
               send_keys('{ENTER}')
               log_msg("PostInstall-OP1", "STEP 9 COMPLETE: ENTER key pressed.")
 
-              # ── STEP 10: Wait 5 seconds ───────────────────────────────────────
               log_msg("PostInstall-OP1", "STEP 10: Waiting 5 seconds after ENTER...")
               for s in range(1, 6):
                   log_msg("PostInstall-OP1", f"  Post-ENTER wait: {s}/5 seconds...")
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 10 COMPLETE.")
 
-              # ── STEP 11: Detect and click Submit button ───────────────────────
               log_msg("PostInstall-OP1", "STEP 11: Detecting and clicking 'Submit' button...")
               desktop = Desktop(backend="uia")
               opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label="step11-SUBMIT")
@@ -1340,22 +1772,19 @@ jobs:
                   except Exception as e2:
                       log_msg("PostInstall-OP1", f"  Fallback click failed: {e2}")
 
-              # ── STEP 12: Wait 5 seconds after Submit ──────────────────────────
               log_msg("PostInstall-OP1", "STEP 12: Waiting 5 seconds after Submit click...")
               for s in range(1, 6):
                   log_msg("PostInstall-OP1", f"  Post-Submit wait: {s}/5 seconds...")
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 12 COMPLETE.")
 
-              # ── STEP 13: TAB CYCLE — 8 TABs → 18 TABs, Ctrl+T before & after, 5s waits ──
               log_msg("PostInstall-OP1", "STEP 13: Starting TAB cycle sequence (8 TABs → 18 TABs)...")
-              tab_sequence = list(range(8, 19))  # [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+              tab_sequence = list(range(8, 19))
               log_msg("PostInstall-OP1", f"  TAB sequence plan: {tab_sequence}")
 
               for cycle_idx, tab_count in enumerate(tab_sequence):
                   log_msg("PostInstall-OP1", f"--- TAB CYCLE {cycle_idx + 1}/{len(tab_sequence)}: {tab_count} TAB presses ---")
 
-                  # Ctrl+T before tab presses
                   desktop = Desktop(backend="uia")
                   opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-pre-CtrlT")
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pressing Ctrl+T (before TABs)...")
@@ -1366,7 +1795,6 @@ jobs:
                       time.sleep(1)
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pre-TAB wait complete.")
 
-                  # Press TAB key tab_count times with 1s delay between each
                   log_msg("PostInstall-OP1", f"  Pressing TAB key {tab_count} times (1 second delay between each)...")
                   for i in range(1, tab_count + 1):
                       desktop = Desktop(backend="uia")
@@ -1376,20 +1804,17 @@ jobs:
                       log_msg("PostInstall-OP1", f"    TAB {i}/{tab_count} sent. Waiting 1 second...")
                       time.sleep(1)
 
-                  # Press ENTER after TAB sequence
                   desktop = Desktop(backend="uia")
                   opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-ENTER")
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pressing ENTER after {tab_count} TABs...")
                   send_keys('{ENTER}')
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: ENTER sent.")
 
-                  # Wait 5 seconds after ENTER
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Waiting 5 seconds after ENTER...")
                   for s in range(1, 6):
                       log_msg("PostInstall-OP1", f"    Post-ENTER wait: {s}/5 seconds...")
                       time.sleep(1)
 
-                  # Ctrl+T after tab presses
                   desktop = Desktop(backend="uia")
                   opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-post-CtrlT")
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pressing Ctrl+T (after TABs)...")
@@ -1561,7 +1986,6 @@ jobs:
               smart_link_interstitial_done = False
               smart_link_interstitial_time = 0
 
-              # Opera One post-install uses 50s threshold (changed from 40s)
               opera_one_installer_executed_time = None
               opera_one_post_install_done = False
 
@@ -1613,7 +2037,6 @@ jobs:
                           download_windows_closed = True
                           edge_window = None
 
-                      # ── Opera One post-install (50s from installer sentinel) ──
                       if action_mode == "install" and not opera_one_post_install_done:
                           is_one = (software_type == "opera_one")
                           is_dynamic = software_type in ["ad_mvn", "dynamic_opera", "opera_smart_link"]
@@ -1630,7 +2053,6 @@ jobs:
                                       opera_one_post_install_sequence(opera_window, software_type=software_type)
                                       opera_one_post_install_done = True
 
-                      # ── Opera GX post-install (40s from installer sentinel) ──
                       if action_mode == "install" and not opera_gx_post_install_done:
                           is_gx = (software_type == "opera_gx")
                           is_dynamic = software_type in ["ad_mvn", "dynamic_opera", "opera_smart_link"]
@@ -1647,7 +2069,6 @@ jobs:
                                       opera_gx_post_install_sequence(opera_window)
                                       opera_gx_post_install_done = True
 
-                      # ── AVG post-install (60s from installer sentinel) ──
                       if software_type == "avg" and action_mode == "install" and not avg_post_install_done:
                           if avg_installer_executed_time is None and os.path.exists(installer_executed_sentinel):
                               avg_installer_executed_time = time.time()
@@ -1657,7 +2078,6 @@ jobs:
                               avg_post_install_sequence(avg_window)
                               avg_post_install_done = True
 
-                      # A. Proxy Authentication dialog
                       if use_proxy and (edge_window or opera_window or avg_window):
                           for w in [edge_window, opera_window, avg_window]:
                               if w:
@@ -1682,7 +2102,6 @@ jobs:
                                       except Exception as e:
                                           log_msg("Proxy", f"Auth injection failed: {e}")
 
-                      # Cookie Handling
                       if edge_window:
                           for cookie_btn in ["Accept all", "Accepter tout", "Tout accepter", "Accept Cookies", "Allow all", "Accept selection"]:
                               btns = edge_window.descendants(control_type="Button", title=cookie_btn)
@@ -1693,7 +2112,6 @@ jobs:
                                       time.sleep(1)
                                   except: pass
 
-                      # Smart Link Interstitial
                       if edge_window and software_type == "opera_smart_link":
                           elapsed = time.time() - proxy_auth_time
                           if not smart_link_interstitial_done:
@@ -1711,7 +2129,6 @@ jobs:
                                   smart_link_interstitial_done = True
                                   smart_link_interstitial_time = time.time()
 
-                      # Skip logic for Click-Only mode
                       if action_mode == "click":
                           if software_type == "opera_smart_link":
                               if not smart_link_interstitial_done:
@@ -1723,7 +2140,6 @@ jobs:
                           time.sleep(1)
                           continue
 
-                      # Edge Download Protection
                       if edge_window and action_mode == "install":
                           keep_btns = edge_window.descendants(control_type="Button", title="Keep")
                           if keep_btns:
@@ -1738,7 +2154,6 @@ jobs:
                               keep_anyway[0].click_input()
                               time.sleep(0.5)
 
-                      # Interstitial & Final Download Auto-Clicker
                       can_click_download = True
                       if software_type == "opera_smart_link":
                           if not smart_link_interstitial_done or (time.time() - smart_link_interstitial_time < 15):
@@ -1778,7 +2193,6 @@ jobs:
                                                   except Exception as e:
                                                       log_msg("Download", f"Failed to click link: {e}")
 
-                      # AVG Download Trigger
                       if edge_window and action_mode == "install" and software_type == "avg":
                           elapsed = time.time() - proxy_auth_time
                           if not avg_download_clicked and elapsed > 20:
@@ -1799,7 +2213,6 @@ jobs:
                                   log_msg("AVG", f"Keyboard sequence error: {e}")
                               avg_download_clicked = True
 
-                      # Browser Extensions Handling
                       if edge_window and action_mode == "install":
                           add_ext_btns = edge_window.descendants(control_type="Button", title="Add extension")
                           if add_ext_btns:
@@ -1825,7 +2238,6 @@ jobs:
                                       except Exception as e:
                                           log_msg("Extension", f"Failed to click '{btn_name}': {e}")
 
-                      # Ctrl+J to open downloads flyout
                       can_ctrl_j = True
                       if software_type == "avg" and not avg_download_clicked:
                           can_ctrl_j = False
@@ -2025,12 +2437,21 @@ jobs:
               $edgeExe = "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
           }
 
+          # ── Build locale-aware Edge accept-language header ────────────────────
+          $localeTag = $env:WINDOWS_LOCALE
+          if (-not $localeTag) { $localeTag = "en-US" }
+          $langCode = $localeTag.ToLower()      # e.g. "pt-br", "de-de"
+          $langPrimary = $langCode.Split("-")[0] # e.g. "pt", "de"
+          $acceptLang = "$langCode,$langPrimary;q=0.9,en;q=0.8"
+
           $edgeArgs = @(
               "--no-first-run",
               "--no-default-browser-check",
               "--disable-sync",
               "--safebrowsing-disable-download-protection",
-              "--disable-features=msSmartScreenProtection,SmartScreenPuaEnabled"
+              "--disable-features=msSmartScreenProtection,SmartScreenPuaEnabled",
+              "--lang=$langCode",
+              "--accept-lang=$acceptLang"
           )
 
           if ($useProxy) {
@@ -2045,6 +2466,7 @@ jobs:
           }
           $edgeArgs += "`"$env:TARGET_URL`""
 
+          Write-Host "[System] Launching Edge with locale: $langCode | Accept-Language: $acceptLang" -ForegroundColor DarkCyan
           Write-Host "[System] Launching Edge browser context..." -ForegroundColor Cyan
           Write-Host "[System] Command: msedge.exe $(($edgeArgs | ForEach-Object { $_ -replace '"','\"' }) -join ' ')" -ForegroundColor DarkGray
           Start-Process -FilePath $edgeExe -ArgumentList ($edgeArgs -join " ")
