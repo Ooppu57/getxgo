@@ -20,12 +20,12 @@ on:
         description: 'Getscreen.me Account Email'
         required: true
         type: string
-        default: 'techx@justzeus.com'
+        default: 'techx@highmail.site'
       gologin_email:
         description: 'GoLogin Account Email'
         required: true
         type: string
-        default: 'ok4@mnb.net'
+        default: 'dc1@mnb.net'
       num_devices:
         description: 'Number of Devices to Spawn'
         required: true
