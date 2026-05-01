@@ -64,7 +64,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera - Techx'
+        default: 'Opera - Mahal'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -79,7 +79,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '0e004f96-37d2-4043-aa10-35258dd7825a'
+        default: 'ca8d8179-d8a7-426a-9e94-73584dfb730a'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -110,7 +110,7 @@ on:
         description: 'Use Mobile Proxies'
         required: true
         type: boolean
-        default: false
+        default: true
       sticky_sessions:
         description: 'Enable Unique Sticky Sessions'
         required: true
