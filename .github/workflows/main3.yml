@@ -32,7 +32,7 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '5'
+        default: '10'
       num_clicks:
         description: 'Number of Clicks'
         required: true
@@ -49,7 +49,7 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '2'
+        default: '4'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -74,7 +74,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera - Techx'
+        default: 'Opera - James'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -89,7 +89,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '5c97a76e-baa8-449d-817f-843a7ddf5b8d'
+        default: '8815e474-bd0e-43de-a46b-f25bd4cfeee5'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -170,10 +170,6 @@ jobs:
           IPINFO_TOKEN = ""   # leave blank to use free tier (50k/mo)
 
           def get_locale_info_from_proxy(proxy_url, device_label=""):
-              """
-              Query ipinfo.io through the proxy to get real IP geolocation,
-              timezone, and country info. Returns a dict with locale fields.
-              """
               try:
                   proxies_cfg = {"http": proxy_url, "https": proxy_url}
                   url = "https://ipinfo.io/json"
@@ -184,7 +180,7 @@ jobs:
                   ip        = data.get("ip", "")
                   city      = data.get("city", "")
                   region    = data.get("region", "")
-                  country   = data.get("country", "US")   # ISO-2
+                  country   = data.get("country", "US")
                   tz        = data.get("timezone", "UTC")
                   org       = data.get("org", "")
                   loc       = data.get("loc", "0,0")
@@ -200,10 +196,6 @@ jobs:
                   return None
 
           def country_code_to_locale(cc):
-              """
-              Map ISO-2 country code → Windows locale tag (used for
-              Set-WinUILanguageOverride / Set-WinSystemLocale etc.)
-              """
               _map = {
                   "US": "en-US", "GB": "en-GB", "CA": "en-CA", "AU": "en-AU",
                   "DE": "de-DE", "FR": "fr-FR", "BR": "pt-BR", "MX": "es-MX",
@@ -225,17 +217,14 @@ jobs:
               return _map.get(cc.upper(), "en-US")
 
           def country_code_to_keyboard(cc):
-              """
-              Map ISO-2 country code → Windows keyboard input method ID
-              (used with Set-WinUserLanguageList).
-              """
               _map = {
                   "US": "0409:00000409", "GB": "0809:00000809", "CA": "1009:00000409",
                   "AU": "0C09:00000409", "DE": "0407:00000407", "FR": "040C:0000040C",
                   "BR": "0416:00000416", "MX": "080A:0000080A", "ES": "0C0A:0000080A",
                   "VN": "042A:0000042A", "CH": "0807:00000807", "ID": "0421:00000409",
                   "IT": "0410:00000410", "NL": "0413:00020409", "PL": "0415:00000415",
-                  "AR": "2C0A:0000080A", "IN": "0409:00000409", "JP": "0411:{03B5835F-F03C-411B-9CE2-AA23E1171E36}{A76C93D9-5523-4E90-AAFA-4DB112F9AC76}",
+                  "AR": "2C0A:0000080A", "IN": "0409:00000409",
+                  "JP": "0411:{03B5835F-F03C-411B-9CE2-AA23E1171E36}{A76C93D9-5523-4E90-AAFA-4DB112F9AC76}",
                   "KR": "0412:{A028AE76-01B1-46C2-99C4-ACD9858AE02F}{B5FE1F02-D5F2-4445-9C03-C568F23C99A1}",
                   "RU": "0419:00000419", "TR": "041F:0000041F",
                   "SA": "0401:00000401", "AE": "3801:00000401",
@@ -250,10 +239,6 @@ jobs:
               return _map.get(cc.upper(), "0409:00000409")
 
           def tz_to_windows_tz(iana_tz):
-              """
-              Convert IANA timezone (e.g. 'America/New_York') to Windows
-              timezone name (e.g. 'Eastern Standard Time').
-              """
               _map = {
                   "America/New_York":       "Eastern Standard Time",
                   "America/Chicago":        "Central Standard Time",
@@ -370,7 +355,6 @@ jobs:
               result = _map.get(iana_tz)
               if result:
                   return result
-              # Fallback: try prefix match
               for k, v in _map.items():
                   if iana_tz.startswith(k.split("/")[0] + "/"):
                       return v
@@ -388,7 +372,6 @@ jobs:
           scrapeops_key = ""
           floppy_key = ""
 
-          # ── Proxy type detection ──────────────────────────────────────────────
           SCRAPEOPS_KEY_RE = re.compile(
               r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
           FLOPPY_KEY_RE = re.compile(r'^[A-Za-z0-9_]{30,80}$')
@@ -488,12 +471,6 @@ jobs:
               return None
 
           def validate_proxy_and_locale(pinfo, label=""):
-              """
-              Validate proxy via ipinfo.io (primary) with ip-api.com fallback.
-              Returns enriched dict with locale/timezone fields on success,
-              or {'working': False} on failure.
-              """
-              # ── Primary: ipinfo.io ────────────────────────────────────────────
               locale_data = get_locale_info_from_proxy(pinfo['url'], device_label=label)
               if locale_data:
                   cc  = locale_data["country_code"]
@@ -521,7 +498,6 @@ jobs:
                                       'windows_locale','windows_keyboard']}
                   }
 
-              # ── Fallback: ip-api.com ──────────────────────────────────────────
               print(f"[ProxyCheck][{label}] ipinfo.io failed, trying ip-api.com fallback...")
               try:
                   proxies_cfg = {"http": pinfo['url'], "https": pinfo['url']}
@@ -585,7 +561,7 @@ jobs:
               for idx, p in enumerate(parsed):
                   result = validate_proxy_and_locale(p, label=f"manual-{idx+1}")
                   if result['working']:
-                      result['proxy_type_label'] = 'manual'  # <-- FIX: Explicitly tag as manual
+                      result['proxy_type_label'] = 'manual'
                       active_proxies.append(result)
                   else:
                       print(f"[Proxy] DEAD -> {result.get('server','?')}")
@@ -666,7 +642,6 @@ jobs:
                   })
                   time.sleep(0.3)
 
-              # ── Validate each FloppyData proxy via ipinfo.io ──────────────────
               print(f"[FloppyData] Validating {len(raw_floppy_proxies)} proxies via ipinfo.io...")
               for idx, p in enumerate(raw_floppy_proxies):
                   result = validate_proxy_and_locale(p, label=f"floppy-{idx+1}")
@@ -722,7 +697,6 @@ jobs:
                             f"{result['city']}, {result['region']}, {result['country_code']} | "
                             f"TZ={result['timezone_iana']}")
                   else:
-                      # ScrapeOps rotating: generate fallback locale from requested country
                       print(f"[ScrapeOps] Device {i}: Could not verify via ipinfo.io — using requested country ({cc_input}) locale.")
                       fallback_cc = cc_input.upper()
                       fallback_tz_map = {
@@ -861,6 +835,10 @@ jobs:
                       region     = proxy.get('region', '')
                       proxy_type = proxy.get('proxy_type_label', 'unknown')
 
+                      # ── KEY FIX: always carry username/password into matrix ──
+                      proxy_user = proxy.get('username', '')
+                      proxy_pass = proxy.get('password', '')
+
                       device_name = f"{i}-{short_os_tag}-{short_sw_tag}-{action_cap}-{cc}"
                       includes.append({
                           "device":          device_name,
@@ -868,14 +846,13 @@ jobs:
                           "os":              os_version,
                           "use_proxy":       "true",
                           "proxy_server":    proxy['server'],
-                          "proxy_user":      proxy['username'],
-                          "proxy_pass":      proxy['password'],
+                          "proxy_user":      proxy_user,
+                          "proxy_pass":      proxy_pass,
                           "proxy_type":      proxy_type,
                           "target_url":      target_url,
                           "software_type":   software_type,
                           "exe_filter":      exe_filter,
                           "action_mode":     action_mode,
-                          # ── NEW: locale fields ──────────────────────────────
                           "proxy_country_code":    cc,
                           "proxy_city":            city,
                           "proxy_region":          region,
@@ -886,6 +863,7 @@ jobs:
                           "windows_keyboard":      win_kb,
                       })
                       print(f"[Device Added] {device_name} | Proxy={proxy['server']} ({cc}) | "
+                            f"Type={proxy_type} | User={proxy_user[:20]}... | "
                             f"IP={real_ip} | TZ={win_tz} | Locale={win_locale} | KB={win_kb}")
 
                   else:
@@ -901,7 +879,6 @@ jobs:
                           "software_type":   software_type,
                           "exe_filter":      exe_filter,
                           "action_mode":     action_mode,
-                          # ── Default US locale for direct (no proxy) ─────────
                           "proxy_country_code":    "US",
                           "proxy_city":            "",
                           "proxy_region":          "",
@@ -1067,9 +1044,6 @@ jobs:
           Set-ItemProperty -Path $exemptPath -Name "1" -Value '{"domains":["*"],"file_extension":"exe"}'
           Write-Host "[Registry] Edge EXEs whitelisted from all warnings." -ForegroundColor Green
 
-      # ══════════════════════════════════════════════════════════════════════════
-      # NEW STEP: Apply Locale / Timezone / Language / Keyboard based on proxy IP
-      # ══════════════════════════════════════════════════════════════════════════
       - name: Apply Proxy-Matched Locale, Timezone & Language
         shell: pwsh
         env:
@@ -1101,7 +1075,6 @@ jobs:
           Write-Host " Keyboard Layout : $kb" -ForegroundColor Gray
           Write-Host "============================================================" -ForegroundColor Cyan
 
-          # ── 1. Set System Timezone ────────────────────────────────────────────
           if ($tz -and $tz -ne "UTC") {
               try {
                   Set-TimeZone -Id $tz -ErrorAction Stop
@@ -1119,7 +1092,6 @@ jobs:
               Write-Host "[Locale] Timezone is UTC or unset — skipping." -ForegroundColor DarkGray
           }
 
-          # ── 2. Set System Locale (formats: date, time, currency, numbers) ────
           try {
               Set-WinSystemLocale -SystemLocale $locale -ErrorAction Stop
               Write-Host "[Locale] System locale set to: $locale" -ForegroundColor Green
@@ -1127,7 +1099,6 @@ jobs:
               Write-Host "[Locale] WARNING: Set-WinSystemLocale failed for '$locale': $_" -ForegroundColor Yellow
           }
 
-          # ── 3. Set UI Culture / Display Language ─────────────────────────────
           try {
               Set-WinUILanguageOverride -Language $locale -ErrorAction Stop
               Write-Host "[Locale] UI language override set to: $locale" -ForegroundColor Green
@@ -1135,8 +1106,6 @@ jobs:
               Write-Host "[Locale] WARNING: Set-WinUILanguageOverride failed for '$locale': $_" -ForegroundColor Yellow
           }
 
-          # ── 4. Set Home Location (GeoID) ─────────────────────────────────────
-          # Map ISO-2 country code → Windows GeoID
           $geoMap = @{
               "US"="244"; "GB"="242"; "CA"="39"; "AU"="12"; "DE"="94";
               "FR"="84"; "BR"="32"; "MX"="166"; "ES"="217"; "VN"="251";
@@ -1161,7 +1130,6 @@ jobs:
               Write-Host "[Locale] No GeoID mapping found for '$country' — skipping home location." -ForegroundColor DarkGray
           }
 
-          # ── 5. Set User Language List with Keyboard Layout ───────────────────
           try {
               $langList = New-WinUserLanguageList $locale -ErrorAction Stop
               if ($kb -and $kb -ne "") {
@@ -1174,7 +1142,6 @@ jobs:
               Write-Host "[Locale] WARNING: Set-WinUserLanguageList failed: $_" -ForegroundColor Yellow
           }
 
-          # ── 6. Sync system clock via w32tm ────────────────────────────────────
           try {
               w32tm /resync /force 2>&1 | Out-Null
               Write-Host "[Locale] System clock synced via w32tm." -ForegroundColor Green
@@ -1182,7 +1149,6 @@ jobs:
               Write-Host "[Locale] w32tm sync failed (non-critical)." -ForegroundColor DarkGray
           }
 
-          # ── 7. Write locale metadata to env file (for Edge launch args) ──────
           $localeEnvPath = "$env:TEMP\proxy_locale.env"
           @"
           LOCALE=$locale
@@ -1192,7 +1158,6 @@ jobs:
           REAL_IP=$realIp
           "@ | Out-File -FilePath $localeEnvPath -Encoding utf8
           Write-Host "[Locale] Locale metadata written to: $localeEnvPath" -ForegroundColor DarkGray
-
           Write-Host "[Locale] ✓ All locale adjustments applied for $country ($locale / $tz)" -ForegroundColor Green
 
       - name: Install and Start Getscreen.me (Windows)
@@ -1242,7 +1207,11 @@ jobs:
           PROXY_COUNTRY_CODE: ${{ matrix.proxy_country_code }}
           TIMEZONE_WINDOWS: ${{ matrix.timezone_windows }}
         run: |
-          $useProxy = $env:USE_PROXY -eq "true"
+          $useProxy    = $env:USE_PROXY -eq "true"
+          $proxyType   = $env:PROXY_TYPE
+          $proxyUser   = $env:PROXY_USER
+          $proxyPass   = $env:PROXY_PASS
+          $proxyServer = $env:PROXY_SERVER
 
           Write-Host "============================================================" -ForegroundColor Cyan
           Write-Host " Zero-Touch Downloader & Installer Active" -ForegroundColor Cyan
@@ -1251,18 +1220,18 @@ jobs:
           Write-Host " Action    : $($env:ACTION_MODE.ToUpper()) PATHWAY ASSIGNED" -ForegroundColor Magenta
           Write-Host " Locale    : $env:WINDOWS_LOCALE | Country: $env:PROXY_COUNTRY_CODE | TZ: $env:TIMEZONE_WINDOWS" -ForegroundColor DarkCyan
 
-          # ── ROBUST PROXY MODE DETECTION ─────────────────────────────────────
+          # ── ROBUST PROXY MODE DETECTION ──────────────────────────────────────
           if ($useProxy) {
-              $proxyType = $env:PROXY_TYPE
               if ($proxyType -eq "manual") {
-                  $proxyServer = $env:PROXY_SERVER
                   Write-Host " Mode      : Manual Proxy ($proxyServer)" -ForegroundColor Cyan
+                  Write-Host " Auth User : $($proxyUser.Substring(0, [Math]::Min(20, $proxyUser.Length)))..." -ForegroundColor DarkCyan
               } elseif ($proxyType -eq "floppydata") {
-                  $proxyServer = $env:PROXY_SERVER
                   Write-Host " Mode      : FloppyData Proxy ($proxyServer)" -ForegroundColor Cyan
+                  Write-Host " Auth User : $($proxyUser.Substring(0, [Math]::Min(20, $proxyUser.Length)))..." -ForegroundColor DarkCyan
               } elseif ($proxyType -eq "scrapeops") {
                   $proxyServer = "residential-proxy.scrapeops.io:8181"
                   Write-Host " Mode      : ScrapeOps Proxy ($proxyServer)" -ForegroundColor Cyan
+                  Write-Host " Auth User : $($proxyUser.Substring(0, [Math]::Min(30, $proxyUser.Length)))..." -ForegroundColor DarkCyan
               } else {
                   Write-Host " Mode      : ERROR — Unrecognized proxy type '$proxyType'. Aborting." -ForegroundColor Red
                   exit 1
@@ -1275,8 +1244,23 @@ jobs:
           Write-Host "[Dependencies] Installing python UIA modules (pywinauto, pyautogui, etc)..." -ForegroundColor DarkGray
           python -m pip install pywinauto pyautogui pygetwindow keyboard --quiet
 
+          # ══════════════════════════════════════════════════════════════════════
+          # Write proxy credentials to a temp file so Python reads them safely
+          # (avoids any shell quoting / escaping issues with long ScrapeOps usernames)
+          # ══════════════════════════════════════════════════════════════════════
+          $credFile = "$env:TEMP\proxy_creds.json"
+          $credObj  = @{
+              proxy_user   = $proxyUser
+              proxy_pass   = $proxyPass
+              proxy_server = $proxyServer
+              proxy_type   = $proxyType
+              use_proxy    = $useProxy
+          }
+          $credObj | ConvertTo-Json -Depth 2 | Out-File -FilePath $credFile -Encoding utf8
+          Write-Host "[Proxy] Credentials written to secure temp file: $credFile" -ForegroundColor DarkGray
+
           $handlerPy = @'
-          import time, sys, subprocess, random, os, tempfile, ctypes
+          import time, sys, subprocess, random, os, tempfile, ctypes, json
           from pywinauto import Desktop
           import pyautogui
           from pywinauto.keyboard import send_keys
@@ -1284,6 +1268,26 @@ jobs:
           def log_msg(tag, msg):
               t = time.strftime('%H:%M:%S')
               print(f"[{t}][{tag}] {msg}", flush=True)
+
+          # ── Load proxy credentials from the JSON file written by PowerShell ──
+          # This is the robust approach: avoids all shell quoting/escaping issues
+          # that affect ScrapeOps (long dotted username) and FloppyData (token-style user)
+          _CRED_FILE = os.path.join(tempfile.gettempdir(), "proxy_creds.json")
+          _CREDS = {}
+          try:
+              with open(_CRED_FILE, "r", encoding="utf-8") as _f:
+                  _CREDS = json.load(_f)
+              log_msg("ProxyCreds", f"Credentials loaded from file. Type={_CREDS.get('proxy_type','?')} | "
+                      f"User={str(_CREDS.get('proxy_user',''))[:25]}... | "
+                      f"Server={_CREDS.get('proxy_server','?')}")
+          except Exception as _e:
+              log_msg("ProxyCreds", f"WARNING: Could not load credential file: {_e}")
+
+          PROXY_USER   = _CREDS.get("proxy_user",   "")
+          PROXY_PASS   = _CREDS.get("proxy_pass",   "")
+          PROXY_SERVER = _CREDS.get("proxy_server", "")
+          PROXY_TYPE   = _CREDS.get("proxy_type",   "none")
+          USE_PROXY    = str(_CREDS.get("use_proxy", False)).lower() in ("true", "1", "yes")
 
           DOWNLOAD_DONE_TITLES = [
               "Thanks for downloading Opera", "Thanks for downloadin",
@@ -1320,6 +1324,16 @@ jobs:
               "how do you want to open",
               "administrator: c:\\",
               "user account control",
+          ]
+
+          # ── Known proxy auth dialog titles (covers Edge, Chrome, system dialogs) ──
+          PROXY_AUTH_DIALOG_TITLES = [
+              "Sign in",
+              "Authentication Required",
+              "Proxy Authentication Required",
+              "Connect to",
+              "Enter credentials",
+              "Network Authentication",
           ]
 
           def _is_download_done_window(text):
@@ -1409,7 +1423,6 @@ jobs:
               return dismissed_any
 
           def robust_maximize_opera_window(desktop, software_type, label=""):
-              import ctypes
               found_window = None
 
               dismiss_interference_windows(desktop, software_type, label=f"{label}-pre-dismiss")
@@ -1658,6 +1671,138 @@ jobs:
               except Exception as e:
                   log_msg("ButtonClick", f"[{label}] Exception during button click: {e}")
                   return False
+
+          # ══════════════════════════════════════════════════════════════════════
+          # ROBUST PROXY AUTH INJECTION
+          # Works for: manual, floppydata, scrapeops — all use the same
+          # credential file so long usernames are never truncated by shell args.
+          # ══════════════════════════════════════════════════════════════════════
+          def inject_proxy_auth(window, label=""):
+              """
+              Attempt to fill proxy authentication dialogs in any window.
+              Tries pywinauto field injection first, then keyboard fallback.
+              Returns True if credentials were injected.
+              """
+              if not USE_PROXY or not PROXY_USER or not PROXY_PASS:
+                  return False
+
+              try:
+                  # ── Strategy 1: pywinauto Edit field injection ────────────────
+                  user_fields = window.descendants(control_type="Edit", title="Username")
+                  pass_fields = window.descendants(control_type="Edit", title="Password")
+
+                  # Fallback titles used by different browsers/OS dialogs
+                  if not user_fields:
+                      user_fields = (
+                          window.descendants(control_type="Edit", title="User name") or
+                          window.descendants(control_type="Edit", title="user") or
+                          [f for f in window.descendants(control_type="Edit") if "user" in f.window_text().lower()] or
+                          []
+                      )
+                  if not pass_fields:
+                      pass_fields = (
+                          window.descendants(control_type="Edit", title="pass") or
+                          [f for f in window.descendants(control_type="Edit") if "pass" in f.window_text().lower()] or
+                          []
+                      )
+
+                  # Last resort: grab first two Edit fields (username then password)
+                  if not user_fields or not pass_fields:
+                      all_edits = window.descendants(control_type="Edit")
+                      if len(all_edits) >= 2:
+                          user_fields = [all_edits[0]]
+                          pass_fields = [all_edits[1]]
+
+                  if user_fields and pass_fields:
+                      log_msg("ProxyAuth", f"[{label}] Auth dialog found — injecting credentials. "
+                              f"Type={PROXY_TYPE} | User={PROXY_USER[:25]}...")
+                      window.set_focus()
+                      time.sleep(0.5)
+
+                      # Clear then type username
+                      user_fields[0].click_input()
+                      time.sleep(0.2)
+                      send_keys('^a')          # select all existing text
+                      time.sleep(0.1)
+                      send_keys('{DELETE}')    # clear it
+                      time.sleep(0.1)
+                      user_fields[0].type_keys(PROXY_USER, with_spaces=True, pause=0.02)
+                      time.sleep(0.3)
+
+                      # Clear then type password
+                      pass_fields[0].click_input()
+                      time.sleep(0.2)
+                      send_keys('^a')
+                      time.sleep(0.1)
+                      send_keys('{DELETE}')
+                      time.sleep(0.1)
+                      pass_fields[0].type_keys(PROXY_PASS, with_spaces=True, pause=0.02)
+                      time.sleep(0.3)
+
+                      # Click Sign In / OK button
+                      signed_in = False
+                      for btn_title in ["Sign in", "OK", "Connect", "Login", "Submit", "Authenticate"]:
+                          btns = window.descendants(control_type="Button", title=btn_title)
+                          if btns:
+                              try:
+                                  btns[0].click_input()
+                                  log_msg("ProxyAuth", f"[{label}] Clicked '{btn_title}' button. Auth submitted.")
+                                  signed_in = True
+                                  break
+                              except Exception as eb:
+                                  log_msg("ProxyAuth", f"[{label}] '{btn_title}' click failed: {eb}")
+
+                      if not signed_in:
+                          # Fallback: press Enter from the password field
+                          try:
+                              pass_fields[0].click_input()
+                              time.sleep(0.2)
+                              send_keys('{ENTER}')
+                              log_msg("ProxyAuth", f"[{label}] Submitted via ENTER key fallback.")
+                              signed_in = True
+                          except Exception as ek:
+                              log_msg("ProxyAuth", f"[{label}] ENTER fallback also failed: {ek}")
+
+                      return signed_in
+
+                  else:
+                      # ── Strategy 2: Keyboard-only (Tab navigation) ────────────
+                      log_msg("ProxyAuth", f"[{label}] No Edit fields found — trying keyboard Tab injection.")
+                      window.set_focus()
+                      time.sleep(0.5)
+                      send_keys('^a{DELETE}')
+                      time.sleep(0.1)
+                      # Type username char by char to avoid special char issues
+                      for ch in PROXY_USER:
+                          send_keys(ch if ch.isalnum() or ch in '.-_=@' else '{%s}' % ch)
+                          time.sleep(0.01)
+                      send_keys('{TAB}')
+                      time.sleep(0.3)
+                      send_keys('^a{DELETE}')
+                      time.sleep(0.1)
+                      for ch in PROXY_PASS:
+                          send_keys(ch if ch.isalnum() or ch in '.-_=@' else '{%s}' % ch)
+                          time.sleep(0.01)
+                      time.sleep(0.2)
+                      send_keys('{ENTER}')
+                      log_msg("ProxyAuth", f"[{label}] Keyboard-only auth submitted.")
+                      return True
+
+              except Exception as e:
+                  log_msg("ProxyAuth", f"[{label}] inject_proxy_auth exception: {e}")
+                  return False
+
+          def _is_proxy_auth_dialog(window_text):
+              """Check if a window title matches known proxy auth dialog patterns."""
+              if not window_text:
+                  return False
+              wl = window_text.lower().strip()
+              auth_keywords = [
+                  "sign in", "authentication required", "proxy authentication",
+                  "connect to", "enter credentials", "network authentication",
+                  "proxy auth", "authentication", "enter network credentials",
+              ]
+              return any(kw in wl for kw in auth_keywords)
 
           def opera_one_post_install_sequence(opera_window, software_type="opera_one"):
               log_msg("PostInstall-OP1", "=== Opera One Post-Install Sequence Starting ===")
@@ -1980,12 +2125,15 @@ jobs:
 
               log_msg("PostInstall-AVG", "=== AVG Post-Install Sequence Completed Successfully ===")
 
-          def handle_automation(username, password, software_type, use_proxy, action_mode, timeout=360):
+          def handle_automation(software_type, action_mode, timeout=360):
               desktop = Desktop(backend="uia")
               start_time = time.time()
               proxy_auth_time = start_time
 
-              log_msg("UI-Engine", f"Started monitoring. Action Mode: {action_mode.upper()} | Type: {software_type}")
+              log_msg("UI-Engine", f"Started monitoring. Action Mode: {action_mode.upper()} | "
+                      f"Type: {software_type} | ProxyType: {PROXY_TYPE} | UseProxy: {USE_PROXY}")
+              log_msg("UI-Engine", f"Proxy credentials ready: User={PROXY_USER[:25]}... | "
+                      f"Server={PROXY_SERVER}")
 
               last_ctrl_j_time = time.time()
               last_dl_click_time = 0
@@ -2013,6 +2161,10 @@ jobs:
               last_interference_sweep = 0
               INTERFERENCE_SWEEP_INTERVAL = 2
 
+              # Track last auth injection time to avoid re-injecting too fast
+              last_auth_inject_time = 0
+              AUTH_INJECT_COOLDOWN = 8   # seconds between re-injection attempts
+
               while time.time() - start_time < timeout:
                   try:
                       desktop = Desktop(backend="uia")
@@ -2035,6 +2187,57 @@ jobs:
                       if now - last_interference_sweep >= INTERFERENCE_SWEEP_INTERVAL:
                           dismiss_interference_windows(desktop, software_type, label="continuous")
                           last_interference_sweep = now
+
+                      # ── UNIVERSAL PROXY AUTH DETECTION ──────────────────────────
+                      # Scan ALL visible windows for proxy auth dialogs.
+                      # This covers manual, floppydata, AND scrapeops since they all
+                      # need credentials injected in exactly the same way.
+                      if USE_PROXY and (now - last_auth_inject_time > AUTH_INJECT_COOLDOWN):
+                          try:
+                              for auth_window in desktop.windows(visible_only=True):
+                                  awt = auth_window.window_text()
+                                  if awt and _is_proxy_auth_dialog(awt):
+                                      log_msg("ProxyAuth", f"Auth dialog detected: '{awt}' — injecting {PROXY_TYPE} credentials...")
+                                      injected = inject_proxy_auth(auth_window, label=f"dialog-{awt[:30]}")
+                                      if injected:
+                                          proxy_auth_time = time.time()
+                                          last_auth_inject_time = now
+                                          log_msg("ProxyAuth", f"Credentials injected successfully for '{awt}'.")
+                                          break
+                          except Exception as auth_ex:
+                              log_msg("ProxyAuth", f"Auth scan error: {auth_ex}")
+
+                          # Also check inside Edge window for embedded auth prompts
+                          if edge_window and (now - last_auth_inject_time > AUTH_INJECT_COOLDOWN):
+                              try:
+                                  for child in edge_window.children():
+                                      cwt = child.window_text()
+                                      if cwt and _is_proxy_auth_dialog(cwt):
+                                          log_msg("ProxyAuth", f"Embedded Edge auth dialog: '{cwt}'")
+                                          injected = inject_proxy_auth(child, label=f"edge-child-{cwt[:20]}")
+                                          if injected:
+                                              proxy_auth_time = time.time()
+                                              last_auth_inject_time = now
+                                              break
+                              except Exception:
+                                  pass
+
+                          # Legacy fallback: check edge_window itself for Username/Password fields
+                          # (catches cases where Edge renders the dialog inside its own window tree)
+                          if edge_window and (now - last_auth_inject_time > AUTH_INJECT_COOLDOWN):
+                              try:
+                                  user_fields = edge_window.descendants(control_type="Edit", title="Username")
+                                  pass_fields = edge_window.descendants(control_type="Edit", title="Password")
+                                  if not user_fields:
+                                      user_fields = edge_window.descendants(control_type="Edit", title="User name")
+                                  if user_fields and pass_fields:
+                                      log_msg("ProxyAuth", f"Legacy: Found Username/Password in Edge window tree.")
+                                      injected = inject_proxy_auth(edge_window, label="edge-legacy")
+                                      if injected:
+                                          proxy_auth_time = time.time()
+                                          last_auth_inject_time = now
+                              except Exception:
+                                  pass
 
                       if not download_windows_closed and os.path.exists(sentinel_path):
                           log_msg("Sentinel", "Flag detected (EXE found). Initiating download window cleanup sequence...")
@@ -2087,30 +2290,6 @@ jobs:
                               log_msg("PostInstall-AVG", "60s threshold reached. Launching AVG post-install.")
                               avg_post_install_sequence(avg_window)
                               avg_post_install_done = True
-
-                      if use_proxy and (edge_window or opera_window or avg_window):
-                          for w in [edge_window, opera_window, avg_window]:
-                              if w:
-                                  user_fields = w.descendants(control_type="Edit", title="Username")
-                                  pass_fields = w.descendants(control_type="Edit", title="Password")
-                                  if user_fields and pass_fields:
-                                      try:
-                                          log_msg("Proxy", "Authentication dialog detected.")
-                                          w.set_focus()
-                                          time.sleep(0.5)
-                                          user_fields[0].click_input()
-                                          user_fields[0].type_keys(username, with_spaces=True, pause=0.02)
-                                          pass_fields[0].click_input()
-                                          pass_fields[0].type_keys(password, with_spaces=True, pause=0.02)
-                                          btn = w.descendants(control_type="Button", title="Sign in")
-                                          if btn:
-                                              btn[0].click_input()
-                                          else:
-                                              pass_fields[0].type_keys("{ENTER}")
-                                          proxy_auth_time = time.time()
-                                          log_msg("Proxy", "Credentials injected.")
-                                      except Exception as e:
-                                          log_msg("Proxy", f"Auth injection failed: {e}")
 
                       if edge_window:
                           for cookie_btn in ["Accept all", "Accepter tout", "Tout accepter", "Accept Cookies", "Allow all", "Accept selection"]:
@@ -2268,18 +2447,20 @@ jobs:
                   time.sleep(1)
 
           if __name__ == "__main__":
-              username      = sys.argv[1] if len(sys.argv) > 1 else ""
-              password      = sys.argv[2] if len(sys.argv) > 2 else ""
-              software_type = sys.argv[3] if len(sys.argv) > 3 else "avg"
-              use_proxy     = (sys.argv[4].lower() == "true") if len(sys.argv) > 4 else False
-              action_mode   = sys.argv[5] if len(sys.argv) > 5 else "install"
-              handle_automation(username, password, software_type, use_proxy, action_mode)
+              # Args now only carry software_type and action_mode.
+              # All proxy credentials come from the JSON credential file.
+              software_type = sys.argv[1] if len(sys.argv) > 1 else "avg"
+              action_mode   = sys.argv[2] if len(sys.argv) > 2 else "install"
+              handle_automation(software_type, action_mode)
           '@
           $handlerPy | Out-File -FilePath "$env:TEMP\auto_handler.py" -Encoding utf8
 
           Write-Host "[UI-Engine] Spinning up background Python process..." -ForegroundColor DarkGray
+          # Note: proxy creds now come from the JSON file, NOT command-line args.
+          # This fixes truncation/escaping issues with long ScrapeOps usernames
+          # and FloppyData token-style credentials.
           Start-Process -FilePath "python" `
-              -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:PROXY_USER`" `"$env:PROXY_PASS`" `"$env:SOFTWARE_TYPE`" `"$env:USE_PROXY`" `"$env:ACTION_MODE`"" `
+              -ArgumentList "-u `"$env:TEMP\auto_handler.py`" `"$env:SOFTWARE_TYPE`" `"$env:ACTION_MODE`"" `
               -WindowStyle Hidden
 
           $dlFolder    = "$env:USERPROFILE\Downloads"
@@ -2450,8 +2631,8 @@ jobs:
           # ── Build locale-aware Edge accept-language header ────────────────────
           $localeTag = $env:WINDOWS_LOCALE
           if (-not $localeTag) { $localeTag = "en-US" }
-          $langCode = $localeTag.ToLower()      # e.g. "pt-br", "de-de"
-          $langPrimary = $langCode.Split("-")[0] # e.g. "pt", "de"
+          $langCode = $localeTag.ToLower()
+          $langPrimary = $langCode.Split("-")[0]
           $acceptLang = "$langCode,$langPrimary;q=0.9,en;q=0.8"
 
           $edgeArgs = @(
