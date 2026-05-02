@@ -39,7 +39,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '3'
+        default: '2'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -64,7 +64,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'AVG - TechxTrader'
+        default: 'Opera - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -105,7 +105,7 @@ on:
           - 'Italy'
           - 'Netherlands'
           - 'Poland'
-        default: 'USA'
+        default: 'Brazil'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
