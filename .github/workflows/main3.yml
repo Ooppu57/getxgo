@@ -1325,20 +1325,8 @@ jobs:
 
           # ══════════════════════════════════════════════════════════════════════
           # MULTILINGUAL DOWNLOAD BUTTON KEYWORDS
-          #
-          # Covers ALL proxy country languages in the supported country list:
-          # USA (en), UK (en), Canada (en/fr), Australia (en), Germany (de),
-          # France (fr), Brazil (pt-BR), Mexico (es), Spain (es), Vietnam (vi),
-          # Switzerland (de/fr/it), Indonesia (id), Italy (it),
-          # Netherlands (nl), Poland (pl)
-          #
-          # Organized by software type for precise matching, with a universal
-          # fallback list covering any page that has a download CTA.
           # ══════════════════════════════════════════════════════════════════════
 
-          # ── OPERA / OPERA ONE / OPERA GX download button keywords ─────────────
-          # These appear on opera.com landing pages, interstitial pages, and
-          # localized regional mirror pages.
           OPERA_DOWNLOAD_KEYWORDS = [
               # English
               "download opera", "download opera gx", "download opera one",
@@ -1346,51 +1334,49 @@ jobs:
               "free download", "download for free", "download for windows",
               "get for free", "get it free", "install opera", "install now",
               "download browser", "get browser",
-              # French (France + Canada + Switzerland + Belgium)
+              # French
               "télécharger opera", "télécharger maintenant", "télécharger gratuitement",
               "télécharger", "obtenir opera", "installer maintenant",
               "téléchargement gratuit", "télécharger pour windows",
               "télécharger le navigateur", "obtenir gratuitement",
-              # Portuguese / Brazilian (Brazil)
+              # Portuguese / Brazilian
               "baixar opera", "baixar agora", "baixar grátis", "baixar gratis",
               "baixar gratuitamente", "baixar para windows", "baixe agora",
               "baixe grátis", "baixe gratis", "obter opera", "instalar agora",
               "download grátis", "download gratis", "baixar navegador",
-              # German (Germany + Switzerland + Austria)
+              # German
               "opera herunterladen", "jetzt herunterladen", "kostenlos herunterladen",
               "herunterladen", "opera holen", "für windows herunterladen",
               "kostenlos holen", "browser herunterladen", "jetzt installieren",
               "gratis herunterladen",
-              # Spanish (Mexico + Spain)
+              # Spanish
               "descargar opera", "descargar ahora", "descargar gratis",
               "descargar gratuitamente", "descargar para windows",
               "obtener opera", "instalar ahora", "descargar navegador",
               "gratis descargar", "descarga gratis",
-              # Italian (Italy + Switzerland)
+              # Italian
               "scarica opera", "scarica ora", "scarica gratis",
               "scarica gratuitamente", "scarica per windows",
               "ottieni opera", "installa ora", "download gratuito",
               "scarica il browser", "scarica gratis",
-              # Dutch (Netherlands + Belgium)
+              # Dutch
               "opera downloaden", "nu downloaden", "gratis downloaden",
               "opera ophalen", "voor windows downloaden", "installeer nu",
               "gratis ophalen", "browser downloaden",
-              # Polish (Poland)
+              # Polish
               "pobierz operę", "pobierz opere", "pobierz teraz",
               "pobierz za darmo", "pobierz opera", "zainstaluj teraz",
               "darmowe pobieranie", "pobierz przeglądarkę", "pobierz przegladarke",
-              # Vietnamese (Vietnam)
+              # Vietnamese
               "tải opera", "tải xuống", "tải về", "tải miễn phí",
               "tải ngay", "cài đặt ngay", "tải cho windows",
               "tải trình duyệt", "nhận opera",
-              # Indonesian (Indonesia)
+              # Indonesian
               "unduh opera", "unduh sekarang", "unduh gratis",
               "download opera", "pasang opera", "instal sekarang",
               "dapatkan opera", "unduh browser", "gratis unduh",
           ]
 
-          # ── AVG download button keywords ──────────────────────────────────────
-          # Covers avg.com landing pages and localized variants
           AVG_DOWNLOAD_KEYWORDS = [
               # English
               "download avg", "free download", "download free", "get avg free",
@@ -1422,9 +1408,6 @@ jobs:
               "unduh avg", "unduh gratis", "unduh sekarang",
           ]
 
-          # ── UNIVERSAL fallback download keywords ──────────────────────────────
-          # These match any generic download CTA regardless of software brand,
-          # used as a last resort when brand-specific keywords don't match.
           UNIVERSAL_DOWNLOAD_KEYWORDS = [
               # English
               "download", "download now", "free download", "get it free",
@@ -1449,9 +1432,6 @@ jobs:
               "unduh", "unduh sekarang",
           ]
 
-          # ── INTERSTITIAL / redirect page link keywords ────────────────────────
-          # These appear on smart-link interstitial pages and affiliate redirect pages
-          # where a text link (not a button) triggers the download.
           INTERSTITIAL_LINK_KEYWORDS = [
               "opera gx", "opera one", "opera browser", "opera for windows",
               "download opera", "click here", "click to download",
@@ -1476,7 +1456,6 @@ jobs:
               "klik di sini", "mulai unduh",
           ]
 
-          # ── COOKIE CONSENT button keywords ───────────────────────────────────
           COOKIE_CONSENT_KEYWORDS = [
               # English
               "accept all", "accept cookies", "allow all", "accept selection",
@@ -1501,6 +1480,148 @@ jobs:
               "chấp nhận tất cả", "chấp nhận", "đồng ý",
               # Indonesian
               "terima semua", "terima", "setuju",
+          ]
+
+          # ══════════════════════════════════════════════════════════════════════
+          # MULTILINGUAL "KEEP" / "KEEP ANYWAY" BUTTON KEYWORDS
+          #
+          # These appear in Edge's download warning bar when SmartScreen flags
+          # a file. Covers all proxy country languages plus common variants.
+          # ══════════════════════════════════════════════════════════════════════
+          KEEP_DOWNLOAD_KEYWORDS = [
+              # English
+              "keep", "keep anyway", "keep file", "run anyway",
+              "keep download", "download anyway", "allow",
+              # French (France + Canada + Switzerland + Belgium)
+              "conserver", "conserver quand même", "garder", "garder quand même",
+              "conserver le fichier", "télécharger quand même",
+              "continuer quand même", "autoriser",
+              # Portuguese / Brazilian (Brazil)
+              "manter", "manter assim mesmo", "manter arquivo",
+              "baixar assim mesmo", "continuar assim mesmo",
+              "permitir", "manter de qualquer forma",
+              # German (Germany + Switzerland + Austria)
+              "beibehalten", "trotzdem beibehalten", "datei beibehalten",
+              "trotzdem herunterladen", "trotzdem ausführen",
+              "zulassen", "behalten", "trotzdem behalten",
+              # Spanish (Mexico + Spain)
+              "conservar", "conservar de todas formas", "conservar igualmente",
+              "mantener", "mantener de todas formas", "descargar igualmente",
+              "ejecutar igualmente", "permitir",
+              # Italian (Italy + Switzerland)
+              "mantieni", "mantieni comunque", "mantieni il file",
+              "scarica comunque", "esegui comunque", "consenti",
+              "tieni", "tieni comunque",
+              # Dutch (Netherlands + Belgium)
+              "bewaren", "toch bewaren", "bestand bewaren",
+              "toch downloaden", "toch uitvoeren",
+              "toestaan", "behouden", "toch behouden",
+              # Polish (Poland)
+              "zachowaj", "zachowaj mimo to", "zachowaj plik",
+              "pobierz mimo to", "uruchom mimo to",
+              "zezwól", "zatrzymaj", "zatrzymaj mimo to",
+              # Vietnamese (Vietnam)
+              "giữ lại", "vẫn giữ", "giữ tệp",
+              "vẫn tải xuống", "vẫn chạy", "cho phép",
+              # Indonesian (Indonesia)
+              "simpan", "tetap simpan", "simpan file",
+              "tetap unduh", "tetap jalankan", "izinkan",
+          ]
+
+          # ══════════════════════════════════════════════════════════════════════
+          # MULTILINGUAL OPERA ONE POST-INSTALL BUTTON KEYWORDS
+          #
+          # Covers all buttons used in the Opera One onboarding / setup wizard:
+          # Next, Done, Finish, Submit — across all supported languages.
+          # ══════════════════════════════════════════════════════════════════════
+
+          # "Next" button in all supported languages
+          OPERA_NEXT_KEYWORDS = [
+              # English
+              "next", "next step", "continue", "proceed",
+              # French
+              "suivant", "étape suivante", "continuer",
+              # Portuguese / Brazilian
+              "próximo", "proximo", "próxima", "seguinte",
+              "continuar", "avançar", "avancar",
+              # German
+              "weiter", "nächste", "nachste", "nächster schritt",
+              "fortfahren",
+              # Spanish
+              "siguiente", "próximo", "continuar", "avanzar",
+              # Italian
+              "avanti", "successivo", "continua", "prossimo",
+              # Dutch
+              "volgende", "verder", "doorgaan",
+              # Polish
+              "dalej", "następny", "nastepny", "kontynuuj",
+              # Vietnamese
+              "tiếp theo", "tiep theo", "tiếp tục", "tiep tuc",
+              # Indonesian
+              "selanjutnya", "lanjut", "berikutnya",
+          ]
+
+          # "Done" / "Finish" button in all supported languages
+          OPERA_DONE_KEYWORDS = [
+              # English
+              "done", "finish", "complete", "close", "finalize",
+              # French
+              "terminé", "termine", "terminer", "fin", "fermer",
+              "finaliser",
+              # Portuguese / Brazilian
+              "concluído", "concluido", "concluir", "finalizar",
+              "fechar", "pronto", "fim",
+              # German
+              "fertig", "abschließen", "abschliessen", "beenden",
+              "schließen", "schliessen",
+              # Spanish
+              "listo", "finalizar", "terminar", "cerrar",
+              "completar",
+              # Italian
+              "fatto", "finito", "completato", "chiudi",
+              "termina", "finalizza",
+              # Dutch
+              "klaar", "afsluiten", "voltooien", "sluiten",
+              "beëindigen", "beeindigen",
+              # Polish
+              "gotowe", "zakończ", "zakoncz", "zamknij",
+              "zakończono", "zakonczono",
+              # Vietnamese
+              "xong", "hoàn thành", "hoan thanh", "đóng", "dong",
+              # Indonesian
+              "selesai", "tutup", "akhiri",
+          ]
+
+          # "Submit" button in all supported languages
+          OPERA_SUBMIT_KEYWORDS = [
+              # English
+              "submit", "send", "confirm", "apply", "save",
+              # French
+              "soumettre", "envoyer", "confirmer", "appliquer",
+              "sauvegarder", "valider",
+              # Portuguese / Brazilian
+              "enviar", "confirmar", "aplicar", "salvar",
+              "submeter",
+              # German
+              "senden", "absenden", "bestätigen", "bestatigen",
+              "anwenden", "speichern",
+              # Spanish
+              "enviar", "confirmar", "aplicar", "guardar",
+              "aceptar",
+              # Italian
+              "invia", "conferma", "applica", "salva",
+              "sottometti",
+              # Dutch
+              "verzenden", "bevestigen", "toepassen", "opslaan",
+              "indienen",
+              # Polish
+              "wyślij", "wyslij", "potwierdź", "potwierdz",
+              "zastosuj", "zapisz",
+              # Vietnamese
+              "gửi", "gui", "xác nhận", "xac nhan", "áp dụng",
+              "lưu", "luu",
+              # Indonesian
+              "kirim", "konfirmasi", "terapkan", "simpan",
           ]
 
           # ══════════════════════════════════════════════════════════════════════
@@ -1628,8 +1749,6 @@ jobs:
               return any(kw.lower() in tl for kw in keyword_list)
 
           def _matches_any_exact_start(text, keyword_list):
-              """Match where the button text STARTS WITH or exactly equals a keyword.
-              Useful for short button labels like 'Download' vs longer page text."""
               if not text:
                   return False
               tl = text.lower().strip()
@@ -1762,26 +1881,11 @@ jobs:
 
           # ══════════════════════════════════════════════════════════════════════
           # MULTILINGUAL DOWNLOAD BUTTON FINDER
-          #
-          # Tries multiple strategies in order of specificity:
-          #   1. Brand-specific keyword match on Button control type
-          #   2. Universal keyword match on Button control type
-          #   3. Hyperlink / Text / Image controls with interstitial keywords
-          #   4. Any clickable element whose text contains the word for "download"
-          #      in any supported language (last-resort scan)
-          #
-          # Returns (element, match_strategy_label) or (None, None)
           # ══════════════════════════════════════════════════════════════════════
           def find_download_button_multilingual(edge_window, software_type, label=""):
-              """
-              Robustly find and return the download button/link in any language.
-              Scans buttons, hyperlinks, text nodes, and image controls.
-              Returns the clickable element or None.
-              """
               if edge_window is None:
                   return None, None
 
-              # Determine which brand keyword list to use first
               if software_type in ["opera_gx", "opera_one", "opera_smart_link",
                                     "dynamic_opera", "ad_mvn"]:
                   primary_keywords = OPERA_DOWNLOAD_KEYWORDS
@@ -1793,7 +1897,7 @@ jobs:
                   primary_keywords = UNIVERSAL_DOWNLOAD_KEYWORDS
                   brand_label = "Generic"
 
-              # ── Strategy 1: Brand-specific Button match ───────────────────────
+              # Strategy 1: Brand-specific Button match
               try:
                   for btn in edge_window.descendants(control_type="Button"):
                       try:
@@ -1811,7 +1915,7 @@ jobs:
               except Exception as e:
                   log_msg("DL-Find", f"[{label}] Strategy1 scan error: {e}")
 
-              # ── Strategy 2: Universal Button keyword match ────────────────────
+              # Strategy 2: Universal Button keyword match
               try:
                   for btn in edge_window.descendants(control_type="Button"):
                       try:
@@ -1824,14 +1928,13 @@ jobs:
                           name = ""
                       combined = (txt + " " + name).strip()
                       if combined and _matches_any(combined, UNIVERSAL_DOWNLOAD_KEYWORDS):
-                          # Skip very short generic labels that might be nav buttons
                           if len(combined) > 2:
                               log_msg("DL-Find", f"[{label}] Strategy2 (Universal Button): '{combined[:60]}'")
                               return btn, "s2-universal-button"
               except Exception as e:
                   log_msg("DL-Find", f"[{label}] Strategy2 scan error: {e}")
 
-              # ── Strategy 3: Hyperlink / Text / Image with interstitial keywords ─
+              # Strategy 3: Hyperlink / Text / Image with interstitial keywords
               try:
                   for el in edge_window.descendants():
                       try:
@@ -1846,19 +1949,16 @@ jobs:
                           wt = ""
                       if not wt or len(wt) > 200:
                           continue
-                      # Must not be a URL string or a long paragraph
                       if "http" in wt.lower() or "www." in wt.lower():
                           continue
                       if _matches_any(wt, primary_keywords + INTERSTITIAL_LINK_KEYWORDS):
-                          # Extra guard: skip if it looks like plain page text (>80 chars)
                           if len(wt) <= 80:
                               log_msg("DL-Find", f"[{label}] Strategy3 ({ctrl_type} link): '{wt[:60]}'")
                               return el, f"s3-{ctrl_type.lower()}-link"
               except Exception as e:
                   log_msg("DL-Find", f"[{label}] Strategy3 scan error: {e}")
 
-              # ── Strategy 4: Any clickable element whose text contains a
-              #    download keyword in ANY language (very broad last-resort) ──────
+              # Strategy 4: Broad last-resort scan
               try:
                   all_keywords_combined = list(set(
                       primary_keywords + UNIVERSAL_DOWNLOAD_KEYWORDS + INTERSTITIAL_LINK_KEYWORDS
@@ -1884,16 +1984,10 @@ jobs:
               except Exception as e:
                   log_msg("DL-Find", f"[{label}] Strategy4 scan error: {e}")
 
-              log_msg("DL-Find", f"[{label}] No download element found in any language after all 4 strategies.")
+              log_msg("DL-Find", f"[{label}] No download element found after all 4 strategies.")
               return None, None
 
           def click_download_button_multilingual(edge_window, software_type, label=""):
-              """
-              Find and click the download button/link using multilingual detection.
-              Returns True if a click was executed, False otherwise.
-              Tries click_input() first, falls back to invoke() pattern, then
-              pyautogui coordinate click as last resort.
-              """
               element, strategy = find_download_button_multilingual(edge_window, software_type, label=label)
               if element is None:
                   return False
@@ -1904,7 +1998,6 @@ jobs:
               except Exception:
                   pass
 
-              # Attempt 1: click_input() — standard pywinauto click
               try:
                   element.click_input()
                   log_msg("DL-Click", f"[{label}] click_input() succeeded via {strategy}.")
@@ -1912,7 +2005,6 @@ jobs:
               except Exception as e1:
                   log_msg("DL-Click", f"[{label}] click_input() failed: {e1}")
 
-              # Attempt 2: invoke() — works on some UIA elements that resist click_input
               try:
                   element.invoke()
                   log_msg("DL-Click", f"[{label}] invoke() succeeded via {strategy}.")
@@ -1920,7 +2012,6 @@ jobs:
               except Exception as e2:
                   log_msg("DL-Click", f"[{label}] invoke() failed: {e2}")
 
-              # Attempt 3: pyautogui coordinate click using element bounding rect
               try:
                   rect = element.rectangle()
                   cx = (rect.left + rect.right) // 2
@@ -1934,6 +2025,150 @@ jobs:
                   log_msg("DL-Click", f"[{label}] pyautogui click failed: {e3}")
 
               log_msg("DL-Click", f"[{label}] All click strategies exhausted for element via {strategy}.")
+              return False
+
+          # ══════════════════════════════════════════════════════════════════════
+          # MULTILINGUAL "KEEP" BUTTON FINDER & CLICKER
+          #
+          # Searches Edge download warning bar for "Keep" / "Keep anyway" in
+          # any supported language. Uses 3 strategies:
+          #   1. Exact/partial Button title match against KEEP_DOWNLOAD_KEYWORDS
+          #   2. Descendant scan (ToolBar, Pane, notification area)
+          #   3. Keyboard fallback (Alt+K shortcut then Tab+Enter)
+          # ══════════════════════════════════════════════════════════════════════
+          def click_keep_button_multilingual(edge_window, label=""):
+              """
+              Find and click the multilingual 'Keep' / 'Keep anyway' button in
+              Edge's download warning bar. Returns True if clicked successfully.
+              """
+              if edge_window is None:
+                  return False
+
+              clicked = False
+
+              # ── Strategy 1: Direct Button descendants with keyword match ──────
+              try:
+                  for btn in edge_window.descendants(control_type="Button"):
+                      try:
+                          txt = (btn.window_text() or "").strip()
+                      except Exception:
+                          txt = ""
+                      try:
+                          name = (btn.element_info.name or "").strip()
+                      except Exception:
+                          name = ""
+                      combined = (txt + " " + name).strip()
+                      if combined and _matches_any(combined, KEEP_DOWNLOAD_KEYWORDS):
+                          # Extra guard: skip if the text is too long (not a button label)
+                          if len(combined) <= 60:
+                              log_msg("Keep", f"[{label}] Strategy1 (Button): '{combined[:50]}'")
+                              try:
+                                  edge_window.set_focus()
+                                  time.sleep(0.3)
+                                  btn.click_input()
+                                  log_msg("Keep", f"[{label}] click_input() on '{combined[:30]}' succeeded.")
+                                  return True
+                              except Exception as e1:
+                                  log_msg("Keep", f"[{label}] click_input() failed: {e1}")
+                                  try:
+                                      btn.invoke()
+                                      log_msg("Keep", f"[{label}] invoke() on '{combined[:30]}' succeeded.")
+                                      return True
+                                  except Exception as e2:
+                                      log_msg("Keep", f"[{label}] invoke() failed: {e2}")
+                                      try:
+                                          rect = btn.rectangle()
+                                          cx = (rect.left + rect.right) // 2
+                                          cy = (rect.top + rect.bottom) // 2
+                                          pyautogui.moveTo(cx, cy, duration=0.2)
+                                          time.sleep(0.1)
+                                          pyautogui.click(cx, cy)
+                                          log_msg("Keep", f"[{label}] pyautogui click at ({cx},{cy}) succeeded.")
+                                          return True
+                                      except Exception as e3:
+                                          log_msg("Keep", f"[{label}] pyautogui click failed: {e3}")
+              except Exception as e:
+                  log_msg("Keep", f"[{label}] Strategy1 scan error: {e}")
+
+              # ── Strategy 2: Scan ToolBar/Pane/notification area descendants ──
+              try:
+                  for container_type in ["ToolBar", "Pane", "Group", "Custom"]:
+                      try:
+                          containers = edge_window.descendants(control_type=container_type)
+                      except Exception:
+                          continue
+                      for container in containers:
+                          try:
+                              for el in container.descendants():
+                                  try:
+                                      ctrl_type = el.element_info.control_type
+                                  except Exception:
+                                      continue
+                                  if ctrl_type not in ["Button", "Hyperlink", "Text"]:
+                                      continue
+                                  try:
+                                      wt = (el.window_text() or "").strip()
+                                  except Exception:
+                                      wt = ""
+                                  try:
+                                      nm = (el.element_info.name or "").strip()
+                                  except Exception:
+                                      nm = ""
+                                  combined = (wt + " " + nm).strip()
+                                  if combined and len(combined) <= 60 and _matches_any(combined, KEEP_DOWNLOAD_KEYWORDS):
+                                      log_msg("Keep", f"[{label}] Strategy2 ({container_type}->{ctrl_type}): '{combined[:50]}'")
+                                      try:
+                                          edge_window.set_focus()
+                                          time.sleep(0.3)
+                                          el.click_input()
+                                          log_msg("Keep", f"[{label}] Strategy2 click_input() succeeded.")
+                                          return True
+                                      except Exception:
+                                          try:
+                                              el.invoke()
+                                              log_msg("Keep", f"[{label}] Strategy2 invoke() succeeded.")
+                                              return True
+                                          except Exception:
+                                              try:
+                                                  rect = el.rectangle()
+                                                  cx = (rect.left + rect.right) // 2
+                                                  cy = (rect.top + rect.bottom) // 2
+                                                  pyautogui.click(cx, cy)
+                                                  log_msg("Keep", f"[{label}] Strategy2 pyautogui click succeeded.")
+                                                  return True
+                                              except Exception:
+                                                  pass
+                          except Exception:
+                              pass
+              except Exception as e:
+                  log_msg("Keep", f"[{label}] Strategy2 scan error: {e}")
+
+              # ── Strategy 3: Keyboard fallback ──────────────────────────────────
+              # Edge download warning bar responds to keyboard shortcuts.
+              # Alt+K = "Keep" in English Edge; Tab+Enter navigates to first button.
+              log_msg("Keep", f"[{label}] Strategy3: Attempting keyboard fallback for Keep button...")
+              try:
+                  edge_window.set_focus()
+                  time.sleep(0.5)
+                  # Try Alt+K shortcut (Edge English shortcut for Keep)
+                  send_keys('%k')
+                  time.sleep(0.5)
+                  log_msg("Keep", f"[{label}] Strategy3: Alt+K sent.")
+                  return True
+              except Exception as ek:
+                  log_msg("Keep", f"[{label}] Strategy3 Alt+K failed: {ek}")
+                  try:
+                      # Fallback: Tab to navigate download bar buttons then Enter
+                      send_keys('{TAB}')
+                      time.sleep(0.3)
+                      send_keys('{ENTER}')
+                      time.sleep(0.3)
+                      log_msg("Keep", f"[{label}] Strategy3: Tab+Enter fallback sent.")
+                      return True
+                  except Exception as et:
+                      log_msg("Keep", f"[{label}] Strategy3 Tab+Enter failed: {et}")
+
+              log_msg("Keep", f"[{label}] All Keep strategies exhausted. Button not found/clicked.")
               return False
 
           def dismiss_interference_windows(desktop, software_type, label=""):
@@ -2189,7 +2424,25 @@ jobs:
               result = force_maximize_and_focus_target(desktop, target_window, software_type, label=label)
               return result if result else target_window
 
-          def click_opera_button(desktop, opera_window, software_type, button_names, label=""):
+          # ══════════════════════════════════════════════════════════════════════
+          # MULTILINGUAL OPERA BUTTON CLICKER
+          #
+          # Replaces the original click_opera_button() which only accepted
+          # English button name strings. This version uses keyword lists so it
+          # works across all supported country languages.
+          #
+          # keyword_list: one of OPERA_NEXT_KEYWORDS / OPERA_DONE_KEYWORDS /
+          #               OPERA_SUBMIT_KEYWORDS (or any custom list)
+          # label:        logging label string
+          # ══════════════════════════════════════════════════════════════════════
+          def click_opera_button_multilingual(desktop, opera_window, software_type,
+                                              keyword_list, label="", fallback_coords=None):
+              """
+              Find and click a button in the Opera window whose text matches any
+              keyword in keyword_list (multilingual). Falls back to pyautogui
+              coordinate click at fallback_coords if provided.
+              Returns True if clicked, False otherwise.
+              """
               try:
                   target = opera_window
                   if target is None or not target.is_visible():
@@ -2199,53 +2452,103 @@ jobs:
                               target = w
                               break
                   if not target:
-                      log_msg("ButtonClick", f"[{label}] Target Opera window not found.")
+                      log_msg("MLBtn", f"[{label}] Target Opera window not found.")
+                      if fallback_coords:
+                          fx, fy = fallback_coords
+                          log_msg("MLBtn", f"[{label}] Fallback click at ({fx}, {fy})...")
+                          try:
+                              pyautogui.moveTo(fx, fy, duration=0.2)
+                              pyautogui.click(fx, fy)
+                              return True
+                          except Exception as ef:
+                              log_msg("MLBtn", f"[{label}] Fallback click failed: {ef}")
                       return False
 
                   target.set_focus()
                   time.sleep(0.3)
 
-                  for name in button_names:
-                      btns = target.descendants(control_type="Button", title=name)
-                      if btns:
-                          try:
-                              btns[0].click_input()
-                              log_msg("ButtonClick", f"[{label}] Clicked '{name}' via exact title match.")
-                              return True
-                          except Exception as e:
-                              log_msg("ButtonClick", f"[{label}] click_input on '{name}' failed: {e}")
+                  # Pass 1: exact title match against each keyword
+                  for kw in keyword_list:
+                      try:
+                          btns = target.descendants(control_type="Button", title=kw)
+                          if btns:
+                              try:
+                                  btns[0].click_input()
+                                  log_msg("MLBtn", f"[{label}] Clicked '{kw}' via exact title match.")
+                                  return True
+                              except Exception as e:
+                                  log_msg("MLBtn", f"[{label}] click_input on exact '{kw}' failed: {e}")
+                      except Exception:
+                          pass
 
+                  # Pass 2: partial text match on all Button descendants
                   for btn in target.descendants(control_type="Button"):
                       try:
-                          txt = btn.window_text()
-                          if txt:
-                              for name in button_names:
-                                  if name.lower() in txt.lower():
-                                      btn.click_input()
-                                      log_msg("ButtonClick", f"[{label}] Clicked '{txt}' via partial match for '{name}'.")
-                                      return True
-                      except:
+                          txt = (btn.window_text() or "").strip()
+                          nm  = (btn.element_info.name or "").strip()
+                          combined = (txt + " " + nm).strip()
+                      except Exception:
                           continue
+                      if combined and _matches_any(combined, keyword_list):
+                          try:
+                              btn.click_input()
+                              log_msg("MLBtn", f"[{label}] Clicked '{combined[:40]}' via partial keyword match.")
+                              return True
+                          except Exception as e:
+                              log_msg("MLBtn", f"[{label}] Partial match click failed for '{combined[:40]}': {e}")
 
+                  # Pass 3: scan all descendants (Text, Hyperlink, Custom, etc.)
                   for el in target.descendants():
                       try:
-                          txt = el.window_text()
-                          if txt:
-                              for name in button_names:
-                                  if name.lower() == txt.strip().lower():
-                                      el.click_input()
-                                      log_msg("ButtonClick", f"[{label}] Clicked '{txt}' via generic descendant match.")
-                                      return True
-                      except:
+                          ctrl_type = el.element_info.control_type
+                      except Exception:
                           continue
+                      if ctrl_type not in ["Button", "Hyperlink", "Text", "Custom"]:
+                          continue
+                      try:
+                          txt = (el.window_text() or "").strip()
+                      except Exception:
+                          txt = ""
+                      if not txt or len(txt) > 80:
+                          continue
+                      if _matches_any(txt, keyword_list):
+                          try:
+                              el.click_input()
+                              log_msg("MLBtn", f"[{label}] Clicked '{txt[:40]}' via generic descendant scan.")
+                              return True
+                          except Exception as e:
+                              log_msg("MLBtn", f"[{label}] Descendant click failed for '{txt[:40]}': {e}")
 
-                  return False
               except Exception as e:
-                  log_msg("ButtonClick", f"[{label}] Exception during button click: {e}")
-                  return False
+                  log_msg("MLBtn", f"[{label}] Exception during multilingual button click: {e}")
+
+              # Fallback: coordinate click
+              if fallback_coords:
+                  fx, fy = fallback_coords
+                  log_msg("MLBtn", f"[{label}] All passes failed — fallback click at ({fx}, {fy}).")
+                  try:
+                      pyautogui.moveTo(fx, fy, duration=0.2)
+                      pyautogui.click(fx, fy)
+                      return True
+                  except Exception as ef:
+                      log_msg("MLBtn", f"[{label}] Fallback click also failed: {ef}")
+
+              return False
+
+          # Keep the original click_opera_button for backward compatibility,
+          # now internally delegating to click_opera_button_multilingual.
+          def click_opera_button(desktop, opera_window, software_type, button_names, label=""):
+              sw, sh = pyautogui.size()
+              fallback = (int(sw * 0.90), int(sh * 0.90))
+              return click_opera_button_multilingual(
+                  desktop, opera_window, software_type,
+                  keyword_list=button_names,
+                  label=label,
+                  fallback_coords=fallback
+              )
 
           # ══════════════════════════════════════════════════════════════════════
-          # ROBUST MULTILINGUAL PROXY AUTH INJECTION
+          # MULTILINGUAL PROXY AUTH INJECTION
           # ══════════════════════════════════════════════════════════════════════
           def inject_proxy_auth(window, label=""):
               if not USE_PROXY or not PROXY_USER or not PROXY_PASS:
@@ -2356,8 +2659,16 @@ jobs:
                   log_msg("ProxyAuth", f"[{label}] inject_proxy_auth exception: {e}")
                   return False
 
+          # ══════════════════════════════════════════════════════════════════════
+          # OPERA ONE POST-INSTALL SEQUENCE — FULLY MULTILINGUAL
+          #
+          # All button searches now use OPERA_NEXT_KEYWORDS, OPERA_DONE_KEYWORDS,
+          # and OPERA_SUBMIT_KEYWORDS instead of English-only string literals.
+          # Every click_opera_button() call is replaced with
+          # click_opera_button_multilingual() with proper fallback coords.
+          # ══════════════════════════════════════════════════════════════════════
           def opera_one_post_install_sequence(opera_window, software_type="opera_one"):
-              log_msg("PostInstall-OP1", "=== Opera One Post-Install Sequence Starting ===")
+              log_msg("PostInstall-OP1", "=== Opera One Post-Install Sequence Starting (Multilingual) ===")
               desktop = Desktop(backend="uia")
 
               log_msg("PostInstall-OP1", "STEP 1: Waiting 50 seconds for Opera One to fully initialize...")
@@ -2405,44 +2716,48 @@ jobs:
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 6 COMPLETE.")
 
-              log_msg("PostInstall-OP1", "STEP 7: Detecting and clicking 'Next' button 6 times (2 second delay each)...")
+              # ── STEP 7: Click "Next" 6 times — MULTILINGUAL ────────────────────
+              log_msg("PostInstall-OP1", "STEP 7: Clicking 'Next' button 6 times (multilingual, 2s delay each)...")
               for i in range(1, 7):
                   desktop = Desktop(backend="uia")
-                  opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"step7-NEXT-{i}")
-                  log_msg("PostInstall-OP1", f"  Next click attempt {i}/6...")
-                  clicked = click_opera_button(desktop, opera_window, software_type, ["Next"], label=f"NEXT-{i}")
+                  opera_window = force_maximize_and_focus_target(
+                      desktop, opera_window, software_type, label=f"step7-NEXT-{i}"
+                  )
+                  log_msg("PostInstall-OP1", f"  Next click attempt {i}/6 (multilingual)...")
+                  sw_now, sh_now = pyautogui.size()
+                  fallback_next = (int(sw_now * 0.90), int(sh_now * 0.90))
+                  clicked = click_opera_button_multilingual(
+                      desktop, opera_window, software_type,
+                      keyword_list=OPERA_NEXT_KEYWORDS,
+                      label=f"NEXT-{i}",
+                      fallback_coords=fallback_next
+                  )
                   if clicked:
-                      log_msg("PostInstall-OP1", f"  Next {i}/6 clicked successfully.")
+                      log_msg("PostInstall-OP1", f"  Next {i}/6 clicked successfully (multilingual).")
                   else:
-                      log_msg("PostInstall-OP1", f"  Next {i}/6 not found via UI automation. Attempting fallback click at bottom-right...")
-                      try:
-                          sw, sh = pyautogui.size()
-                          fx, fy = int(sw * 0.90), int(sh * 0.90)
-                          pyautogui.moveTo(fx, fy, duration=0.2)
-                          pyautogui.click(fx, fy)
-                          log_msg("PostInstall-OP1", f"  Fallback click executed at ({fx}, {fy}).")
-                      except Exception as e2:
-                          log_msg("PostInstall-OP1", f"  Fallback click failed: {e2}")
+                      log_msg("PostInstall-OP1", f"  Next {i}/6 not found via multilingual scan — fallback already attempted.")
                   log_msg("PostInstall-OP1", f"  Waiting 2 seconds after Next click {i}...")
                   time.sleep(2)
-              log_msg("PostInstall-OP1", "STEP 7 COMPLETE: All 6 Next clicks attempted.")
+              log_msg("PostInstall-OP1", "STEP 7 COMPLETE: All 6 Next clicks attempted (multilingual).")
 
-              log_msg("PostInstall-OP1", "STEP 7b: Detecting and clicking 'Done' button...")
+              # ── STEP 7b: Click "Done" — MULTILINGUAL ──────────────────────────
+              log_msg("PostInstall-OP1", "STEP 7b: Clicking 'Done'/'Finish' button (multilingual)...")
               desktop = Desktop(backend="uia")
-              opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label="step7b-DONE")
-              clicked_done = click_opera_button(desktop, opera_window, software_type, ["Done", "Finish"], label="DONE")
+              opera_window = force_maximize_and_focus_target(
+                  desktop, opera_window, software_type, label="step7b-DONE"
+              )
+              sw_now, sh_now = pyautogui.size()
+              fallback_done = (int(sw_now * 0.90), int(sh_now * 0.90))
+              clicked_done = click_opera_button_multilingual(
+                  desktop, opera_window, software_type,
+                  keyword_list=OPERA_DONE_KEYWORDS,
+                  label="DONE",
+                  fallback_coords=fallback_done
+              )
               if clicked_done:
-                  log_msg("PostInstall-OP1", "STEP 7b COMPLETE: 'Done' clicked successfully.")
+                  log_msg("PostInstall-OP1", "STEP 7b COMPLETE: 'Done'/'Finish' clicked successfully (multilingual).")
               else:
-                  log_msg("PostInstall-OP1", "  'Done' not found via UI automation. Attempting fallback click at bottom-right...")
-                  try:
-                      sw, sh = pyautogui.size()
-                      fx, fy = int(sw * 0.90), int(sh * 0.90)
-                      pyautogui.moveTo(fx, fy, duration=0.2)
-                      pyautogui.click(fx, fy)
-                      log_msg("PostInstall-OP1", f"  Fallback click executed at ({fx}, {fy}) for Done.")
-                  except Exception as e2:
-                      log_msg("PostInstall-OP1", f"  Fallback click failed: {e2}")
+                  log_msg("PostInstall-OP1", "STEP 7b: Multilingual Done not found — fallback already attempted.")
 
               log_msg("PostInstall-OP1", "STEP 8: Waiting 5 seconds after Done click...")
               for s in range(1, 6):
@@ -2452,7 +2767,9 @@ jobs:
 
               log_msg("PostInstall-OP1", "STEP 9: Pressing ENTER key...")
               desktop = Desktop(backend="uia")
-              opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label="step9-ENTER")
+              opera_window = force_maximize_and_focus_target(
+                  desktop, opera_window, software_type, label="step9-ENTER"
+              )
               send_keys('{ENTER}')
               log_msg("PostInstall-OP1", "STEP 9 COMPLETE: ENTER key pressed.")
 
@@ -2462,22 +2779,24 @@ jobs:
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 10 COMPLETE.")
 
-              log_msg("PostInstall-OP1", "STEP 11: Detecting and clicking 'Submit' button...")
+              # ── STEP 11: Click "Submit" — MULTILINGUAL ─────────────────────────
+              log_msg("PostInstall-OP1", "STEP 11: Clicking 'Submit' button (multilingual)...")
               desktop = Desktop(backend="uia")
-              opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label="step11-SUBMIT")
-              clicked_submit = click_opera_button(desktop, opera_window, software_type, ["Submit"], label="SUBMIT")
+              opera_window = force_maximize_and_focus_target(
+                  desktop, opera_window, software_type, label="step11-SUBMIT"
+              )
+              sw_now, sh_now = pyautogui.size()
+              fallback_submit = (sw_now // 2, int(sh_now * 0.85))
+              clicked_submit = click_opera_button_multilingual(
+                  desktop, opera_window, software_type,
+                  keyword_list=OPERA_SUBMIT_KEYWORDS,
+                  label="SUBMIT",
+                  fallback_coords=fallback_submit
+              )
               if clicked_submit:
-                  log_msg("PostInstall-OP1", "STEP 11 COMPLETE: 'Submit' clicked successfully.")
+                  log_msg("PostInstall-OP1", "STEP 11 COMPLETE: 'Submit' clicked successfully (multilingual).")
               else:
-                  log_msg("PostInstall-OP1", "  'Submit' not found via UI automation. Attempting fallback click at center-bottom...")
-                  try:
-                      sw, sh = pyautogui.size()
-                      fx, fy = sw // 2, int(sh * 0.85)
-                      pyautogui.moveTo(fx, fy, duration=0.2)
-                      pyautogui.click(fx, fy)
-                      log_msg("PostInstall-OP1", f"  Fallback click executed at ({fx}, {fy}) for Submit.")
-                  except Exception as e2:
-                      log_msg("PostInstall-OP1", f"  Fallback click failed: {e2}")
+                  log_msg("PostInstall-OP1", "STEP 11: Multilingual Submit not found — fallback already attempted.")
 
               log_msg("PostInstall-OP1", "STEP 12: Waiting 5 seconds after Submit click...")
               for s in range(1, 6):
@@ -2493,7 +2812,9 @@ jobs:
                   log_msg("PostInstall-OP1", f"--- TAB CYCLE {cycle_idx + 1}/{len(tab_sequence)}: {tab_count} TAB presses ---")
 
                   desktop = Desktop(backend="uia")
-                  opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-pre-CtrlT")
+                  opera_window = force_maximize_and_focus_target(
+                      desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-pre-CtrlT"
+                  )
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pressing Ctrl+T (before TABs)...")
                   send_keys('^t')
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Ctrl+T sent. Waiting 5 seconds...")
@@ -2505,14 +2826,19 @@ jobs:
                   log_msg("PostInstall-OP1", f"  Pressing TAB key {tab_count} times (1 second delay between each)...")
                   for i in range(1, tab_count + 1):
                       desktop = Desktop(backend="uia")
-                      opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-TAB{tab_count}-press{i}")
+                      opera_window = force_maximize_and_focus_target(
+                          desktop, opera_window, software_type,
+                          label=f"cycle{cycle_idx+1}-TAB{tab_count}-press{i}"
+                      )
                       log_msg("PostInstall-OP1", f"    TAB press {i}/{tab_count} (cycle {cycle_idx + 1})...")
                       send_keys('{TAB}')
                       log_msg("PostInstall-OP1", f"    TAB {i}/{tab_count} sent. Waiting 1 second...")
                       time.sleep(1)
 
                   desktop = Desktop(backend="uia")
-                  opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-ENTER")
+                  opera_window = force_maximize_and_focus_target(
+                      desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-ENTER"
+                  )
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pressing ENTER after {tab_count} TABs...")
                   send_keys('{ENTER}')
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: ENTER sent.")
@@ -2523,7 +2849,9 @@ jobs:
                       time.sleep(1)
 
                   desktop = Desktop(backend="uia")
-                  opera_window = force_maximize_and_focus_target(desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-post-CtrlT")
+                  opera_window = force_maximize_and_focus_target(
+                      desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-post-CtrlT"
+                  )
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pressing Ctrl+T (after TABs)...")
                   send_keys('^t')
                   log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Ctrl+T sent. Waiting 5 seconds...")
@@ -2533,7 +2861,7 @@ jobs:
                   log_msg("PostInstall-OP1", f"--- TAB CYCLE {cycle_idx + 1}/{len(tab_sequence)} COMPLETE ---")
 
               log_msg("PostInstall-OP1", "STEP 13 COMPLETE: All TAB cycles finished.")
-              log_msg("PostInstall-OP1", "=== Opera One Post-Install Sequence Completed Successfully ===")
+              log_msg("PostInstall-OP1", "=== Opera One Post-Install Sequence Completed Successfully (Multilingual) ===")
 
           def opera_gx_post_install_sequence(opera_window):
               log_msg("PostInstall-OPGX", "=== Opera GX Post-Install Sequence Starting ===")
@@ -2716,10 +3044,12 @@ jobs:
               last_auth_inject_time = 0
               AUTH_INJECT_COOLDOWN = 8
 
-              # Cooldown tracker for multilingual download button clicks
-              # Prevents hammering the same button repeatedly
               last_dl_multilingual_time = 0
               DL_MULTILINGUAL_COOLDOWN = 5
+
+              # Cooldown for Keep button clicks — prevents hammering
+              last_keep_click_time = 0
+              KEEP_CLICK_COOLDOWN = 6
 
               while time.time() - start_time < timeout:
                   try:
@@ -2744,9 +3074,7 @@ jobs:
                           dismiss_interference_windows(desktop, software_type, label="continuous")
                           last_interference_sweep = now
 
-                      # ══════════════════════════════════════════════════════════
-                      # UNIVERSAL MULTILINGUAL PROXY AUTH DETECTION
-                      # ══════════════════════════════════════════════════════════
+                      # ── UNIVERSAL MULTILINGUAL PROXY AUTH DETECTION ────────────
                       if USE_PROXY and (now - last_auth_inject_time > AUTH_INJECT_COOLDOWN):
                           try:
                               for auth_window in desktop.windows(visible_only=True):
@@ -2848,10 +3176,7 @@ jobs:
                               avg_post_install_sequence(avg_window)
                               avg_post_install_done = True
 
-                      # ══════════════════════════════════════════════════════════
-                      # MULTILINGUAL COOKIE CONSENT
-                      # Clicks cookie accept buttons in any supported language
-                      # ══════════════════════════════════════════════════════════
+                      # ── MULTILINGUAL COOKIE CONSENT ────────────────────────────
                       if edge_window:
                           try:
                               for btn in edge_window.descendants(control_type="Button"):
@@ -2898,35 +3223,48 @@ jobs:
                           time.sleep(1)
                           continue
 
+                      # ══════════════════════════════════════════════════════════
+                      # MULTILINGUAL "KEEP" / "KEEP ANYWAY" BUTTON DETECTION
+                      #
+                      # Replaces the original English-only Keep/Keep anyway search.
+                      # Uses click_keep_button_multilingual() which covers all
+                      # supported country languages with 3 fallback strategies.
+                      # ══════════════════════════════════════════════════════════
                       if edge_window and action_mode == "install":
-                          keep_btns = edge_window.descendants(control_type="Button", title="Keep")
-                          if keep_btns:
-                              log_msg("EdgeProtect", "Detected 'Keep' warning. Clicking...")
-                              keep_clicked = True
-                              keep_btns[0].click_input()
-                              time.sleep(0.5)
-                          keep_anyway = edge_window.descendants(control_type="Button", title="Keep anyway")
-                          if keep_anyway:
-                              log_msg("EdgeProtect", "Detected 'Keep anyway' warning. Clicking...")
-                              keep_clicked = True
-                              keep_anyway[0].click_input()
-                              time.sleep(0.5)
+                          if now - last_keep_click_time > KEEP_CLICK_COOLDOWN:
+                              # Quick pre-scan: check if any Keep-like button exists
+                              # before doing the full multilingual search
+                              keep_button_found = False
+                              try:
+                                  for btn in edge_window.descendants(control_type="Button"):
+                                      try:
+                                          txt = (btn.window_text() or "").strip()
+                                          nm  = (btn.element_info.name or "").strip()
+                                      except Exception:
+                                          txt, nm = "", ""
+                                      combined = (txt + " " + nm).strip()
+                                      if combined and _matches_any(combined, KEEP_DOWNLOAD_KEYWORDS):
+                                          keep_button_found = True
+                                          break
+                              except Exception:
+                                  pass
+
+                              if keep_button_found:
+                                  log_msg("EdgeProtect", "Keep button detected (multilingual). Clicking...")
+                                  clicked_keep = click_keep_button_multilingual(
+                                      edge_window, label="keep-multilingual"
+                                  )
+                                  if clicked_keep:
+                                      keep_clicked = True
+                                      last_keep_click_time = now
+                                      log_msg("EdgeProtect", "Keep button clicked successfully (multilingual).")
 
                       can_click_download = True
                       if software_type == "opera_smart_link":
                           if not smart_link_interstitial_done or (time.time() - smart_link_interstitial_time < 15):
                               can_click_download = False
 
-                      # ══════════════════════════════════════════════════════════
-                      # MULTILINGUAL DOWNLOAD BUTTON CLICK
-                      #
-                      # Replaces the old English-only download button detection.
-                      # Uses find_download_button_multilingual() which covers all
-                      # 4 strategies across all supported country languages.
-                      #
-                      # Applies to: Opera GX, Opera One, Ad-MVN, dynamic_opera,
-                      #             opera_smart_link, and AVG.
-                      # ══════════════════════════════════════════════════════════
+                      # ── MULTILINGUAL DOWNLOAD BUTTON CLICK ─────────────────────
                       if (edge_window and action_mode == "install" and can_click_download
                               and software_type in ["opera_gx", "opera_one", "ad_mvn",
                                                     "dynamic_opera", "opera_smart_link"]):
@@ -2946,7 +3284,6 @@ jobs:
                           elapsed = time.time() - proxy_auth_time
                           if not avg_download_clicked and elapsed > 20:
                               log_msg("AVG", f"{elapsed:.1f}s elapsed. Initiating multilingual AVG download click.")
-                              # First try multilingual button detection
                               clicked = click_download_button_multilingual(
                                   edge_window, software_type, label="avg-dl-multilingual"
                               )
@@ -2954,7 +3291,6 @@ jobs:
                                   log_msg("AVG", "Multilingual AVG download button clicked successfully.")
                                   avg_download_clicked = True
                               else:
-                                  # Fallback to original TAB+ENTER keyboard method
                                   log_msg("AVG", "Multilingual button not found — falling back to TAB+ENTER keyboard method.")
                                   try:
                                       edge_window.set_focus()
