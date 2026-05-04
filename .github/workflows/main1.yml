@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: ''
+        default: '2'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: ''
+        default: '2'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: ''
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
