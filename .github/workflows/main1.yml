@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '1'
+        default: '3'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '5'
+        default: '3'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '1'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - 'B4Books - MVN'
           - 'A2Z - MVN'
           - 'Orderflowz - MVN'
-        default: 'Fatradez - Smart'
+        default: 'Techx - Smart'
       download_tab_presses:
         description: 'Number of Tab Presses for Download Button'
         required: true
