@@ -71,7 +71,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'AVG - TechxTrader'
+        default: 'OperaOne - Harrari'
       download_tab_presses:
         description: 'Number of Tab Presses for Download Button'
         required: true
