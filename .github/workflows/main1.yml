@@ -32,12 +32,12 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '3'
+        default: '2'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '3'
+        default: '2'
       num_clicks:
         description: 'Number of Clicks'
         required: true
