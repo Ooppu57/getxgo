@@ -32,7 +32,7 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '5'
+        default: '3'
       num_installs:
         description: 'Number of Installs'
         required: true
@@ -1287,7 +1287,7 @@ jobs:
               tl = text.lower()
               if software_type == "avg":
                   return "avg" in tl
-              elif software_type in ["opera_gx"]:
+              elif software_type in["opera_gx"]:
                   return ("opera" in tl and "gx" in tl) or "opera gx" in tl
               elif software_type in["opera_one", "opera_smart_link", "dynamic_opera", "ad_mvn"]:
                   return "opera" in tl and "edge" not in tl and "chrome web store" not in tl
@@ -2145,8 +2145,13 @@ jobs:
 
               opera_download_clicked = False
               avg_download_clicked = False
+              
+              # Keep Sequence Control Variables
               keep_sequence_pending = False
               last_dl_click_time = 0
+              keep_step = 0
+              keep_last_try = 0
+              keep_try_count = 0
 
               smart_link_interstitial_done = False
               smart_link_interstitial_time = 0
@@ -2358,17 +2363,15 @@ jobs:
                                   edge_window.set_focus()
                                   time.sleep(0.5)
                                   
-                                  # --- Added Offset Screen Clicks ---
                                   sw, sh = pyautogui.size()
-                                  cx = int(sw * 0.4) # 10% to the left of center
-                                  cy = int(sh * 0.25) # 25% above center
+                                  cx = int(sw * 0.4)
+                                  cy = int(sh * 0.25)
                                   log_msg("DL-Engine", f"Clicking 25% above & 10% left of center ({cx}, {cy}) 2 times...")
                                   pyautogui.moveTo(cx, cy, duration=0.2)
                                   pyautogui.click()
                                   time.sleep(1)
                                   pyautogui.click()
                                   time.sleep(1)
-                                  # ----------------------------------
 
                                   for i in range(1, DOWNLOAD_TABS + 1):
                                       send_keys('{TAB}')
@@ -2382,6 +2385,8 @@ jobs:
                               opera_download_clicked = True
                               last_dl_click_time = time.time()
                               keep_sequence_pending = True
+                              keep_step = 0
+                              keep_try_count = 0
 
                       # ── KEYBOARD DOWNLOAD BUTTON TRIGGER (AVG) ─────────────────────
                       if edge_window and action_mode == "install" and software_type == "avg":
@@ -2392,19 +2397,16 @@ jobs:
                                   edge_window.set_focus()
                                   time.sleep(0.5)
                                   
-                                  # --- Added Offset Screen Clicks ---
                                   sw, sh = pyautogui.size()
-                                  cx = int(sw * 0.4) # 10% to the left of center
-                                  cy = int(sh * 0.25) # 25% above center
+                                  cx = int(sw * 0.4)
+                                  cy = int(sh * 0.25)
                                   log_msg("AVG", f"Clicking 25% above & 10% left of center ({cx}, {cy}) 2 times...")
                                   pyautogui.moveTo(cx, cy, duration=0.2)
                                   pyautogui.click()
                                   time.sleep(1)
                                   pyautogui.click()
                                   time.sleep(1)
-                                  # ----------------------------------
 
-                                  # Hardcoded to 1 TAB press per user instructions 
                                   send_keys('{TAB}')
                                   log_msg("AVG", f"TAB 1/1 sent.")
                                   time.sleep(1)
@@ -2417,27 +2419,91 @@ jobs:
                               avg_download_clicked = True
                               last_dl_click_time = time.time()
                               keep_sequence_pending = True
+                              keep_step = 0
+                              keep_try_count = 0
 
-                      # ── STATE MACHINE: UNIVERSAL KEEP SEQUENCE (Ctrl+J) ───────────────────────────
-                      if keep_sequence_pending and (now - last_dl_click_time >= 15):
-                          keep_sequence_pending = False
-                          log_msg("KeepSeq", "15 seconds elapsed since download click. Executing robust Ctrl+J -> Tab x4 -> Enter sequence.")
-                          try:
-                              edge_window.set_focus()
-                              time.sleep(0.5)
-                              log_msg("KeepSeq", "Sending Ctrl+J...")
-                              send_keys('^j')
-                              time.sleep(1.5)
-                              for t_idx in range(1, 5):
-                                  log_msg("KeepSeq", f"Sending TAB {t_idx}/4...")
-                                  send_keys('{TAB}')
-                                  time.sleep(1)
-                              log_msg("KeepSeq", "Sending ENTER...")
-                              send_keys('{ENTER}')
-                              log_msg("KeepSeq", "Keep keyboard sequence complete.")
-                          except Exception as e:
-                              log_msg("KeepSeq", f"Error in Keep keyboard sequence: {e}")
+                      # ── STATE MACHINE: ADVANCED KEEP SEQUENCE (Mouse Automation & Keyboard Backup) ───────────────────────────
+                      if keep_sequence_pending:
+                          elapsed_since_dl = now - last_dl_click_time
 
+                          if keep_step == 0 and elapsed_since_dl >= 5:
+                              log_msg("KeepSeq", "5 seconds elapsed since download click. Pressing Ctrl+J to open downloads flyout.")
+                              try:
+                                  if edge_window:
+                                      edge_window.set_focus()
+                                      time.sleep(0.5)
+                                  send_keys('^j')
+                              except Exception as e:
+                                  log_msg("KeepSeq", f"Error pressing Ctrl+J: {e}")
+                              keep_step = 1
+                              keep_last_try = now
+                              keep_try_count = 0
+
+                          elif keep_step == 1 and (now - keep_last_try >= 5):
+                              keep_try_count += 1
+                              log_msg("KeepSeq", f"Attempt {keep_try_count}/3: Searching for 'Keep' button via Mouse Automation...")
+                              
+                              clicked_keep = False
+                              try:
+                                  if edge_window:
+                                      KEEP_KW =["keep", "conserver", "manter", "behalten", "conservar", "mantieni", "behouden", "zachowaj", "giữ", "simpan", "sakla", "säilytä", "zadržet", "megtartás"]
+                                      for btn in edge_window.descendants(control_type="Button"):
+                                          b_txt = (btn.window_text() or "").lower()
+                                          b_name = (btn.element_info.name or "").lower()
+                                          combined = f"{b_txt} {b_name}"
+                                          
+                                          if any(kw in combined for kw in KEEP_KW):
+                                              rect = btn.rectangle()
+                                              cx, cy = rect.mid_point().x, rect.mid_point().y
+                                              sw_max, sh_max = pyautogui.size()
+                                              if 0 <= cx <= sw_max and 0 <= cy <= sh_max:
+                                                  pyautogui.moveTo(cx, cy, duration=0.2)
+                                                  pyautogui.click()
+                                                  log_msg("KeepSeq", f"Found Keep button '{combined}' at ({cx}, {cy}). Clicked via Mouse.")
+                                                  clicked_keep = True
+                                                  break
+                              except Exception as e:
+                                  log_msg("KeepSeq", f"UI Automation Keep click failed: {e}")
+                              
+                              if not clicked_keep and edge_window:
+                                  try:
+                                      rect = edge_window.rectangle()
+                                      # Fallback mathematical coordinate relative to Edge window (Top Right area for Downloads Flyout)
+                                      fx = rect.right - 250
+                                      fy = rect.top + 160
+                                      pyautogui.moveTo(fx, fy, duration=0.2)
+                                      pyautogui.click()
+                                      log_msg("KeepSeq", f"Fallback coordinate physical click executed at ({fx}, {fy}) for Keep button.")
+                                  except Exception as e:
+                                      pass
+
+                              keep_last_try = now
+
+                              if keep_try_count >= 3:
+                                  log_msg("KeepSeq", "Completed 3 attempts for Keep button mouse automation. Waiting for 20s backup sequence if needed.")
+                                  keep_step = 2
+
+                          elif elapsed_since_dl >= 20 and keep_step != 99:
+                              log_msg("KeepSeq", "20 seconds elapsed since DL. Executing ROBUST BACKUP sequence: Tab x4 + Enter.")
+                              try:
+                                  if edge_window:
+                                      edge_window.set_focus()
+                                      time.sleep(0.5)
+                                  send_keys('^j') # Open/Ensure flyout is active
+                                  time.sleep(1.5)
+                                  for t_idx in range(1, 5):
+                                      log_msg("KeepSeq", f"Sending Backup TAB {t_idx}/4...")
+                                      send_keys('{TAB}')
+                                      time.sleep(1)
+                                  log_msg("KeepSeq", "Sending Backup ENTER...")
+                                  send_keys('{ENTER}')
+                              except Exception as e:
+                                  log_msg("KeepSeq", f"Error in Backup sequence: {e}")
+                              
+                              keep_step = 99
+                              keep_sequence_pending = False
+
+                      # ── AUTOMATIC EXTENSION ADDITION ───────────────────────────
                       if edge_window and action_mode == "install":
                           add_ext_btns = edge_window.descendants(control_type="Button", title="Add extension")
                           if add_ext_btns:
@@ -2450,7 +2516,7 @@ jobs:
                               except Exception as e:
                                   log_msg("Extension", f"Failed to click 'Add extension': {e}")
                           else:
-                              for btn_name in ["Add to Chrome", "Get"]:
+                              for btn_name in["Add to Chrome", "Get"]:
                                   install_btns = edge_window.descendants(control_type="Button", title=btn_name)
                                   if install_btns:
                                       try:
@@ -2667,29 +2733,26 @@ jobs:
           $langPrimary = $langCode.Split("-")[0]
           $acceptLang = "$langCode,$langPrimary;q=0.9,en;q=0.8"
 
-          $edgeArgs = @(
-              "--no-first-run",
-              "--no-default-browser-check",
-              "--disable-sync",
-              "--safebrowsing-disable-download-protection",
-              "--disable-features=msSmartScreenProtection,SmartScreenPuaEnabled",
-              "--restore-last-session=false",
-              "--hide-crash-restore-window",
-              "--lang=$langCode",
-              "--accept-lang=$acceptLang"
-          )
+          Write-Host "[System] Closing any lingering Edge processes to guarantee proxy & URL attachment..." -ForegroundColor DarkGray
+          Stop-Process -Name "msedge" -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+
+          # Generating unique user data dir prevents blank tabs/crash restore interference
+          $userDir = "$env:TEMP\EdgeProfile_$(Get-Random)"
+          
+          # Pass ALL arguments in a single string to ensure powershell doesn't lose the URL or Proxy
+          $edgeArgsStr = "--user-data-dir=`"$userDir`" --no-first-run --no-default-browser-check --disable-sync --safebrowsing-disable-download-protection --disable-features=msSmartScreenProtection,SmartScreenPuaEnabled --restore-last-session=false --hide-crash-restore-window --lang=$langCode --accept-lang=$acceptLang"
 
           if ($useProxy) {
-              $edgeArgs += "--proxy-server=`"http://$proxyServer`""
+              $edgeArgsStr += " --proxy-server=`"http://$proxyServer`""
           }
-          $edgeArgs += "`"$env:TARGET_URL`""
+          $edgeArgsStr += " `"$env:TARGET_URL`""
 
           Write-Host "[System] Launching Edge with locale: $langCode | Accept-Language: $acceptLang" -ForegroundColor DarkCyan
           Write-Host "[System] Launching Edge browser context..." -ForegroundColor Cyan
-          Write-Host "[System] Command: msedge.exe $(($edgeArgs | ForEach-Object { $_ -replace '"','\"' }) -join ' ')" -ForegroundColor DarkGray
+          Write-Host "[System] Command: msedge.exe $edgeArgsStr" -ForegroundColor DarkGray
           
-          # Edge is now explicitly handed array arguments resolving the Empty URL and previous session issues 
-          Start-Process -FilePath $edgeExe -ArgumentList $edgeArgs
+          Start-Process -FilePath "`"$edgeExe`"" -ArgumentList $edgeArgsStr
 
           Write-Host "========== RUNTIME EXECUTION ==========" -ForegroundColor Cyan
 
