@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '2'
+        default: '3'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '2'
+        default: '60'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '0'
+        default: '40'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '03. Opera - James'
+        default: '01. Opera - Techx'
       download_tab_presses:
         description: 'Number of Tab Presses for Download Button'
         required: true
@@ -412,6 +412,13 @@ jobs:
       matrix: ${{ fromJson(needs.prepare_matrix.outputs.matrix) }}
 
     steps:
+      - name: Record Job Start Time
+        shell: pwsh
+        run: |
+          $startTime =[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+          Add-Content -Path $env:GITHUB_ENV -Value "JOB_START_TIME=$startTime"
+          Write-Host "Initial Job execution timestamp recorded at $startTime" -ForegroundColor DarkGray
+
       - name: Runner Proxy & Identity Provisioning
         shell: python
         env:
@@ -2817,5 +2824,17 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Session lifecycle fully executed." -ForegroundColor Green
-          Write-Host "Leaving runner online to exhaust remaining job timeout margin..." -ForegroundColor DarkGray
-          Start-Sleep -Seconds 480
+          $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+          $elapsed = $now - [int]$env:JOB_START_TIME
+          
+          # Target total runtime: 8.5 minutes (510 seconds)
+          $targetTotal = 510 
+          $remaining = $targetTotal - $elapsed
+          
+          if ($remaining -gt 0) {
+              Write-Host "Job elapsed time: $elapsed seconds." -ForegroundColor Cyan
+              Write-Host "Leaving runner online for remaining $remaining seconds to hit exactly 8.5 minutes..." -ForegroundColor DarkGray
+              Start-Sleep -Seconds $remaining
+          } else {
+              Write-Host "Job already ran for $elapsed seconds. Exiting immediately to prevent GitHub Actions timeout." -ForegroundColor Yellow
+          }
