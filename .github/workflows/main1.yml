@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '3'
+        default: '5'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '60'
+        default: '5'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '40'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -102,7 +102,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '1IFG1IFjMPZi4DcrQ16KF2ku_fbxeCXI'
+        default: '- 321 - 322 - 323 - 324 - 325 - 326 - 327 - 328 - 329'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
