@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '3'
+        default: '5'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '60'
+        default: '5'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '40'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '01. Opera - Techx'
+        default: '03. Opera - James'
       download_tab_presses:
         description: 'Number of Tab Presses for Download Button'
         required: true
@@ -102,7 +102,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '1IFG1IFjMPZi4DcrQ16KF2ku_fbxeCXI'
+        default: '- 330 - 331 - 332 - 333 - 334 - 335 - 336 - 337 - 338 - 339 - 340 - 341 - 342 - 343 - 344 - 345 - 346 - 347 - 348 - 349 - 350 - 351 - 352 - 353 - 354 - 355 - 356 - 357 - 358 - 359 - 360 - 361 - 362 - 363 - 364 - 365 - 366 - 367 - 368 - 369'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
