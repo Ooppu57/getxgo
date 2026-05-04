@@ -71,7 +71,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'Opera - Fatradez'
+        default: 'AVG - TechxTrader'
       download_tab_presses:
         description: 'Number of Tab Presses for Download Button'
         required: true
@@ -128,7 +128,7 @@ on:
           - 'Italy'
           - 'Netherlands'
           - 'Poland'
-        default: 'Brazil'
+        default: 'USA'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
