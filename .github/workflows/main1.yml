@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '2'
+        default: '5'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '2'
+        default: '10'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '0'
+        default: '5'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - 'Ad-MVN - B4Books'
           - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
-        default: 'OperaOne - Harrari'
+        default: 'Opera - Techx'
       download_tab_presses:
         description: 'Number of Tab Presses for Download Button'
         required: true
