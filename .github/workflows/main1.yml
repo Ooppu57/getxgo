@@ -13,12 +13,12 @@ on:
           - 'windows-11-arm'
         default: 'windows-2025'
       getscreen_email:
-        description: 'Getscreen.me Email'
+        description: 'Getscreen.me Account Email'
         required: true
         type: string
         default: 'techx@highmail.site'
       num_devices:
-        description: 'Number of Devices'
+        description: 'Number of Devices to Spawn (Concurrency)'
         required: true
         type: choice
         options:
@@ -34,17 +34,17 @@ on:
           - '10'
         default: ''
       num_installs:
-        description: 'Installs'
+        description: 'Number of Installs'
         required: true
         type: string
         default: ''
       num_clicks:
-        description: 'Clicks'
+        description: 'Number of Clicks'
         required: true
         type: string
         default: ''
       software_choice:
-        description: 'Software & Link'
+        description: 'Select Software & Link'
         required: true
         type: choice
         options:
@@ -73,7 +73,7 @@ on:
           - 'Ad-MVN - A2Z'
         default: 'Opera - Fatradez'
       download_tab_presses:
-        description: 'Tab Presses for Download Button'
+        description: 'Number of Tab Presses for Download Button'
         required: true
         type: choice
         options:
@@ -94,7 +94,7 @@ on:
         type: string
         default: ''
       run_manual_link:
-        description: 'Run Manual Link'
+        description: 'Run manual link'
         required: true
         type: boolean
         default: false
@@ -104,12 +104,12 @@ on:
         type: string
         default: '1IFG1IFjMPZi4DcrQ16KF2ku_fbxeCXI'
       use_without_proxy:
-        description: 'Run without Proxy'
+        description: 'Run without proxy'
         required: true
         type: boolean
         default: false
       proxy_country:
-        description: 'Proxy Country'
+        description: 'Proxy Country Geotargeting'
         required: true
         type: choice
         options:
@@ -130,12 +130,12 @@ on:
           - 'Poland'
         default: 'Brazil'
       mobile_proxies:
-        description: 'Mobile Proxies'
+        description: 'Use Mobile Proxies'
         required: true
         type: boolean
         default: false
       sticky_sessions:
-        description: 'Sticky Sessions'
+        description: 'Enable Unique Sticky Sessions'
         required: true
         type: boolean
         default: true
@@ -155,6 +155,8 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         if: github.event_name == 'workflow_dispatch'
+        with:
+          persist-credentials: false # FIX: This stops the default token from blocking your PAT
 
       - name: Save Inputs as Defaults in main1.yml
         if: github.event_name == 'workflow_dispatch'
@@ -166,6 +168,10 @@ jobs:
           else
             git config --global user.name "github-actions[bot]"
             git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            
+            # FIX: Aggressively unset any residual Action token headers before applying PAT
+            git config --local --unset-all http.https://github.com/.extraheader || true
+            
             git remote set-url origin https://${GH_PAT}@github.com/${{ github.repository }}.git
             git fetch
             git checkout ${{ github.ref_name }}
@@ -232,7 +238,7 @@ jobs:
             else
               git add .github/workflows/main1.yml
               git commit -m "chore: update default inputs [skip ci]"
-              git push
+              git push origin ${{ github.ref_name }}
             fi
           fi
 
@@ -274,7 +280,7 @@ jobs:
               with open(os.environ["GITHUB_OUTPUT"], "a") as f:
                   f.write("has_tasks=true\n")
 
-          action_list = ["install"] * num_installs + ["click"] * num_clicks
+          action_list =["install"] * num_installs + ["click"] * num_clicks
           random.shuffle(action_list)
 
           print(f"[Action Matrix] Total Tasks Queued: {tasks_total}")
@@ -918,7 +924,7 @@ jobs:
 
           if ($useProxy) {
               Write-Host " Mode      : Proxy ($proxyType -> $proxyServer)" -ForegroundColor Cyan
-              Write-Host " Auth User : $($proxyUser.Substring(0, [Math]::Min(20, $proxyUser.Length)))..." -ForegroundColor DarkCyan
+              Write-Host " Auth User : $($proxyUser.Substring(0,[Math]::Min(20, $proxyUser.Length)))..." -ForegroundColor DarkCyan
           } else {
               Write-Host " Mode      : Direct (Proxy Completely Bypassed)" -ForegroundColor Yellow
           }
@@ -1619,7 +1625,7 @@ jobs:
                           ctrl_type = el.element_info.control_type
                       except Exception:
                           continue
-                      if ctrl_type not in["Button", "Hyperlink", "Text", "Custom"]:
+                      if ctrl_type not in ["Button", "Hyperlink", "Text", "Custom"]:
                           continue
                       try:
                           txt = (el.window_text() or "").strip()
