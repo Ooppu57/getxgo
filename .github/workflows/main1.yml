@@ -48,30 +48,30 @@ on:
         required: true
         type: choice
         options:
-          - 'AVG - TechxTrader'
-          - 'AVG - B4Books'
-          - 'AVG - F.Ahmad'
-          - 'OperaGX - F.Ahmad'
-          - 'OperaGX - B4Books'
-          - 'OperaGX - MLZ'
-          - 'OperaOne - Jimmy'
-          - 'OperaOne - Esmeel'
-          - 'OperaOne - Harrari'
-          - 'OperaOne - Chloe'
-          - 'OperaOne - Daisy'
-          - 'Opera - Techx'
-          - 'Opera - Fatradez'
-          - 'Opera - James'
-          - 'Opera - Oliver'
-          - 'Opera - Mahal'
-          - 'Opera - AD'
-          - 'Opera - Peggy'
-          - 'Opera - Harrari'
-          - 'Ad-MVN - Techx'
-          - 'Ad-MVN - B4Books'
-          - 'Ad-MVN - Orderflowz'
-          - 'Ad-MVN - A2Z'
-        default: 'Opera - Techx'
+          - '01. AVG - TechxTrader'
+          - '02. AVG - B4Books'
+          - '03. AVG - F.Ahmad'
+          - '01. OperaGX - F.Ahmad'
+          - '02. OperaGX - B4Books'
+          - '03. OperaGX - MLZ'
+          - '01. OperaOne - Jimmy'
+          - '02. OperaOne - Esmeel'
+          - '03. OperaOne - Harrari'
+          - '04. OperaOne - Chloe'
+          - '05. OperaOne - Daisy'
+          - '01. Opera - Techx'
+          - '02. Opera - Fatradez'
+          - '03. Opera - James'
+          - '04. Opera - Oliver'
+          - '05. Opera - Mahal'
+          - '06. Opera - AD'
+          - '07. Opera - Peggy'
+          - '08. Opera - Harrari'
+          - '01. Ad-MVN - Techx'
+          - '02. Ad-MVN - B4Books'
+          - '03. Ad-MVN - Orderflowz'
+          - '04. Ad-MVN - A2Z'
+        default: '01. Opera - Techx'
       download_tab_presses:
         description: 'Number of Tab Presses for Download Button'
         required: true
@@ -238,7 +238,7 @@ jobs:
           MANUAL_URL: ${{ inputs.manual_software_url }}
           RUN_MANUAL: ${{ inputs.run_manual_link }}
         run: |
-          import os, json, random
+          import os, json, random, re
 
           print("========== INITIALIZING MATRIX GENERATION ==========")
 
@@ -273,7 +273,11 @@ jobs:
           run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
           manual_url_input = os.environ.get("MANUAL_URL", "").strip()
           manual_url = manual_url_input if run_manual else ""
-          software_choice = os.environ.get("SOFTWARE_CHOICE", "Opera - Fatradez")
+          software_choice_raw = os.environ.get("SOFTWARE_CHOICE", "01. Opera - Fatradez")
+          
+          # Clean numbering (e.g., "01. Opera - Techx" -> "Opera - Techx")
+          software_choice = re.sub(r'^\d+\.\s*', '', software_choice_raw)
+          
           os_version = os.environ.get("OS_VERSION", "windows-2025")
           email = os.environ.get("EMAIL", "").strip()
 
@@ -400,7 +404,7 @@ jobs:
     needs: prepare_matrix
     if: needs.prepare_matrix.outputs.has_tasks == 'true'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 6
+    timeout-minutes: 10
 
     strategy:
       fail-fast: false
@@ -1523,13 +1527,11 @@ jobs:
 
                       if not closed:
                           try:
-                              window.set_focus()
-                              time.sleep(0.3)
-                              send_keys('%{F4}')
+                              window.close()
                               closed = True
-                              log_msg("EdgeClose", "Alt+F4 fallback executed.")
+                              log_msg("EdgeClose", "window.close() executed.")
                           except Exception as e:
-                              log_msg("EdgeClose", f"Alt+F4 fallback failed: {e}")
+                              log_msg("EdgeClose", f"window.close() failed: {e}")
 
                       if closed:
                           closed_any = True
@@ -1547,6 +1549,22 @@ jobs:
           # ══════════════════════════════════════════════════════════════════════
           def click_opera_button_multilingual(desktop, opera_window, software_type,
                                               keyword_list, label="", fallback_coords=None):
+              
+              # Inner helper to guarantee clicks hit the correct physical location.
+              def physical_click(ctrl, tag):
+                  try:
+                      rect = ctrl.rectangle()
+                      cx, cy = rect.mid_point().x, rect.mid_point().y
+                      sw_max, sh_max = pyautogui.size()
+                      if 0 <= cx <= sw_max and 0 <= cy <= sh_max:
+                          pyautogui.moveTo(cx, cy, duration=0.2)
+                          pyautogui.click()
+                          log_msg("MLBtn", f"[{label}] ({tag}) Physically clicked at ({cx}, {cy}).")
+                          return True
+                  except Exception as err:
+                      log_msg("MLBtn", f"[{label}] ({tag}) Physical physical click failed: {err}")
+                  return False
+
               try:
                   target = opera_window
                   if target is None or not target.is_visible():
@@ -1576,9 +1594,10 @@ jobs:
                       try:
                           btns = target.descendants(control_type="Button", title=kw)
                           if btns:
+                              if physical_click(btns[0], "Pass1 Exact"): return True
                               try:
                                   btns[0].click_input()
-                                  log_msg("MLBtn", f"[{label}] Clicked '{kw}' via exact title match.")
+                                  log_msg("MLBtn", f"[{label}] Clicked '{kw}' via click_input exact match.")
                                   return True
                               except Exception as e:
                                   log_msg("MLBtn", f"[{label}] click_input on exact '{kw}' failed: {e}")
@@ -1594,6 +1613,7 @@ jobs:
                       except Exception:
                           continue
                       if combined and _matches_any(combined, keyword_list):
+                          if physical_click(btn, "Pass2 Partial"): return True
                           try:
                               btn.click_input()
                               log_msg("MLBtn", f"[{label}] Clicked '{combined[:40]}' via partial keyword match.")
@@ -1607,7 +1627,7 @@ jobs:
                           ctrl_type = el.element_info.control_type
                       except Exception:
                           continue
-                      if ctrl_type not in ["Button", "Hyperlink", "Text", "Custom"]:
+                      if ctrl_type not in["Button", "Hyperlink", "Text", "Custom"]:
                           continue
                       try:
                           txt = (el.window_text() or "").strip()
@@ -1616,6 +1636,7 @@ jobs:
                       if not txt or len(txt) > 80:
                           continue
                       if _matches_any(txt, keyword_list):
+                          if physical_click(el, "Pass3 Descendant"): return True
                           try:
                               el.click_input()
                               log_msg("MLBtn", f"[{label}] Clicked '{txt[:40]}' via generic descendant scan.")
@@ -1803,8 +1824,8 @@ jobs:
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 6 COMPLETE.")
 
-              # ── STEP 7: Click "Next" 6 times (1s delay) — MULTILINGUAL ────────────────────
-              log_msg("PostInstall-OP1", "STEP 7: Clicking 'Next' button 6 times (multilingual, 1s delay each)...")
+              # ── STEP 7: Click "Next" 6 times (0.5s delay) — MULTILINGUAL ────────────────────
+              log_msg("PostInstall-OP1", "STEP 7: Clicking 'Next' button 6 times (multilingual, 0.5s delay each)...")
               for i in range(1, 7):
                   desktop = Desktop(backend="uia")
                   opera_window = force_maximize_and_focus_target(
@@ -1827,8 +1848,8 @@ jobs:
                   else:
                       log_msg("PostInstall-OP1", f"  Next {i}/6 not found via multilingual scan — fallback already attempted.")
                   
-                  log_msg("PostInstall-OP1", f"  Waiting 1 second after Next click {i}...")
-                  time.sleep(1)
+                  log_msg("PostInstall-OP1", f"  Waiting 0.5 seconds after Next click {i}...")
+                  time.sleep(0.5)
               log_msg("PostInstall-OP1", "STEP 7 COMPLETE: All 6 Next clicks attempted (multilingual).")
 
               # ── STEP 7b: Click "Done" — SAME LOCATION AS NEXT ──────────────────────────
@@ -1911,62 +1932,49 @@ jobs:
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 12 COMPLETE.")
 
-              # ── STEP 13: Tab cycle starting at 10 (Increased by 2) ────────────
-              log_msg("PostInstall-OP1", "STEP 13: Starting TAB cycle sequence (10 TABs → 20 TABs)...")
-              tab_sequence = list(range(10, 21))
-              log_msg("PostInstall-OP1", f"  TAB sequence plan: {tab_sequence}")
+              # ── STEP 13: Tab cycle starting at 10 (Increased by 1 or 2 at random) ────────────
+              log_msg("PostInstall-OP1", "STEP 13: Starting TAB cycle sequence (Random +1/+2 up to 21)...")
+              tab_count = 10
+              tab_ceiling = 21
 
-              for cycle_idx, tab_count in enumerate(tab_sequence):
-                  log_msg("PostInstall-OP1", f"--- TAB CYCLE {cycle_idx + 1}/{len(tab_sequence)}: {tab_count} TAB presses ---")
+              while tab_count <= tab_ceiling:
+                  log_msg("PostInstall-OP1", f"--- TAB CYCLE: {tab_count} TAB presses ---")
 
                   desktop = Desktop(backend="uia")
                   opera_window = force_maximize_and_focus_target(
-                      desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-pre-CtrlT"
+                      desktop, opera_window, software_type, label=f"cycle-pre-CtrlT-{tab_count}"
                   )
-                  log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pressing Ctrl+T (before TABs)...")
+                  log_msg("PostInstall-OP1", f"  Pressing Ctrl+T (before TABs)...")
                   send_keys('^t')
-                  log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Ctrl+T sent. Waiting 5 seconds...")
+                  log_msg("PostInstall-OP1", f"  Ctrl+T sent. Waiting 5 seconds...")
                   for s in range(1, 6):
-                      log_msg("PostInstall-OP1", f"    Pre-TAB wait: {s}/5 seconds...")
                       time.sleep(1)
-                  log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pre-TAB wait complete.")
 
                   log_msg("PostInstall-OP1", f"  Pressing TAB key {tab_count} times (1 second delay between each)...")
                   for i in range(1, tab_count + 1):
                       desktop = Desktop(backend="uia")
                       opera_window = force_maximize_and_focus_target(
-                          desktop, opera_window, software_type,
-                          label=f"cycle{cycle_idx+1}-TAB{tab_count}-press{i}"
+                          desktop, opera_window, software_type, label=f"cycle-TAB{tab_count}-press{i}"
                       )
-                      log_msg("PostInstall-OP1", f"    TAB press {i}/{tab_count} (cycle {cycle_idx + 1})...")
+                      log_msg("PostInstall-OP1", f"    TAB press {i}/{tab_count}...")
                       send_keys('{TAB}')
-                      log_msg("PostInstall-OP1", f"    TAB {i}/{tab_count} sent. Waiting 1 second...")
                       time.sleep(1)
 
                   desktop = Desktop(backend="uia")
                   opera_window = force_maximize_and_focus_target(
-                      desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-ENTER"
+                      desktop, opera_window, software_type, label=f"cycle-ENTER-{tab_count}"
                   )
-                  log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pressing ENTER after {tab_count} TABs...")
+                  log_msg("PostInstall-OP1", f"  Pressing ENTER after {tab_count} TABs...")
                   send_keys('{ENTER}')
-                  log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: ENTER sent.")
 
-                  log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Waiting 5 seconds after ENTER...")
-                  for s in range(1, 6):
-                      log_msg("PostInstall-OP1", f"    Post-ENTER wait: {s}/5 seconds...")
-                      time.sleep(1)
+                  step = random.randint(1, 2)
+                  log_msg("PostInstall-OP1", f"Next cycle increment: +{step}. Next tab_count: {tab_count + step}.")
+                  tab_count += step
 
-                  desktop = Desktop(backend="uia")
-                  opera_window = force_maximize_and_focus_target(
-                      desktop, opera_window, software_type, label=f"cycle{cycle_idx+1}-post-CtrlT"
-                  )
-                  log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Pressing Ctrl+T (after TABs)...")
-                  send_keys('^t')
-                  log_msg("PostInstall-OP1", f"  Cycle {cycle_idx + 1}: Ctrl+T sent. Waiting 5 seconds...")
-                  for s in range(1, 6):
-                      log_msg("PostInstall-OP1", f"    Post-CtrlT wait: {s}/5 seconds...")
-                      time.sleep(1)
-                  log_msg("PostInstall-OP1", f"--- TAB CYCLE {cycle_idx + 1}/{len(tab_sequence)} COMPLETE ---")
+                  if tab_count <= tab_ceiling:
+                      log_msg("PostInstall-OP1", f"  Waiting 5 seconds after ENTER before next cycle...")
+                      for s in range(1, 6):
+                          time.sleep(1)
 
               log_msg("PostInstall-OP1", "STEP 13 COMPLETE: All TAB cycles finished.")
               log_msg("PostInstall-OP1", "=== Opera One Post-Install Sequence Completed Successfully (Multilingual) ===")
@@ -2030,25 +2038,37 @@ jobs:
                       opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"wait5-{s}")
                   time.sleep(1)
 
-              for tab_count in range(7, 17):
+              log_msg("PostInstall-OPGX", "Starting Random TAB sequence (Random +1/+2 up to 17)...")
+              tab_count = 7
+              tab_ceiling = 17
+
+              while tab_count <= tab_ceiling:
                   opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"pre-CtrlT-{tab_count}")
                   log_msg("PostInstall-OPGX", f"Sending Ctrl+T for cycle TAB {tab_count}...")
                   send_keys('^t')
                   log_msg("PostInstall-OPGX", f"Pressing TAB key {tab_count} times (1-2s delay each)...")
+                  
                   for i in range(1, tab_count + 1):
                       opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"TAB{tab_count}-{i}")
                       log_msg("PostInstall-OPGX", f"  Sending TAB ({i}/{tab_count})...")
                       send_keys('{TAB}')
                       d = random.uniform(1.0, 2.0)
                       time.sleep(d)
+                      
                   opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"post-TAB{tab_count}-ENTER")
                   log_msg("PostInstall-OPGX", f"Sending ENTER after {tab_count} TABs...")
                   send_keys('{ENTER}')
-                  log_msg("PostInstall-OPGX", "Waiting 5 seconds...")
-                  for s in range(1, 6):
-                      if s % 2 == 0:
-                          opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"wait5-loop{tab_count}-{s}")
-                      time.sleep(1)
+
+                  step = random.randint(1, 2)
+                  log_msg("PostInstall-OPGX", f"Next cycle increment: +{step}. Next tab_count: {tab_count + step}.")
+                  tab_count += step
+
+                  if tab_count <= tab_ceiling:
+                      log_msg("PostInstall-OPGX", "Waiting 5 seconds...")
+                      for s in range(1, 6):
+                          if s % 2 == 0:
+                              opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"wait5-loop{tab_count}-{s}")
+                          time.sleep(1)
 
               log_msg("PostInstall-OPGX", "=== Opera GX Post-Install Sequence Completed Successfully ===")
 
@@ -2081,7 +2101,7 @@ jobs:
               tab_count = 6
               tab_ceiling = 17
 
-              while tab_count < tab_ceiling:
+              while tab_count <= tab_ceiling:
                   log_msg("PostInstall-AVG", f"--- Cycle: {tab_count} TAB presses ---")
 
                   avg_window = force_maximize_and_focus_target(desktop, avg_window, "avg", label=f"pre-CtrlT-{tab_count}")
@@ -2104,7 +2124,7 @@ jobs:
                   log_msg("PostInstall-AVG", f"Next cycle increment: +{step}. Next tab_count: {tab_count + step}.")
                   tab_count += step
 
-                  if tab_count < tab_ceiling:
+                  if tab_count <= tab_ceiling:
                       log_msg("PostInstall-AVG", "Waiting 5 seconds before next cycle...")
                       for s in range(1, 6):
                           if s % 2 == 0:
@@ -2241,7 +2261,7 @@ jobs:
                           try:
                               with open(installer_executed_sentinel, "r") as f:
                                   flag_content = f.read().strip()
-                                  if flag_content in ["opera_one", "opera_gx", "avg"]:
+                                  if flag_content in["opera_one", "opera_gx", "avg"]:
                                       actual_software = flag_content
                           except Exception:
                               pass
@@ -2399,7 +2419,6 @@ jobs:
                               keep_sequence_pending = True
 
                       # ── STATE MACHINE: UNIVERSAL KEEP SEQUENCE (Ctrl+J) ───────────────────────────
-                      # Reduced Keep Sequence Wait Time to half (15 seconds instead of 30)
                       if keep_sequence_pending and (now - last_dl_click_time >= 15):
                           keep_sequence_pending = False
                           log_msg("KeepSeq", "15 seconds elapsed since download click. Executing robust Ctrl+J -> Tab x4 -> Enter sequence.")
@@ -2528,6 +2547,14 @@ jobs:
                               }
                               Start-Sleep -Milliseconds 500
                           }
+                          
+                          # Robust Backup: If Edge is still running after soft close, terminate its process 
+                          # to avoid interfering with the action terminal.
+                          $remainingAfter = Get-Process -Name "msedge" -ErrorAction SilentlyContinue
+                          if ($remainingAfter) {
+                              Write-Output "[$($softwareType.ToUpper())-WATCHER] Backup Edge Kill: Force closing msedge processes to prevent terminal interference."
+                              Stop-Process -Name "msedge" -Force -ErrorAction SilentlyContinue
+                          }
 
                           # Accurate Download Execution Detection
                           $actualSoftware = $softwareType
@@ -2646,6 +2673,8 @@ jobs:
               "--disable-sync",
               "--safebrowsing-disable-download-protection",
               "--disable-features=msSmartScreenProtection,SmartScreenPuaEnabled",
+              "--restore-last-session=false",
+              "--hide-crash-restore-window",
               "--lang=$langCode",
               "--accept-lang=$acceptLang"
           )
@@ -2658,7 +2687,9 @@ jobs:
           Write-Host "[System] Launching Edge with locale: $langCode | Accept-Language: $acceptLang" -ForegroundColor DarkCyan
           Write-Host "[System] Launching Edge browser context..." -ForegroundColor Cyan
           Write-Host "[System] Command: msedge.exe $(($edgeArgs | ForEach-Object { $_ -replace '"','\"' }) -join ' ')" -ForegroundColor DarkGray
-          Start-Process -FilePath $edgeExe -ArgumentList ($edgeArgs -join " ")
+          
+          # Edge is now explicitly handed array arguments resolving the Empty URL and previous session issues 
+          Start-Process -FilePath $edgeExe -ArgumentList $edgeArgs
 
           Write-Host "========== RUNTIME EXECUTION ==========" -ForegroundColor Cyan
 
@@ -2724,4 +2755,4 @@ jobs:
         run: |
           Write-Host "Session lifecycle fully executed." -ForegroundColor Green
           Write-Host "Leaving runner online to exhaust remaining job timeout margin..." -ForegroundColor DarkGray
-          Start-Sleep -Seconds 360
+          Start-Sleep -Seconds 480
