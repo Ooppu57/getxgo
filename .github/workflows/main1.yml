@@ -48,6 +48,17 @@ on:
         required: true
         type: choice
         options:
+          - 'AVG - TechxTrader'
+          - 'AVG - B4Books'
+          - 'AVG - F.Ahmad'
+          - 'OperaGX - F.Ahmad'
+          - 'OperaGX - B4Books'
+          - 'OperaGX - MLZ'
+          - 'OperaOne - Jimmy'
+          - 'OperaOne - Esmeel'
+          - 'OperaOne - Harrari'
+          - 'OperaOne - Chloe'
+          - 'OperaOne - Daisy'
           - 'Opera - Techx'
           - 'Opera - Fatradez'
           - 'Opera - James'
@@ -56,21 +67,10 @@ on:
           - 'Opera - AD'
           - 'Opera - Peggy'
           - 'Opera - Harrari'
-          - 'OperaGX - F.Ahmad'
-          - 'OperaGX - B4Books'
-          - 'OperaGX - MLZ'
-          - 'Opera-One - Jimmy'
-          - 'Opera-One - Esmeel'
-          - 'Opera-One - Harrari'
-          - 'Opera-One - Chloe'
-          - 'Opera-One - Daisy'
           - 'Ad-MVN - Techx'
           - 'Ad-MVN - B4Books'
-          - 'Ad-MVN - A2Z'
           - 'Ad-MVN - Orderflowz'
-          - 'AVG - TechxTrader'
-          - 'AVG - B4Books'
-          - 'AVG - F.Ahmad'
+          - 'Ad-MVN - A2Z'
         default: 'Opera - Fatradez'
       download_tab_presses:
         description: 'Number of Tab Presses for Download Button'
@@ -145,6 +145,80 @@ permissions:
   contents: write
 
 jobs:
+  save_inputs:
+    name: Auto-Save Last Inputs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+          ref: ${{ github.ref }}
+      - name: Update YAML Defaults
+        run: |
+          python -c '
+          import re
+          import os
+          file_path = ".github/workflows/main1.yml"
+          try:
+              with open(file_path, "r") as f:
+                  content = f.read()
+          except Exception as e:
+              print("Error reading main1.yml:", e)
+              exit(0)
+
+          updates = {
+              "os_version": os.getenv("IN_OS"),
+              "getscreen_email": os.getenv("IN_EMAIL"),
+              "num_devices": os.getenv("IN_DEV"),
+              "num_installs": os.getenv("IN_INST"),
+              "num_clicks": os.getenv("IN_CLK"),
+              "software_choice": os.getenv("IN_SW"),
+              "download_tab_presses": os.getenv("IN_DL"),
+              "manual_software_url": os.getenv("IN_MANUAL"),
+              "run_manual_link": os.getenv("IN_RUN_MANUAL"),
+              "use_without_proxy": os.getenv("IN_NOPROXY"),
+              "proxy_country": os.getenv("IN_COUNTRY"),
+              "mobile_proxies": os.getenv("IN_MOBILE"),
+              "sticky_sessions": os.getenv("IN_STICKY")
+          }
+
+          for k, v in updates.items():
+              if v is None:
+                  v = ""
+              if v.lower() in ["true", "false"]:
+                  rep = v.lower()
+              else:
+                  rep = f"\x27{v}\x27"
+                  
+              pattern = r"(" + k + r":\s*\n(?:\s+.*?\n)*?\s+default:\s*)([^\n]*)"
+              content = re.sub(pattern, r"\g<1>" + rep, content)
+
+          with open(file_path, "w") as f:
+              f.write(content)
+          '
+        env:
+          IN_OS: ${{ inputs.os_version }}
+          IN_EMAIL: ${{ inputs.getscreen_email }}
+          IN_DEV: ${{ inputs.num_devices }}
+          IN_INST: ${{ inputs.num_installs }}
+          IN_CLK: ${{ inputs.num_clicks }}
+          IN_SW: ${{ inputs.software_choice }}
+          IN_DL: ${{ inputs.download_tab_presses }}
+          IN_MANUAL: ${{ inputs.manual_software_url }}
+          IN_RUN_MANUAL: ${{ inputs.run_manual_link }}
+          IN_NOPROXY: ${{ inputs.use_without_proxy }}
+          IN_COUNTRY: ${{ inputs.proxy_country }}
+          IN_MOBILE: ${{ inputs.mobile_proxies }}
+          IN_STICKY: ${{ inputs.sticky_sessions }}
+      - name: Commit and Push Changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add .github/workflows/main1.yml
+          git commit -m "Auto-update workflow inputs from last execution" || echo "No changes to save"
+          git push origin HEAD || echo "Push skipped"
+
   prepare_matrix:
     name: Check Inputs & Prepare Runners
     runs-on: ubuntu-latest
@@ -152,71 +226,6 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       has_tasks: ${{ steps.set-matrix.outputs.has_tasks }}
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GH_PAT || github.token }}
-          
-      - name: Save Inputs (Excluding Proxies)
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
-        run: |
-          if [ -z "$GH_PAT" ]; then
-            echo "GH_PAT not set, skipping save inputs."
-            exit 0
-          fi
-          
-          python -c "
-          import os, re
-          file_path = '.github/workflows/main1.yml'
-          if not os.path.exists(file_path):
-              print(f'{file_path} not found.')
-              exit(0)
-              
-          with open(file_path, 'r') as f:
-              content = f.read()
-
-          inputs_to_save = {
-              'os_version': '${{ inputs.os_version }}',
-              'getscreen_email': '${{ inputs.getscreen_email }}',
-              'num_devices': '${{ inputs.num_devices }}',
-              'num_installs': '${{ inputs.num_installs }}',
-              'num_clicks': '${{ inputs.num_clicks }}',
-              'software_choice': '${{ inputs.software_choice }}',
-              'download_tab_presses': '${{ inputs.download_tab_presses }}',
-              'manual_software_url': '${{ inputs.manual_software_url }}',
-              'run_manual_link': '${{ inputs.run_manual_link }}',
-              'use_without_proxy': '${{ inputs.use_without_proxy }}',
-              'proxy_country': '${{ inputs.proxy_country }}',
-              'mobile_proxies': '${{ inputs.mobile_proxies }}',
-              'sticky_sessions': '${{ inputs.sticky_sessions }}'
-          }
-
-          for key, val in inputs_to_save.items():
-              if val in ['true', 'false']:
-                  val_str = val
-              else:
-                  val_str = f\"'{val}'\" if val else \"''\"
-              
-              pattern = re.compile(r'(      ' + key + r':\n(?:.*?\n)*?        default: ).*', re.MULTILINE)
-              content = pattern.sub(r'\g<1>' + val_str.replace('\\', '\\\\'), content, count=1)
-
-          with open(file_path, 'w') as f:
-              f.write(content)
-          "
-          
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/main1.yml
-          
-          if git diff --staged --quiet; then
-            echo "No changes to defaults."
-          else
-            git commit -m "chore: save last workflow inputs[skip ci]"
-            git push https://${GH_PAT}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }}
-          fi
-
       - name: Generate Dynamic Matrix Queue
         id: set-matrix
         shell: python
@@ -273,38 +282,36 @@ jobs:
               "AVG - B4Books":     "https://techx.short.gy/b4bxavg",
               "AVG - F.Ahmad":     "https://techx.short.gy/f.ahxavg",
           }
-          opera_urls = {
-              "Opera - Techx":      "https://techx.short.gy/techxsmrt",
-              "Opera - Fatradez":   "https://techx.short.gy/fatradezxsmrt",
-              "Opera - James":      "https://techx.short.gy/jamesxsmrt",
-              "Opera - Oliver":     "https://techx.short.gy/oliverxsmrt",
-              "Opera - Mahal":      "https://techx.short.gy/mahalxsmrt",
-              "Opera - AD":         "https://techx.short.gy/adxsmrt",
-              "Opera - Peggy":      "https://techx.short.gy/peggyxsmrt",
-              "Opera - Harrari":    "https://techx.short.gy/harrarixsmrt",
+          opera_gx_urls = {
+              "OperaGX - F.Ahmad": "https://techx.short.gy/f.ahxopx",
+              "OperaGX - B4Books": "https://techx.short.gy/b4bxopx",
+              "OperaGX - MLZ":     "https://techx.short.gy/mlzxopx",
           }
           opera_one_urls = {
-              "Opera-One - Jimmy":   "https://techx.short.gy/jimmyxopo",
-              "Opera-One - Esmeel":  "https://techx.short.gy/esmeelxopo",
-              "Opera-One - Harrari": "https://techx.short.gy/harrarixopo",
-              "Opera-One - Chloe":   "https://techx.short.gy/chloexopo",
-              "Opera-One - Daisy":   "https://techx.short.gy/daisyxopo",
+              "OperaOne - Jimmy":   "https://techx.short.gy/jimmyxopo",
+              "OperaOne - Esmeel":  "https://techx.short.gy/esmeelxopo",
+              "OperaOne - Harrari": "https://techx.short.gy/harrarixopo",
+              "OperaOne - Chloe":   "https://techx.short.gy/chloexopo",
+              "OperaOne - Daisy":   "https://techx.short.gy/daisyxopo",
           }
-          opera_gx_urls = {
-              "OperaGX - F.Ahmad":  "https://techx.short.gy/f.ahxopx",
-              "OperaGX - B4Books":  "https://techx.short.gy/b4bxopx",
-              "OperaGX - MLZ":      "https://techx.short.gy/mlzxopx",
+          opera_urls = {
+              "Opera - Techx":    "https://techx.short.gy/techxsmrt",
+              "Opera - Fatradez": "https://techx.short.gy/fatradezxsmrt",
+              "Opera - James":    "https://techx.short.gy/jamesxsmrt",
+              "Opera - Oliver":   "https://techx.short.gy/oliverxsmrt",
+              "Opera - Mahal":    "https://techx.short.gy/mahalxsmrt",
+              "Opera - AD":       "https://techx.short.gy/adxsmrt",
+              "Opera - Peggy":    "https://techx.short.gy/peggyxsmrt",
+              "Opera - Harrari":  "https://techx.short.gy/harrarixsmrt",
           }
           ad_mvn_urls = {
               "Ad-MVN - Techx":      "https://techx.short.gy/techxadmvn",
               "Ad-MVN - B4Books":    "https://techx.short.gy/b4bxadmvn",
-              "Ad-MVN - A2Z":        "https://techx.short.gy/a2zxadmvn",
               "Ad-MVN - Orderflowz": "https://techx.short.gy/ordrflwzxadmvn",
+              "Ad-MVN - A2Z":        "https://techx.short.gy/a2zxadmvn",
           }
           all_urls = {**avg_urls, **opera_urls, **opera_one_urls, **opera_gx_urls, **ad_mvn_urls}
           
-          dynamic_links = list(opera_urls.keys())
-
           if manual_url:
               target_url = manual_url
               if target_url.endswith("xsmrt"):
@@ -323,11 +330,11 @@ jobs:
                   software_type = "ad_mvn"
                   exe_filter = "*Opera*Setup*.exe"
               else:
-                  software_type = "dynamic_opera"
+                  software_type = "opera_smart_link"
                   exe_filter = "*.exe"
           else:
-              target_url = all_urls.get(software_choice, opera_urls.get("Opera - Fatradez", "https://techx.short.gy/fatradezxsmrt"))
-              if software_choice in dynamic_links or software_choice.startswith("Opera - "):
+              target_url = all_urls.get(software_choice, avg_urls.get("AVG - B4Books", "https://techx.short.gy/b4bxavg"))
+              if software_choice.startswith("Opera - "):
                   software_type = "opera_smart_link"
                   exe_filter = "*Opera*Setup*.exe"
               elif software_choice.startswith("Ad-MVN"):
@@ -336,7 +343,7 @@ jobs:
               elif software_choice.startswith("OperaGX"):
                   software_type = "opera_gx"
                   exe_filter = "OperaGXSetup*.exe"
-              elif software_choice.startswith("Opera-One"):
+              elif software_choice.startswith("OperaOne"):
                   software_type = "opera_one"
                   exe_filter = "OperaSetup*.exe"
               else:
@@ -350,7 +357,7 @@ jobs:
               return "W" + os_ver.replace("windows-", "").replace("-", "")
 
           def short_software(choice):
-              prefix_map = {"OperaGX": "OPX", "Opera-One": "OPO", "Ad-MVN": "MVN", "AVG": "AVG", "Opera": "OP"}
+              prefix_map = {"OperaGX": "OPX", "OperaOne": "OPO", "Ad-MVN": "MVN", "AVG": "AVG", "Opera": "OP"}
               for key, prefix in prefix_map.items():
                   if choice.startswith(key):
                       parts = choice.split(" - ", 1)
@@ -675,7 +682,7 @@ jobs:
                               **pinfo,
                               'working': True, 'country_code': fallback_cc, 'country_name': country_input, 'ip': 'unknown',
                               'city': '', 'region': '', 'timezone_iana': fallback_iana, 'timezone_windows': tz_to_windows_tz(fallback_iana),
-                              'windows_locale': country_code_to_locale(fallback_cc), 'windows_locale': country_code_to_locale(fallback_cc), 'windows_keyboard': country_code_to_keyboard(fallback_cc)
+                              'windows_locale': country_code_to_locale(fallback_cc), 'windows_keyboard': country_code_to_keyboard(fallback_cc)
                           }
                           active_proxy['proxy_type_label'] = 'scrapeops'
                           use_proxy = True
@@ -1140,7 +1147,7 @@ jobs:
                       if aid_kw.lower() in aid:
                           return True
                   if "omnibox" in cls or "addressbar" in cls:
-                      return True
+                          return True
               except Exception:
                   pass
               return False
@@ -1276,7 +1283,7 @@ jobs:
               tl = text.lower()
               if software_type == "avg":
                   return "avg" in tl
-              elif software_type in["opera_gx"]:
+              elif software_type in ["opera_gx"]:
                   return ("opera" in tl and "gx" in tl) or "opera gx" in tl
               elif software_type in["opera_one", "opera_smart_link", "dynamic_opera", "ad_mvn"]:
                   return "opera" in tl and "edge" not in tl and "chrome web store" not in tl
@@ -1600,7 +1607,7 @@ jobs:
                           ctrl_type = el.element_info.control_type
                       except Exception:
                           continue
-                      if ctrl_type not in["Button", "Hyperlink", "Text", "Custom"]:
+                      if ctrl_type not in ["Button", "Hyperlink", "Text", "Custom"]:
                           continue
                       try:
                           txt = (el.window_text() or "").strip()
@@ -2234,7 +2241,7 @@ jobs:
                           try:
                               with open(installer_executed_sentinel, "r") as f:
                                   flag_content = f.read().strip()
-                                  if flag_content in["opera_one", "opera_gx", "avg"]:
+                                  if flag_content in ["opera_one", "opera_gx", "avg"]:
                                       actual_software = flag_content
                           except Exception:
                               pass
@@ -2298,7 +2305,7 @@ jobs:
                                       send_keys('{TAB}')
                                       time.sleep(1)
                                       send_keys('{ENTER}')
-                                      log_msg("SmartLink", "TAB + ENTER injected. Waiting 30s.")
+                                      log_msg("SmartLink", "TAB + ENTER injected. Waiting 15s for redirection.")
                                   except Exception as e:
                                       log_msg("SmartLink", f"Bypass failed: {e}")
                                   smart_link_interstitial_done = True
@@ -2309,7 +2316,7 @@ jobs:
                               if not smart_link_interstitial_done:
                                   time.sleep(1)
                                   continue
-                              elif time.time() - smart_link_interstitial_time < 30:
+                              elif time.time() - smart_link_interstitial_time < 15:
                                   time.sleep(1)
                                   continue
                           time.sleep(1)
@@ -2317,10 +2324,10 @@ jobs:
 
                       can_click_download = True
                       if software_type == "opera_smart_link":
-                          if not smart_link_interstitial_done or (time.time() - smart_link_interstitial_time < 30):
+                          if not smart_link_interstitial_done or (time.time() - smart_link_interstitial_time < 15):
                               can_click_download = False
 
-                      # ── KEYBOARD DOWNLOAD BUTTON TRIGGER (Opera One / Opera GX / Dynamic) ─────────────────────
+                      # ── KEYBOARD DOWNLOAD BUTTON TRIGGER (Opera One / Opera GX / Dynamic / AdMVN) ─────────────────────
                       if (edge_window and action_mode == "install" and can_click_download
                               and software_type in["opera_gx", "opera_one", "ad_mvn",
                                                     "dynamic_opera", "opera_smart_link"]):
@@ -2360,7 +2367,7 @@ jobs:
                       if edge_window and action_mode == "install" and software_type == "avg":
                           elapsed = time.time() - proxy_auth_time
                           if not avg_download_clicked and elapsed > 40:
-                              log_msg("AVG", f"{elapsed:.1f}s elapsed. Initiating AVG TABx1 + ENTER download trigger.")
+                              log_msg("AVG", f"{elapsed:.1f}s elapsed. Initiating AVG TABx1 + ENTER download trigger (Hardcoded)...")
                               try:
                                   edge_window.set_focus()
                                   time.sleep(0.5)
@@ -2377,12 +2384,13 @@ jobs:
                                   time.sleep(1)
                                   # ----------------------------------
 
-                                  for i in range(1, 2):
-                                      send_keys('{TAB}')
-                                      log_msg("AVG", "TAB 1/1 sent.")
-                                      time.sleep(1)
+                                  # Hardcoded to 1 TAB press per user instructions 
+                                  send_keys('{TAB}')
+                                  log_msg("AVG", f"TAB 1/1 sent.")
+                                  time.sleep(1)
+
                                   send_keys('{ENTER}')
-                                  log_msg("AVG", "ENTER sent for download.")
+                                  log_msg("AVG", "ENTER sent for AVG download.")
                               except Exception as e:
                                   log_msg("AVG", f"Keyboard sequence error: {e}")
                               
@@ -2391,6 +2399,7 @@ jobs:
                               keep_sequence_pending = True
 
                       # ── STATE MACHINE: UNIVERSAL KEEP SEQUENCE (Ctrl+J) ───────────────────────────
+                      # Reduced Keep Sequence Wait Time to half (15 seconds instead of 30)
                       if keep_sequence_pending and (now - last_dl_click_time >= 15):
                           keep_sequence_pending = False
                           log_msg("KeepSeq", "15 seconds elapsed since download click. Executing robust Ctrl+J -> Tab x4 -> Enter sequence.")
@@ -2422,7 +2431,7 @@ jobs:
                               except Exception as e:
                                   log_msg("Extension", f"Failed to click 'Add extension': {e}")
                           else:
-                              for btn_name in["Add to Chrome", "Get"]:
+                              for btn_name in ["Add to Chrome", "Get"]:
                                   install_btns = edge_window.descendants(control_type="Button", title=btn_name)
                                   if install_btns:
                                       try:
@@ -2520,16 +2529,23 @@ jobs:
                               Start-Sleep -Milliseconds 500
                           }
 
+                          # Accurate Download Execution Detection
                           $actualSoftware = $softwareType
-                          if ($file.Name -match "(?i)avg") {
-                              $actualSoftware = "avg"
-                              Write-Output "[$($softwareType.ToUpper())-WATCHER] Payload fingerprinted as AVG."
-                          } elseif ($file.Name -match "(?i)OperaGX" -or $file.Name -match "(?i)Opera_GX") {
-                              $actualSoftware = "opera_gx"
-                              Write-Output "[$($softwareType.ToUpper())-WATCHER] Payload fingerprinted as Opera GX Setup."
-                          } elseif ($file.Name -match "(?i)Opera") {
-                              $actualSoftware = "opera_one"
-                              Write-Output "[$($softwareType.ToUpper())-WATCHER] Payload fingerprinted as Opera One Standard Setup."
+                          if ($softwareType -eq "ad_mvn" -or $softwareType -eq "dynamic_opera" -or $softwareType -eq "opera_smart_link") {
+                              if ($file.Name -match "OperaGX") {
+                                  $actualSoftware = "opera_gx"
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Payload fingerprinted as Opera GX Setup."
+                              } elseif ($file.Name -match "Opera.*Setup" -or $file.Name -match "Opera") {
+                                  $actualSoftware = "opera_one"
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Payload fingerprinted as Opera One Standard Setup."
+                              } else {
+                                  if ($file.Name -match "avg") {
+                                      $actualSoftware = "avg"
+                                      Write-Output "[$($softwareType.ToUpper())-WATCHER] Payload fingerprinted as AVG Setup."
+                                  } else {
+                                      $actualSoftware = "opera_one"
+                                  }
+                              }
                           }
 
                           Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Verifying file I/O lock status..."
@@ -2537,7 +2553,7 @@ jobs:
                           while ($locked) {
                               Start-Sleep -Seconds 2
                               try {
-                                  $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
+                                  $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
                                   $s.Close()
                                   $locked = $false
                                   Write-Output "[$($actualSoftware.ToUpper())-INSTALL] File unlocked and ready."
@@ -2679,7 +2695,7 @@ jobs:
                   Write-Host "[$env:SOFTWARE_TYPE] Click tracker: $w / $clickTotal seconds elapsed..." -ForegroundColor Yellow
 
                   if (-not $reloadFired) {
-                      $elapsed =[int]((Get-Date) - $clickStart).TotalSeconds
+                      $elapsed = [int]((Get-Date) - $clickStart).TotalSeconds
                       if ($elapsed -ge $reloadThreshold) {
                           Write-Host "[$env:SOFTWARE_TYPE] Reload threshold reached at ${elapsed}s. Executing page reload..." -ForegroundColor Cyan
                           try {
