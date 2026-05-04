@@ -32,25 +32,22 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '2'
+        default: ''
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '2'
+        default: ''
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '0'
+        default: ''
       software_choice:
         description: 'Select Software & Link'
         required: true
         type: choice
         options:
-          - 'AVG - TechxTrader'
-          - 'AVG - B4Books'
-          - 'AVG - F.Ahmad'
           - 'Opera - Techx'
           - 'Opera - Fatradez'
           - 'Opera - James'
@@ -59,18 +56,21 @@ on:
           - 'Opera - AD'
           - 'Opera - Peggy'
           - 'Opera - Harrari'
+          - 'OperaGX - F.Ahmad'
+          - 'OperaGX - B4Books'
+          - 'OperaGX - MLZ'
           - 'Opera-One - Jimmy'
           - 'Opera-One - Esmeel'
           - 'Opera-One - Harrari'
           - 'Opera-One - Chloe'
           - 'Opera-One - Daisy'
-          - 'OperaGX - F.Ahmad'
-          - 'OperaGX - B4Books'
-          - 'OperaGX - MLZ'
           - 'Ad-MVN - Techx'
           - 'Ad-MVN - B4Books'
-          - 'Ad-MVN - Orderflowz'
           - 'Ad-MVN - A2Z'
+          - 'Ad-MVN - Orderflowz'
+          - 'AVG - TechxTrader'
+          - 'AVG - B4Books'
+          - 'AVG - F.Ahmad'
         default: 'Opera - Fatradez'
       download_tab_presses:
         description: 'Number of Tab Presses for Download Button'
@@ -152,94 +152,69 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       has_tasks: ${{ steps.set-matrix.outputs.has_tasks }}
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
-        if: github.event_name == 'workflow_dispatch'
         with:
-          persist-credentials: false # Stops default token from blocking PAT pushes
-
-      - name: Save Inputs as Defaults in main1.yml
+          token: ${{ secrets.GH_PAT || github.token }}
+          
+      - name: Save Inputs (Excluding Proxies)
         if: github.event_name == 'workflow_dispatch'
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           if [ -z "$GH_PAT" ]; then
-            echo "GH_PAT is not set. Skipping default updates."
-          else
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
-            
-            # Aggressively unset residual action token headers before applying PAT
-            git config --local --unset-all http.https://github.com/.extraheader || true
-            
-            git remote set-url origin https://${GH_PAT}@github.com/${{ github.repository }}.git
-            git fetch
-            git checkout ${{ github.ref_name }}
-            
-            cat << 'EOF' > update_defaults.py
-          import re, os
+            echo "GH_PAT not set, skipping save inputs."
+            exit 0
+          fi
           
+          python -c "
+          import os, re
           file_path = '.github/workflows/main1.yml'
           if not os.path.exists(file_path):
+              print(f'{file_path} not found.')
               exit(0)
               
           with open(file_path, 'r') as f:
               content = f.read()
-          
-          updates = {
-              'os_version': os.getenv('OS_VER'),
-              'getscreen_email': os.getenv('EMAIL'),
-              'num_devices': os.getenv('NUM_DEV'),
-              'num_installs': os.getenv('NUM_INST'),
-              'num_clicks': os.getenv('NUM_CLICKS'),
-              'software_choice': os.getenv('SW_CHOICE'),
-              'download_tab_presses': os.getenv('DL_TABS'),
-              'run_manual_link': os.getenv('RUN_MANUAL'),
-              'manual_software_url': os.getenv('MAN_URL'),
-              'use_without_proxy': os.getenv('WITHOUT_PROXY'),
-              'proxy_country': os.getenv('PROXY_CC'),
-              'mobile_proxies': os.getenv('MOB_PROXIES'),
-              'sticky_sessions': os.getenv('STICKY'),
+
+          inputs_to_save = {
+              'os_version': '${{ inputs.os_version }}',
+              'getscreen_email': '${{ inputs.getscreen_email }}',
+              'num_devices': '${{ inputs.num_devices }}',
+              'num_installs': '${{ inputs.num_installs }}',
+              'num_clicks': '${{ inputs.num_clicks }}',
+              'software_choice': '${{ inputs.software_choice }}',
+              'download_tab_presses': '${{ inputs.download_tab_presses }}',
+              'manual_software_url': '${{ inputs.manual_software_url }}',
+              'run_manual_link': '${{ inputs.run_manual_link }}',
+              'use_without_proxy': '${{ inputs.use_without_proxy }}',
+              'proxy_country': '${{ inputs.proxy_country }}',
+              'mobile_proxies': '${{ inputs.mobile_proxies }}',
+              'sticky_sessions': '${{ inputs.sticky_sessions }}'
           }
-          
-          for key, value in updates.items():
-              if value is None:
-                  continue
-              if value.lower() in ['true', 'false']:
-                  val_str = value.lower()
+
+          for key, val in inputs_to_save.items():
+              if val in ['true', 'false']:
+                  val_str = val
               else:
-                  val_str = f"'{value}'"
+                  val_str = f\"'{val}'\" if val else \"''\"
               
-              pattern = r'( {6}' + key + r':\n(?:.*?\n)*? {8}default: ).*(?=\n)'
-              content = re.sub(pattern, r'\g<1>' + val_str, content, count=1)
-          
+              pattern = re.compile(r'(      ' + key + r':\n(?:.*?\n)*?        default: ).*', re.MULTILINE)
+              content = pattern.sub(r'\g<1>' + val_str.replace('\\', '\\\\'), content, count=1)
+
           with open(file_path, 'w') as f:
               f.write(content)
-          EOF
+          "
           
-            export OS_VER="${{ inputs.os_version }}"
-            export EMAIL="${{ inputs.getscreen_email }}"
-            export NUM_DEV="${{ inputs.num_devices }}"
-            export NUM_INST="${{ inputs.num_installs }}"
-            export NUM_CLICKS="${{ inputs.num_clicks }}"
-            export SW_CHOICE="${{ inputs.software_choice }}"
-            export DL_TABS="${{ inputs.download_tab_presses }}"
-            export RUN_MANUAL="${{ inputs.run_manual_link }}"
-            export MAN_URL="${{ inputs.manual_software_url }}"
-            export WITHOUT_PROXY="${{ inputs.use_without_proxy }}"
-            export PROXY_CC="${{ inputs.proxy_country }}"
-            export MOB_PROXIES="${{ inputs.mobile_proxies }}"
-            export STICKY="${{ inputs.sticky_sessions }}"
-            
-            python3 update_defaults.py
-            
-            if git diff --exit-code .github/workflows/main1.yml > /dev/null; then
-              echo "No changes to save."
-            else
-              git add .github/workflows/main1.yml
-              git commit -m "chore: update default inputs [skip ci]"
-              git push origin ${{ github.ref_name }}
-            fi
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/main1.yml
+          
+          if git diff --staged --quiet; then
+            echo "No changes to defaults."
+          else
+            git commit -m "chore: save last workflow inputs[skip ci]"
+            git push https://${GH_PAT}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }}
           fi
 
       - name: Generate Dynamic Matrix Queue
@@ -280,7 +255,7 @@ jobs:
               with open(os.environ["GITHUB_OUTPUT"], "a") as f:
                   f.write("has_tasks=true\n")
 
-          action_list = ["install"] * num_installs + ["click"] * num_clicks
+          action_list =["install"] * num_installs + ["click"] * num_clicks
           random.shuffle(action_list)
 
           print(f"[Action Matrix] Total Tasks Queued: {tasks_total}")
@@ -323,41 +298,41 @@ jobs:
           ad_mvn_urls = {
               "Ad-MVN - Techx":      "https://techx.short.gy/techxadmvn",
               "Ad-MVN - B4Books":    "https://techx.short.gy/b4bxadmvn",
-              "Ad-MVN - Orderflowz": "https://techx.short.gy/ordrflwzxadmvn",
               "Ad-MVN - A2Z":        "https://techx.short.gy/a2zxadmvn",
+              "Ad-MVN - Orderflowz": "https://techx.short.gy/ordrflwzxadmvn",
           }
           all_urls = {**avg_urls, **opera_urls, **opera_one_urls, **opera_gx_urls, **ad_mvn_urls}
           
-          dynamic_links =["Opera - Techx", "Opera - Fatradez", "Opera - James", "Opera - Oliver", "Opera - Mahal", "Opera - AD", "Opera - Peggy", "Opera - Harrari"]
+          dynamic_links = list(opera_urls.keys())
 
           if manual_url:
               target_url = manual_url
-              if manual_url.endswith("xsmrt"):
+              if target_url.endswith("xsmrt"):
                   software_type = "opera_smart_link"
                   exe_filter = "*Opera*Setup*.exe"
-              elif manual_url.endswith("xavg"):
+              elif target_url.endswith("xavg"):
                   software_type = "avg"
                   exe_filter = "*avg*.exe"
-              elif manual_url.endswith("xopo"):
+              elif target_url.endswith("xopo"):
                   software_type = "opera_one"
                   exe_filter = "OperaSetup*.exe"
-              elif manual_url.endswith("xopx"):
+              elif target_url.endswith("xopx"):
                   software_type = "opera_gx"
                   exe_filter = "OperaGXSetup*.exe"
-              elif manual_url.endswith("xadmvn"):
+              elif target_url.endswith("xadmvn"):
                   software_type = "ad_mvn"
-                  exe_filter = "*.exe"
+                  exe_filter = "*Opera*Setup*.exe"
               else:
                   software_type = "dynamic_opera"
                   exe_filter = "*.exe"
           else:
-              target_url = all_urls.get(software_choice, avg_urls.get("AVG - B4Books", "https://techx.short.gy/b4bxavg"))
+              target_url = all_urls.get(software_choice, opera_urls.get("Opera - Fatradez", "https://techx.short.gy/fatradezxsmrt"))
               if software_choice in dynamic_links or software_choice.startswith("Opera - "):
                   software_type = "opera_smart_link"
                   exe_filter = "*Opera*Setup*.exe"
               elif software_choice.startswith("Ad-MVN"):
                   software_type = "ad_mvn"
-                  exe_filter = "*.exe"
+                  exe_filter = "*Opera*Setup*.exe"
               elif software_choice.startswith("OperaGX"):
                   software_type = "opera_gx"
                   exe_filter = "OperaGXSetup*.exe"
@@ -572,8 +547,8 @@ jobs:
               return {'working': False, **pinfo}
 
           # Parse inputs into lists
-          manual_proxies = []
-          scrapeops_keys = []
+          manual_proxies =[]
+          scrapeops_keys =[]
           floppy_keys =[]
           
           if proxy_input and not without_proxy:
@@ -700,7 +675,7 @@ jobs:
                               **pinfo,
                               'working': True, 'country_code': fallback_cc, 'country_name': country_input, 'ip': 'unknown',
                               'city': '', 'region': '', 'timezone_iana': fallback_iana, 'timezone_windows': tz_to_windows_tz(fallback_iana),
-                              'windows_locale': country_code_to_locale(fallback_cc), 'windows_keyboard': country_code_to_keyboard(fallback_cc)
+                              'windows_locale': country_code_to_locale(fallback_cc), 'windows_locale': country_code_to_locale(fallback_cc), 'windows_keyboard': country_code_to_keyboard(fallback_cc)
                           }
                           active_proxy['proxy_type_label'] = 'scrapeops'
                           use_proxy = True
@@ -924,7 +899,7 @@ jobs:
 
           if ($useProxy) {
               Write-Host " Mode      : Proxy ($proxyType -> $proxyServer)" -ForegroundColor Cyan
-              Write-Host " Auth User : $($proxyUser.Substring(0,[Math]::Min(20, $proxyUser.Length)))..." -ForegroundColor DarkCyan
+              Write-Host " Auth User : $($proxyUser.Substring(0, [Math]::Min(20, $proxyUser.Length)))..." -ForegroundColor DarkCyan
           } else {
               Write-Host " Mode      : Direct (Proxy Completely Bypassed)" -ForegroundColor Yellow
           }
@@ -1165,7 +1140,7 @@ jobs:
                       if aid_kw.lower() in aid:
                           return True
                   if "omnibox" in cls or "addressbar" in cls:
-                          return True
+                      return True
               except Exception:
                   pass
               return False
@@ -1301,7 +1276,7 @@ jobs:
               tl = text.lower()
               if software_type == "avg":
                   return "avg" in tl
-              elif software_type in ["opera_gx"]:
+              elif software_type in["opera_gx"]:
                   return ("opera" in tl and "gx" in tl) or "opera gx" in tl
               elif software_type in["opera_one", "opera_smart_link", "dynamic_opera", "ad_mvn"]:
                   return "opera" in tl and "edge" not in tl and "chrome web store" not in tl
@@ -1326,7 +1301,7 @@ jobs:
                       if not _is_interference_window(wt):
                           continue
 
-                      log_msg("WinGuard", f"Interference window detected: '{wt}' [{label}]")
+                      log_msg("WinGuard", f"Interference window detected: '{wt}'[{label}]")
                       closed = False
 
                       try:
@@ -1625,7 +1600,7 @@ jobs:
                           ctrl_type = el.element_info.control_type
                       except Exception:
                           continue
-                      if ctrl_type not in ["Button", "Hyperlink", "Text", "Custom"]:
+                      if ctrl_type not in["Button", "Hyperlink", "Text", "Custom"]:
                           continue
                       try:
                           txt = (el.window_text() or "").strip()
@@ -1672,7 +1647,7 @@ jobs:
                       u_struct, p_struct = _is_auth_dialog_by_structure(window)
                       if u_struct and p_struct:
                           log_msg("ProxyAuth", f"[{label}] Using structural detection (2-field dialog).")
-                          user_fields = [u_struct]
+                          user_fields =[u_struct]
                           pass_fields =[p_struct]
 
                   if user_fields and pass_fields:
@@ -2253,13 +2228,13 @@ jobs:
                           download_windows_closed = True
                           edge_window = None
 
-                      # ── ROBUST SOFTWARE DETECTION FOR POST INSTALL ────────────
+                      # ── ROBUST SOFTWARE DETECTION ────────────────────────────
                       actual_software = software_type
                       if os.path.exists(installer_executed_sentinel):
                           try:
                               with open(installer_executed_sentinel, "r") as f:
                                   flag_content = f.read().strip()
-                                  if flag_content in ["opera_one", "opera_gx", "avg"]:
+                                  if flag_content in["opera_one", "opera_gx", "avg"]:
                                       actual_software = flag_content
                           except Exception:
                               pass
@@ -2402,10 +2377,9 @@ jobs:
                                   time.sleep(1)
                                   # ----------------------------------
 
-                                  # Hardcoded to 1 TAB press for AVG
                                   for i in range(1, 2):
                                       send_keys('{TAB}')
-                                      log_msg("AVG", "TAB 1/1 sent (hardcoded for AVG).")
+                                      log_msg("AVG", "TAB 1/1 sent.")
                                       time.sleep(1)
                                   send_keys('{ENTER}')
                                   log_msg("AVG", "ENTER sent for download.")
@@ -2448,7 +2422,7 @@ jobs:
                               except Exception as e:
                                   log_msg("Extension", f"Failed to click 'Add extension': {e}")
                           else:
-                              for btn_name in ["Add to Chrome", "Get"]:
+                              for btn_name in["Add to Chrome", "Get"]:
                                   install_btns = edge_window.descendants(control_type="Button", title=btn_name)
                                   if install_btns:
                                       try:
@@ -2506,10 +2480,7 @@ jobs:
                           try { Set-Content -Path $sentinelPath -Value "done" -ErrorAction SilentlyContinue } catch {}
                           Write-Output "[$($softwareType.ToUpper())-WATCHER] Sentinel flag generated."
 
-                          Write-Output "[$($softwareType.ToUpper())-WATCHER] Waiting 5 seconds before closing browser completely..."
-                          Start-Sleep -Seconds 5
-
-                          Write-Output "[$($softwareType.ToUpper())-WATCHER] Aggressively closing Edge completely..."
+                          Write-Output "[$($softwareType.ToUpper())-WATCHER] Aggressively closing Edge download tabs..."
                           for ($closeAttempt = 1; $closeAttempt -le 4; $closeAttempt++) {
                               try {
                                   $wsh = New-Object -ComObject WScript.Shell
@@ -2520,23 +2491,19 @@ jobs:
                                   if ($edgeProcs) {
                                       foreach ($edgeProc in $edgeProcs) {
                                           Write-Output "[$($softwareType.ToUpper())-WATCHER] Close attempt $closeAttempt — focusing Edge PID $($edgeProc.Id)..."
-                                          if ($wsh.AppActivate($edgeProc.Id)) {
-                                              Start-Sleep -Milliseconds 600
-                                              $wsh.SendKeys("^w")
-                                              Start-Sleep -Milliseconds 400
-                                              # Uses Ctrl+Shift+W to close whole Edge window securely without triggering system Alt+F4 killswitch
-                                              $wsh.SendKeys("^+w") 
-                                              Start-Sleep -Milliseconds 400
-                                              Write-Output "[$($softwareType.ToUpper())-WATCHER] Keystrokes sent to Edge PID $($edgeProc.Id)."
-                                          }
+                                          $wsh.AppActivate($edgeProc.Id)
+                                          Start-Sleep -Milliseconds 600
+                                          $wsh.SendKeys("^w")
+                                          Start-Sleep -Milliseconds 400
+                                          $wsh.SendKeys("^w")
+                                          Start-Sleep -Milliseconds 400
+                                          Write-Output "[$($softwareType.ToUpper())-WATCHER] Ctrl+W x2 sent to Edge PID $($edgeProc.Id)."
                                       }
                                   } else {
-                                      Write-Output "[$($softwareType.ToUpper())-WATCHER] No visible Edge window — skipping keystrokes..."
-                                  }
-
-                                  if ($closeAttempt -ge 2) {
-                                      Write-Output "[$($softwareType.ToUpper())-WATCHER] Executing hard kill on msedge processes..."
-                                      Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+                                      Write-Output "[$($softwareType.ToUpper())-WATCHER] No visible Edge window — blind Ctrl+W attempt $closeAttempt..."
+                                      $wsh.SendKeys("^w")
+                                      Start-Sleep -Milliseconds 500
+                                      $wsh.SendKeys("^w")
                                   }
 
                                   Start-Sleep -Milliseconds 800
@@ -2554,15 +2521,15 @@ jobs:
                           }
 
                           $actualSoftware = $softwareType
-                          if ($file.Name -match "(?i)OperaGX") {
+                          if ($file.Name -match "(?i)avg") {
+                              $actualSoftware = "avg"
+                              Write-Output "[$($softwareType.ToUpper())-WATCHER] Payload fingerprinted as AVG."
+                          } elseif ($file.Name -match "(?i)OperaGX" -or $file.Name -match "(?i)Opera_GX") {
                               $actualSoftware = "opera_gx"
                               Write-Output "[$($softwareType.ToUpper())-WATCHER] Payload fingerprinted as Opera GX Setup."
                           } elseif ($file.Name -match "(?i)Opera") {
                               $actualSoftware = "opera_one"
                               Write-Output "[$($softwareType.ToUpper())-WATCHER] Payload fingerprinted as Opera One Standard Setup."
-                          } elseif ($file.Name -match "(?i)avg") {
-                              $actualSoftware = "avg"
-                              Write-Output "[$($softwareType.ToUpper())-WATCHER] Payload fingerprinted as AVG Setup."
                           }
 
                           Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Verifying file I/O lock status..."
@@ -2570,7 +2537,7 @@ jobs:
                           while ($locked) {
                               Start-Sleep -Seconds 2
                               try {
-                                  $s = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
+                                  $s =[System.IO.File]::Open($file.FullName, 'Open', 'Read', 'None')
                                   $s.Close()
                                   $locked = $false
                                   Write-Output "[$($actualSoftware.ToUpper())-INSTALL] File unlocked and ready."
@@ -2712,7 +2679,7 @@ jobs:
                   Write-Host "[$env:SOFTWARE_TYPE] Click tracker: $w / $clickTotal seconds elapsed..." -ForegroundColor Yellow
 
                   if (-not $reloadFired) {
-                      $elapsed = [int]((Get-Date) - $clickStart).TotalSeconds
+                      $elapsed =[int]((Get-Date) - $clickStart).TotalSeconds
                       if ($elapsed -ge $reloadThreshold) {
                           Write-Host "[$env:SOFTWARE_TYPE] Reload threshold reached at ${elapsed}s. Executing page reload..." -ForegroundColor Cyan
                           try {
