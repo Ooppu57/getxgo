@@ -1,3 +1,4 @@
+
 name: Parallel Windows Auto-Installer m
 
 on:
@@ -37,12 +38,12 @@ on:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '40'
+        default: '60'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '60'
+        default: '40'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +72,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '03. Opera - James'
+        default: '01. Opera - Techx'
       download_tab_presses:
         description: 'Number of Tab Presses for Download Button'
         required: true
@@ -2150,8 +2151,7 @@ jobs:
               log_msg("UI-Engine", f"Proxy credentials ready: User={PROXY_USER[:25]}... | "
                       f"Server={PROXY_SERVER}")
 
-              opera_download_clicked = False
-              avg_download_clicked = False
+              download_clicked = False
               
               # Keep Sequence Control Variables
               keep_sequence_pending = False
@@ -2359,80 +2359,66 @@ jobs:
                           if not smart_link_interstitial_done or (time.time() - smart_link_interstitial_time < 15):
                               can_click_download = False
 
-                      # ── KEYBOARD DOWNLOAD BUTTON TRIGGER (Opera One / Opera GX / Dynamic / AdMVN) ─────────────────────
-                      if (edge_window and action_mode == "install" and can_click_download
-                              and software_type in["opera_gx", "opera_one", "ad_mvn",
-                                                    "dynamic_opera", "opera_smart_link"]):
+                      # ── ROBUST MULTILINGUAL MOUSE DOWNLOAD TRIGGER (For All SW Types) ─────────────────────
+                      if (edge_window and action_mode == "install" and can_click_download):
                           elapsed = time.time() - proxy_auth_time
-                          if not opera_download_clicked and elapsed > 40:
-                              log_msg("DL-Engine", f"{elapsed:.1f}s elapsed. Executing keyboard download bypass for {software_type} (TABx{DOWNLOAD_TABS} + ENTER)...")
+                          
+                          # DOUBLED LOADING PERIOD (60 Seconds)
+                          if not download_clicked and elapsed > 60:
+                              log_msg("DL-Engine", f"{elapsed:.1f}s elapsed. Initiating UI Mouse Download Trigger for {software_type}...")
                               try:
                                   edge_window.set_focus()
                                   time.sleep(0.5)
                                   
-                                  sw, sh = pyautogui.size()
-                                  cx = int(sw * 0.4)
-                                  cy = int(sh * 0.25)
-                                  log_msg("DL-Engine", f"Clicking 25% above & 10% left of center ({cx}, {cy}) 2 times...")
-                                  pyautogui.moveTo(cx, cy, duration=0.2)
-                                  pyautogui.click()
-                                  time.sleep(1)
-                                  pyautogui.click()
-                                  time.sleep(1)
+                                  clicked_download_btn = False
+                                  DOWNLOAD_KW =["download", "télécharger", "telecharger", "descargar", "herunterladen", "scarica", "downloaden", "pobierz", "tải", "unduh", "indir", "lataa", "stáhnout", "stah", "letölt", "baixar", "install", "instalar", "get it", "obtener", "obter", "obtenir", "gratis", "kostenlos"]
+                                  
+                                  # Scan for Multilingual Download Button
+                                  for el in edge_window.descendants():
+                                      try:
+                                          if el.element_info.control_type not in["Button", "Hyperlink", "Text", "Image"]: continue
+                                          b_txt = (el.window_text() or "").lower()
+                                          b_name = (el.element_info.name or "").lower()
+                                          combined = f"{b_txt} {b_name}"
+                                          
+                                          if any(kw in combined for kw in DOWNLOAD_KW) and len(combined) < 50:
+                                              rect = el.rectangle()
+                                              cx, cy = rect.mid_point().x, rect.mid_point().y
+                                              sw_max, sh_max = pyautogui.size()
+                                              if 0 <= cx <= sw_max and 0 <= cy <= sh_max:
+                                                  pyautogui.moveTo(cx, cy, duration=0.2)
+                                                  pyautogui.click()
+                                                  log_msg("DL-Engine", f"Found Download element '{combined}' at ({cx}, {cy}). Clicked via Mouse.")
+                                                  clicked_download_btn = True
+                                                  break
+                                      except Exception:
+                                          pass
 
-                                  for i in range(1, DOWNLOAD_TABS + 1):
-                                      send_keys('{TAB}')
-                                      log_msg("DL-Engine", f"TAB {i}/{DOWNLOAD_TABS} sent.")
-                                      time.sleep(1)
-                                  send_keys('{ENTER}')
-                                  log_msg("DL-Engine", "ENTER sent for Opera download.")
+                                  # Fallback: Double click dead center of the screen
+                                  if not clicked_download_btn:
+                                      sw, sh = pyautogui.size()
+                                      cx = int(sw * 0.5)
+                                      cy = int(sh * 0.5)
+                                      log_msg("DL-Engine", f"Download text not found. Clicking physical fallback coordinate at ({cx}, {cy}).")
+                                      pyautogui.moveTo(cx, cy, duration=0.2)
+                                      pyautogui.click()
+                                      time.sleep(0.5)
+                                      pyautogui.click()
+                                      
                               except Exception as e:
-                                  log_msg("DL-Engine", f"Keyboard sequence error: {e}")
+                                  log_msg("DL-Engine", f"Download sequence error: {e}")
                               
-                              opera_download_clicked = True
+                              download_clicked = True
                               last_dl_click_time = time.time()
                               keep_sequence_pending = True
                               keep_step = 0
                               keep_try_count = 0
 
-                      # ── KEYBOARD DOWNLOAD BUTTON TRIGGER (AVG) ─────────────────────
-                      if edge_window and action_mode == "install" and software_type == "avg":
-                          elapsed = time.time() - proxy_auth_time
-                          if not avg_download_clicked and elapsed > 40:
-                              log_msg("AVG", f"{elapsed:.1f}s elapsed. Initiating AVG TABx1 + ENTER download trigger (Hardcoded)...")
-                              try:
-                                  edge_window.set_focus()
-                                  time.sleep(0.5)
-                                  
-                                  sw, sh = pyautogui.size()
-                                  cx = int(sw * 0.4)
-                                  cy = int(sh * 0.25)
-                                  log_msg("AVG", f"Clicking 25% above & 10% left of center ({cx}, {cy}) 2 times...")
-                                  pyautogui.moveTo(cx, cy, duration=0.2)
-                                  pyautogui.click()
-                                  time.sleep(1)
-                                  pyautogui.click()
-                                  time.sleep(1)
-
-                                  send_keys('{TAB}')
-                                  log_msg("AVG", f"TAB 1/1 sent.")
-                                  time.sleep(1)
-
-                                  send_keys('{ENTER}')
-                                  log_msg("AVG", "ENTER sent for AVG download.")
-                              except Exception as e:
-                                  log_msg("AVG", f"Keyboard sequence error: {e}")
-                              
-                              avg_download_clicked = True
-                              last_dl_click_time = time.time()
-                              keep_sequence_pending = True
-                              keep_step = 0
-                              keep_try_count = 0
-
-                      # ── STATE MACHINE: ADVANCED KEEP SEQUENCE (Mouse Automation & Keyboard Backup) ───────────────────────────
+                      # ── STATE MACHINE: ADVANCED KEEP SEQUENCE (Mouse Automation ONLY) ───────────────────────────
                       if keep_sequence_pending:
                           elapsed_since_dl = now - last_dl_click_time
 
+                          # Wait 5 seconds after Download is clicked, then Open Downloads Flyout
                           if keep_step == 0 and elapsed_since_dl >= 5:
                               log_msg("KeepSeq", "5 seconds elapsed since download click. Pressing Ctrl+J to open downloads flyout.")
                               try:
@@ -2442,13 +2428,15 @@ jobs:
                                   send_keys('^j')
                               except Exception as e:
                                   log_msg("KeepSeq", f"Error pressing Ctrl+J: {e}")
+                              
                               keep_step = 1
                               keep_last_try = now
                               keep_try_count = 0
 
+                          # Try searching for the Keep Button every 5 seconds using Mouse Automation
                           elif keep_step == 1 and (now - keep_last_try >= 5):
                               keep_try_count += 1
-                              log_msg("KeepSeq", f"Attempt {keep_try_count}/3: Searching for 'Keep' button via Mouse Automation...")
+                              log_msg("KeepSeq", f"Attempt {keep_try_count}: Searching for 'Keep' button via Mouse Automation...")
                               
                               clicked_keep = False
                               try:
@@ -2472,10 +2460,10 @@ jobs:
                               except Exception as e:
                                   log_msg("KeepSeq", f"UI Automation Keep click failed: {e}")
                               
+                              # Coordinate Fallback if text isn't matched
                               if not clicked_keep and edge_window:
                                   try:
                                       rect = edge_window.rectangle()
-                                      # Fallback mathematical coordinate relative to Edge window (Top Right area for Downloads Flyout)
                                       fx = rect.right - 250
                                       fy = rect.top + 160
                                       pyautogui.moveTo(fx, fy, duration=0.2)
@@ -2486,29 +2474,10 @@ jobs:
 
                               keep_last_try = now
 
-                              if keep_try_count >= 3:
-                                  log_msg("KeepSeq", "Completed 3 attempts for Keep button mouse automation. Waiting for 20s backup sequence if needed.")
-                                  keep_step = 2
-
-                          elif elapsed_since_dl >= 20 and keep_step != 99:
-                              log_msg("KeepSeq", "20 seconds elapsed since DL. Executing ROBUST BACKUP sequence: Tab x4 + Enter.")
-                              try:
-                                  if edge_window:
-                                      edge_window.set_focus()
-                                      time.sleep(0.5)
-                                  send_keys('^j') # Open/Ensure flyout is active
-                                  time.sleep(1.5)
-                                  for t_idx in range(1, 5):
-                                      log_msg("KeepSeq", f"Sending Backup TAB {t_idx}/4...")
-                                      send_keys('{TAB}')
-                                      time.sleep(1)
-                                  log_msg("KeepSeq", "Sending Backup ENTER...")
-                                  send_keys('{ENTER}')
-                              except Exception as e:
-                                  log_msg("KeepSeq", f"Error in Backup sequence: {e}")
-                              
-                              keep_step = 99
-                              keep_sequence_pending = False
+                              # Allow it to loop up to 12 times (60 seconds) to ensure Keep is clicked if it takes time
+                              if keep_try_count >= 12:
+                                  log_msg("KeepSeq", "Completed 12 attempts for Keep button mouse automation. Stopping Keep sequence.")
+                                  keep_sequence_pending = False
 
                       # ── AUTOMATIC EXTENSION ADDITION ───────────────────────────
                       if edge_window and action_mode == "install":
