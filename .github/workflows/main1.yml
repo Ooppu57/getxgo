@@ -32,7 +32,7 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '3'
+        default: '5'
       num_installs:
         description: 'Number of Installs'
         required: true
