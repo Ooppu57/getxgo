@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '04. Opera - Oliver'
+        default: '01. Opera - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: ''
+        default: '- 1594 - 1595 - 1596 - 1597 - 1598 - 1599 - 1600 - 1601 - 1602 - 1603 - 1604 - 1605 - 1606 - 1607 - 1608 - 1609 - 400 - 1610'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
