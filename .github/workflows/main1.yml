@@ -37,12 +37,12 @@ on:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '5'
+        default: '4'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '5'
+        default: '1'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '01. Opera - Techx'
+        default: '01. AVG - TechxTrader'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '- 1594 - 1595 - 1596 - 1597 - 1598 - 1599 - 1600 - 1601 - 1602 - 1603 - 1604 - 1605 - 1606 - 1607 - 1608 - 1609 - 400 - 1610'
+        default: 'States - 2265 States - 2266 States - 2267 States - 2268 States - 2269'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
