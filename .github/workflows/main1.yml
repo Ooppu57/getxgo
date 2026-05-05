@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '5'
+        default: '1'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '3'
+        default: '38'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '2'
+        default: '62'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '01. OperaOne - Jimmy'
+        default: '01. AVG - TechxTrader'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 2270 States - 2271 States - 2272 States - 2273 States - 2274 States - 2275'
+        default: 'States - 2276 States - 2277 States - 2278 States - 2279 States - 2280 States - 2281 States - 2282 States - 2283 States - 2284 States - 2285 States - 2286 States - 2287 States - 2288 States - 2289 States - 2290 States - 2291 States - 2292 States - 2293 States - 2294 States - 2295 States - 2296 States - 2297 States - 2298 States - 2299 States - 2300 States - 2301 States - 2302 States - 2303 - 404 States - 2304 States - 2305 States - 2306 States - 2307 States - 2308 States - 2309 States - 2310 States - 2311 States - 2312 States - 2313 States - 2314 States - 2315 States - 2316 States - 2317 States - 2318 States - 2319 States - 2320 States - 2321 States - 2322 States - 2323 States - 2324 States - 2325 States - 2326 States - 2327 States - 2328 States - 2329 States - 2330 States - 2331 States - 2332 States - 2333 States - 2334 States - 2335 States - 2336 States - 2337 States - 2338 States - 2339 States - 2340 States - 2341 States - 2342 States - 2343 States - 2344 States - 2345 States - 2346 States - 2347 States - 2348 States - 2349 States - 2350 States - 2351 States - 2352 States - 2353 States - 2354 States - 2355 States - 2356 States - 2357 States - 2358 States - 2359 States - 2360 States - 2361 States - 2362 States - 2363 States - 2364 States - 2365 States - 2366 States - 2367 States - 2368 States - 2369 States - 2370 States - 2371 States - 2372 States - 2373 States - 2374 States - 2375 States - 2376'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
