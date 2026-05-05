@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 2265 States - 2266 States - 2267 States - 2268 States - 2269'
+        default: '- 2115 - 2116 - 2117 - 2118 - 2119 - 2120 - 2121 - 2122 - 2123 - 2124'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
