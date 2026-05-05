@@ -37,12 +37,12 @@ on:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '35'
+        default: '38'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '65'
+        default: '62'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '01. Opera - Techx'
+        default: '02. Opera - Fatradez'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
