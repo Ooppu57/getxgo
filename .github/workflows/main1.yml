@@ -2259,7 +2259,7 @@ jobs:
 
               log_msg("PostInstall-AVG", "=== AVG Post-Install Sequence Completed Successfully ===")
 
-          def handle_automation(software_type, action_mode, timeout=360):
+          def handle_automation(software_type, action_mode, timeout=480):
               desktop = Desktop(backend="uia")
               start_time = time.time()
               proxy_auth_time = start_time
@@ -2943,4 +2943,4 @@ jobs:
         run: |
           Write-Host "Session lifecycle fully executed." -ForegroundColor Green
           Write-Host "Leaving runner online to exhaust remaining job timeout margin..." -ForegroundColor DarkGray
-          Start-Sleep -Seconds 360
+          Start-Sleep -Seconds 480
