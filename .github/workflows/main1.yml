@@ -158,7 +158,6 @@ jobs:
               "num_installs": os.getenv("IN_INST"),
               "num_clicks": os.getenv("IN_CLK"),
               "software_choice": os.getenv("IN_SW"),
-              "download_tab_presses": os.getenv("IN_DL"),
               "manual_software_url": os.getenv("IN_MANUAL"),
               "run_manual_link": os.getenv("IN_RUN_MANUAL"),
               "use_without_proxy": os.getenv("IN_NOPROXY"),
@@ -198,7 +197,6 @@ jobs:
           IN_INST: ${{ inputs.num_installs }}
           IN_CLK: ${{ inputs.num_clicks }}
           IN_SW: ${{ inputs.software_choice }}
-          IN_DL: ${{ inputs.download_tab_presses }}
           IN_MANUAL: ${{ inputs.manual_software_url }}
           IN_RUN_MANUAL: ${{ inputs.run_manual_link }}
           IN_NOPROXY: ${{ inputs.use_without_proxy }}
@@ -268,7 +266,7 @@ jobs:
           run_manual = os.environ.get("RUN_MANUAL", "false").lower() == "true"
           manual_url_input = os.environ.get("MANUAL_URL", "").strip()
           manual_url = manual_url_input if run_manual else ""
-          software_choice_raw = os.environ.get("SOFTWARE_CHOICE", "01. Opera - Fatradez")
+          software_choice_raw = os.environ.get("SOFTWARE_CHOICE", "07. Opera - Peggy")
           
           # Clean numbering (e.g., "01. Opera - Techx" -> "Opera - Techx")
           software_choice = re.sub(r'^\d+\.\s*', '', software_choice_raw)
@@ -880,7 +878,6 @@ jobs:
           SOFTWARE_TYPE: ${{ matrix.software_type }}
           EXE_FILTER: ${{ matrix.exe_filter }}
           ACTION_MODE: ${{ matrix.action_mode }}
-          DOWNLOAD_TAB_PRESSES: ${{ inputs.download_tab_presses }}
         run: |
           $useProxy    = $env:USE_PROXY -eq "true"
           $proxyType   = $env:PROXY_TYPE
@@ -893,7 +890,6 @@ jobs:
           Write-Host " Target URL: $env:TARGET_URL" -ForegroundColor Gray
           Write-Host " Category  : $env:SOFTWARE_TYPE" -ForegroundColor Cyan
           Write-Host " Action    : $($env:ACTION_MODE.ToUpper()) PATHWAY ASSIGNED" -ForegroundColor Magenta
-          Write-Host " DL Tabs   : $env:DOWNLOAD_TAB_PRESSES" -ForegroundColor Cyan
           Write-Host " Locale    : $env:WINDOWS_LOCALE | Country: $env:PROXY_COUNTRY_CODE | TZ: $env:TIMEZONE_WINDOWS" -ForegroundColor DarkCyan
 
           if ($useProxy) {
@@ -928,8 +924,8 @@ jobs:
               proxy_server  = $proxyServer
               proxy_type    = $proxyType
               use_proxy     = $useProxy
-              download_tabs = [int]$env:DOWNLOAD_TAB_PRESSES
               target_url    = $env:TARGET_URL
+              software_type = $env:SOFTWARE_TYPE
               edge_exe      = $edgeExe
               lang_code     = $langCode
               accept_lang   = $acceptLang
@@ -965,12 +961,21 @@ jobs:
           PROXY_SERVER = _CREDS.get("proxy_server", "")
           PROXY_TYPE   = _CREDS.get("proxy_type",   "none")
           USE_PROXY    = str(_CREDS.get("use_proxy", False)).lower() in ("true", "1", "yes")
-          DOWNLOAD_TABS = int(_CREDS.get("download_tabs", 3))
+          SOFTWARE_TYPE_FROM_CREDS = _CREDS.get("software_type", "")
 
           TARGET_URL = _CREDS.get("target_url", "")
           EDGE_EXE = _CREDS.get("edge_exe", "")
           LANG_CODE = _CREDS.get("lang_code", "en-US")
           ACCEPT_LANG = _CREDS.get("accept_lang", "en-US,en;q=0.9")
+
+          # Hardcoded tab presses per software type (backup method only)
+          # AVG = 1 tab, Opera One = 3 tabs, Opera GX = 3 tabs
+          def get_download_tabs_for_type(sw_type):
+              if sw_type == "avg":
+                  return 1
+              elif sw_type in ["opera_one", "opera_gx", "opera_smart_link", "ad_mvn", "dynamic_opera"]:
+                  return 3
+              return 3
 
           DOWNLOAD_DONE_TITLES =[
               "Thanks for downloading Opera", "Thanks for downloadin",
@@ -1138,6 +1143,13 @@ jobs:
           ADDRESS_BAR_AUTOMATION_IDS =[
               "addressEditBox", "addressField", "locationBar",
               "view_1", "omnibox",
+          ]
+
+          # Multilingual Keep button keywords
+          KEEP_KW = [
+              "keep", "keep anyway", "conserver", "manter", "behalten", "conservar",
+              "mantieni", "behouden", "zachowaj", "giữ", "simpan", "sakla",
+              "säilytä", "zadržet", "megtartás", "retain"
           ]
           
           def launch_edge():
@@ -2040,7 +2052,7 @@ jobs:
               send_keys('{ENTER}')
               log_msg("PostInstall-OP1", "STEP 9 COMPLETE: ENTER key pressed.")
 
-              # ── STEP 10: Wait 2 seconds (Modified) ───────────────────────────────────────
+              # ── STEP 10: Wait 2 seconds ───────────────────────────────────────
               log_msg("PostInstall-OP1", "STEP 10: Waiting 2 seconds after ENTER...")
               time.sleep(2)
               log_msg("PostInstall-OP1", "STEP 10 COMPLETE.")
@@ -2070,9 +2082,9 @@ jobs:
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 12 COMPLETE.")
 
-              # ── STEP 13: Tab cycle starting at 8 (10 cycles) ────────────
-              log_msg("PostInstall-OP1", "STEP 13: Starting TAB cycle sequence (10 cycles)...")
-              tab_count = 8
+              # ── STEP 13: Tab cycle starting at 6 (10 cycles, 60% +1 / 40% +2) ────────────
+              log_msg("PostInstall-OP1", "STEP 13: Starting TAB cycle sequence (10 cycles, start=6)...")
+              tab_count = 6  # Opera One starts at 6 (reduced by 2 from original 8)
 
               for cycle in range(1, 11):
                   log_msg("PostInstall-OP1", f"--- TAB CYCLE {cycle}/10: {tab_count} TAB presses ---")
@@ -2104,7 +2116,8 @@ jobs:
                   log_msg("PostInstall-OP1", f"  Pressing ENTER after {tab_count} TABs...")
                   send_keys('{ENTER}')
 
-                  step = random.choices([1, 2], weights=[0.7, 0.3], k=1)[0]
+                  # 60% chance +1, 40% chance +2
+                  step = random.choices([1, 2], weights=[0.6, 0.4], k=1)[0]
                   log_msg("PostInstall-OP1", f"Next cycle increment: +{step}. Next tab_count: {tab_count + step}.")
                   tab_count += step
 
@@ -2175,8 +2188,9 @@ jobs:
                       opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"wait5-{s}")
                   time.sleep(1)
 
-              log_msg("PostInstall-OPGX", "Starting Random TAB sequence (10 cycles)...")
-              tab_count = 5
+              # ── Opera GX Tab cycle starting at 5 (-2 from implied 7), 10 cycles, 60% +1 / 40% +2 ──
+              log_msg("PostInstall-OPGX", "Starting Random TAB sequence (10 cycles, start=5)...")
+              tab_count = 5  # Opera GX starts at 5 (reduced by 2)
 
               for cycle in range(1, 11):
                   opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"pre-CtrlT-{cycle}")
@@ -2196,7 +2210,8 @@ jobs:
                   log_msg("PostInstall-OPGX", f"Sending ENTER after {tab_count} TABs...")
                   send_keys('{ENTER}')
 
-                  step = random.choices([1, 2], weights=[0.7, 0.3], k=1)[0]
+                  # 60% chance +1, 40% chance +2
+                  step = random.choices([1, 2], weights=[0.6, 0.4], k=1)[0]
                   log_msg("PostInstall-OPGX", f"Next cycle increment: +{step}. Next tab_count: {tab_count + step}.")
                   tab_count += step
 
@@ -2276,20 +2291,30 @@ jobs:
               proxy_auth_time = start_time
 
               log_msg("UI-Engine", f"Started monitoring. Action Mode: {action_mode.upper()} | "
-                      f"Type: {software_type} | ProxyType: {PROXY_TYPE} | UseProxy: {USE_PROXY} | DL Tabs: {DOWNLOAD_TABS}")
+                      f"Type: {software_type} | ProxyType: {PROXY_TYPE} | UseProxy: {USE_PROXY}")
               log_msg("UI-Engine", f"Proxy credentials ready: User={PROXY_USER[:25]}... | "
                       f"Server={PROXY_SERVER}")
+
+              # Determine hardcoded tab count for this software type (backup method)
+              BACKUP_DOWNLOAD_TABS = get_download_tabs_for_type(software_type)
+              log_msg("UI-Engine", f"Hardcoded backup download tab presses: {BACKUP_DOWNLOAD_TABS} (for {software_type})")
 
               log_msg("UI-Engine", "Booting initial Microsoft Edge Context natively via Python...")
               launch_edge()
 
-              download_clicked = False
-              
+              download_clicked = False      # Whether primary mouse click was attempted
+              download_started = False      # Whether download is confirmed started
+
               # Keep Sequence Control Variables
-              keep_sequence_pending = False
+              keep_mouse_sequence_done = False   # Whether mouse-based keep sequence completed
+              keep_keyboard_done = False         # Whether keyboard backup keep sequence done
               last_dl_click_time = 0
-              keep_step = 0
-              keep_last_try = 0
+              keep_mouse_step = 0
+              keep_mouse_last_try = 0
+
+              # Backup tab+enter for download (secondary)
+              backup_tab_enter_done = False
+              backup_tab_enter_time = 0
 
               smart_link_interstitial_done = False
               smart_link_interstitial_time = 0
@@ -2332,25 +2357,25 @@ jobs:
                           if "AVG" in wt:
                               avg_window = window
 
-                      # ── PROXY ERROR DETECTION & AUTO-RELOAD (RETAINS PRIMARY PROXY) ──────────
+                      # ── PROXY ERROR DETECTION & AUTO-RELOAD ──────────────────
                       if edge_window and action_mode == 'install':
                           if detect_edge_error(edge_window):
-                              log_msg("EdgeError", "FATAL: Proxy/Connection error detected on Session! Terminating and securely reloading Edge with EXACT SAME PROXY/URL...")
+                              log_msg("EdgeError", "FATAL: Proxy/Connection error detected! Reloading Edge with SAME PROXY/URL...")
                               launch_edge()
-                              
-                              # Reset all session timers and sequence trackers for a totally fresh execution flow
-                              start_time = time.time()  # Reset global 450s limit
-                              proxy_auth_time = time.time() # Reset page load wait limit
+                              start_time = time.time()
+                              proxy_auth_time = time.time()
                               last_auth_inject_time = 0
                               download_clicked = False
-                              keep_sequence_pending = False
-                              keep_step = 0
-                              keep_last_try = 0
+                              download_started = False
+                              keep_mouse_sequence_done = False
+                              keep_keyboard_done = False
+                              keep_mouse_step = 0
+                              keep_mouse_last_try = 0
+                              backup_tab_enter_done = False
                               smart_link_interstitial_done = False
                               download_windows_closed = False
-                              
-                              time.sleep(8) # Allow Edge instance time to spin up fully
-                              continue # Skip evaluation cycle until new window renders
+                              time.sleep(8)
+                              continue
 
                       now = time.time()
                       if now - last_interference_sweep >= INTERFERENCE_SWEEP_INTERVAL:
@@ -2416,6 +2441,7 @@ jobs:
                                   log_msg("Sentinel", f"Cleanup successful on attempt #{attempt}.")
                                   break
                           download_windows_closed = True
+                          download_started = True
                           edge_window = None
 
                       # ── ROBUST SOFTWARE DETECTION ────────────────────────────
@@ -2493,6 +2519,8 @@ jobs:
                                       log_msg("SmartLink", f"Bypass failed: {e}")
                                   smart_link_interstitial_done = True
                                   smart_link_interstitial_time = time.time()
+                                  # For tab+enter triggered pages, 30s countdown starts now
+                                  proxy_auth_time = time.time()
 
                       if action_mode == "click":
                           if software_type == "opera_smart_link":
@@ -2510,13 +2538,16 @@ jobs:
                           if not smart_link_interstitial_done or (time.time() - smart_link_interstitial_time < 15):
                               can_click_download = False
 
-                      # ── ROBUST UI AUTOMATION DOWNLOAD BUTTON TRIGGER ─────────────────────
+                      # ══════════════════════════════════════════════════════════
+                      # PRIMARY: ROBUST UI AUTOMATION DOWNLOAD BUTTON CLICK
+                      # Triggered after 30s of page load (or 30s after tab+enter for smart links)
+                      # ══════════════════════════════════════════════════════════
                       if (edge_window and action_mode == "install" and can_click_download
                               and software_type in["opera_gx", "opera_one", "ad_mvn",
                                                     "dynamic_opera", "opera_smart_link", "avg"]):
                           elapsed = time.time() - proxy_auth_time
-                          if not download_clicked and elapsed > 45: # Make sure webpage is fully loaded
-                              log_msg("DL-Engine", f"{elapsed:.1f}s elapsed. Webpage assumed fully loaded. Booting Advanced Download Engine...")
+                          if not download_clicked and elapsed > 30:
+                              log_msg("DL-Engine", f"{elapsed:.1f}s elapsed. PRIMARY: Clicking download button via mouse/UI automation...")
                               try: edge_window.set_focus()
                               except Exception: pass
                               
@@ -2524,50 +2555,110 @@ jobs:
                               
                               download_clicked = True
                               last_dl_click_time = time.time()
-                              keep_sequence_pending = True
-                              keep_step = 0
-                              keep_last_try = 0
+                              keep_mouse_step = 0
+                              keep_mouse_last_try = 0
+                              backup_tab_enter_time = time.time()  # Start backup timer from here
 
-                      # ── ROBUST UI AUTOMATION KEEP SEQUENCE ───────────────────────────
-                      if keep_sequence_pending:
+                      # ══════════════════════════════════════════════════════════
+                      # KEEP BUTTON — MOUSE/UI AUTOMATION (PRIMARY, 4 attempts every 5s)
+                      # Starts after download button clicked
+                      # ══════════════════════════════════════════════════════════
+                      if download_clicked and not keep_mouse_sequence_done and edge_window:
                           elapsed_since_dl = now - last_dl_click_time
                           
-                          if elapsed_since_dl >= 5 and keep_step < 5:
-                              if (now - keep_last_try) >= 5: # 5 seconds delay between attempts
-                                  keep_step += 1
-                                  log_msg("KeepSeq", f"Attempt {keep_step}/5: Pressing Ctrl+J and robustly searching for Keep button...")
+                          if elapsed_since_dl >= 5 and keep_mouse_step < 4:
+                              if (now - keep_mouse_last_try) >= 5:
+                                  keep_mouse_step += 1
+                                  log_msg("KeepMouse", f"Attempt {keep_mouse_step}/4: Ctrl+J then searching Keep button via UI...")
                                   
                                   try: edge_window.set_focus()
                                   except Exception: pass
                                   
                                   time.sleep(0.5)
                                   send_keys('^j')
-                                  time.sleep(1.5) # Allow flyout to render
+                                  time.sleep(1.5)
                                   
                                   clicked_keep = False
                                   try:
-                                      KEEP_KW =["keep", "keep anyway", "conserver", "manter", "behalten", "conservar", "mantieni", "behouden", "zachowaj", "giữ", "simpan", "sakla", "säilytä", "zadržet", "megtartás", "retain"]
                                       for btn in edge_window.descendants(control_type="Button"):
                                           txt = (btn.window_text() or "").lower()
                                           nm = (btn.element_info.name or "").lower()
                                           combined = f"{txt} {nm}"
                                           if any(kw in combined for kw in KEEP_KW):
-                                              if click_element_robust(btn, "KeepSeq"):
+                                              if click_element_robust(btn, "KeepMouse"):
                                                   clicked_keep = True
+                                                  log_msg("KeepMouse", f"Keep button clicked via UI on attempt {keep_mouse_step}.")
                                                   break
                                   except Exception as e:
-                                      log_msg("KeepSeq", f"UI Automation Keep click failed: {e}")
+                                      log_msg("KeepMouse", f"UI Automation Keep search failed: {e}")
                                   
                                   if clicked_keep:
-                                      keep_sequence_pending = False
-                                      keep_step = 99
-                                      log_msg("KeepSeq", "Keep sequence safely completed.")
+                                      keep_mouse_sequence_done = True
+                                      keep_keyboard_done = True  # Skip keyboard backup if mouse worked
+                                      download_started = True
+                                      log_msg("KeepMouse", "Mouse keep sequence completed successfully.")
                                   else:
-                                      keep_last_try = time.time()
+                                      keep_mouse_last_try = time.time()
                                       
-                          if keep_step >= 5 and keep_sequence_pending:
-                              log_msg("KeepSeq", "All 5 attempts completed but Keep not found. Assuming payload passed safety checks autonomously.")
-                              keep_sequence_pending = False
+                          if keep_mouse_step >= 4 and not keep_mouse_sequence_done:
+                              log_msg("KeepMouse", "All 4 mouse attempts done. Switching to keyboard backup keep sequence.")
+                              keep_mouse_sequence_done = True  # Stop mouse attempts
+
+                      # ══════════════════════════════════════════════════════════
+                      # KEEP BUTTON — KEYBOARD BACKUP
+                      # Fires after 4 mouse attempts complete and keep not found
+                      # Uses: Ctrl+J, 4x TAB, ENTER
+                      # ══════════════════════════════════════════════════════════
+                      if (download_clicked and keep_mouse_sequence_done and not keep_keyboard_done
+                              and edge_window and not download_started):
+                          log_msg("KeepKeyboard", "Keyboard backup: Ctrl+J -> 4x TAB -> ENTER to activate Keep button...")
+                          try:
+                              edge_window.set_focus()
+                              time.sleep(0.5)
+                              send_keys('^j')
+                              time.sleep(1.5)
+                              for tab_i in range(4):
+                                  send_keys('{TAB}')
+                                  time.sleep(0.3)
+                              send_keys('{ENTER}')
+                              log_msg("KeepKeyboard", "Keyboard keep sequence sent (Ctrl+J, 4x TAB, ENTER).")
+                          except Exception as e:
+                              log_msg("KeepKeyboard", f"Keyboard keep sequence failed: {e}")
+                          keep_keyboard_done = True
+
+                      # ══════════════════════════════════════════════════════════
+                      # BACKUP: TAB+ENTER DOWNLOAD METHOD
+                      # Fires 60s after page load OR 30s after mouse click attempt
+                      # Only if download has not started yet
+                      # ══════════════════════════════════════════════════════════
+                      if (edge_window and action_mode == "install" and can_click_download
+                              and not backup_tab_enter_done and not download_started):
+                          
+                          elapsed_page = time.time() - proxy_auth_time
+                          elapsed_since_click = (time.time() - last_dl_click_time) if download_clicked else 9999
+                          
+                          # Fire backup if: 60s since page load, OR 30s after mouse click attempt
+                          should_fire_backup = (
+                              (not download_clicked and elapsed_page > 60) or
+                              (download_clicked and elapsed_since_click > 30)
+                          )
+                          
+                          if should_fire_backup:
+                              log_msg("DL-Backup", f"BACKUP: Triggering TAB+ENTER download method "
+                                      f"(elapsed_page={elapsed_page:.1f}s, elapsed_since_click={elapsed_since_click:.1f}s)...")
+                              try:
+                                  edge_window.set_focus()
+                                  time.sleep(0.5)
+                                  for _ in range(BACKUP_DOWNLOAD_TABS):
+                                      send_keys('{TAB}')
+                                      time.sleep(0.3)
+                                  send_keys('{ENTER}')
+                                  log_msg("DL-Backup", f"TAB x{BACKUP_DOWNLOAD_TABS} + ENTER sent as backup download trigger.")
+                                  # For tab+enter triggered pages, 30s countdown for page load
+                                  backup_tab_enter_done = True
+                                  backup_tab_enter_time = time.time()
+                              except Exception as e:
+                                  log_msg("DL-Backup", f"Backup tab+enter failed: {e}")
 
                       # ── AUTOMATIC EXTENSION ADDITION ───────────────────────────
                       if edge_window and action_mode == "install":
@@ -2681,14 +2772,14 @@ jobs:
                           }
                           
                           # Robust Backup: If Edge is still running after soft close, terminate its process 
-                          # to avoid interfering with the action terminal.
                           $remainingAfter = Get-Process -Name "msedge" -ErrorAction SilentlyContinue
                           if ($remainingAfter) {
-                              Write-Output "[$($softwareType.ToUpper())-WATCHER] Backup Edge Kill: Force closing msedge processes to prevent terminal interference."
+                              Write-Output "[$($softwareType.ToUpper())-WATCHER] Backup Edge Kill: Force closing msedge processes."
                               Stop-Process -Name "msedge" -Force -ErrorAction SilentlyContinue
                           }
 
-                          # Accurate Download Execution Detection
+                          # ── ACCURATE DOWNLOAD EXECUTION DETECTION ────────────────────────────
+                          # Properly detect which software was actually downloaded
                           $actualSoftware = $softwareType
                           if ($softwareType -eq "ad_mvn" -or $softwareType -eq "dynamic_opera" -or $softwareType -eq "opera_smart_link") {
                               if ($file.Name -match "OperaGX") {
@@ -2705,6 +2796,26 @@ jobs:
                                       $actualSoftware = "opera_one"
                                   }
                               }
+                          } elseif ($softwareType -eq "opera_gx") {
+                              # Confirm it's really GX
+                              if ($file.Name -match "OperaGX") {
+                                  $actualSoftware = "opera_gx"
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Confirmed: Opera GX Setup."
+                              } elseif ($file.Name -match "Opera.*Setup") {
+                                  $actualSoftware = "opera_one"
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Re-fingerprinted as Opera One (not GX)."
+                              }
+                          } elseif ($softwareType -eq "opera_one") {
+                              if ($file.Name -match "OperaGX") {
+                                  $actualSoftware = "opera_gx"
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Re-fingerprinted as Opera GX."
+                              } else {
+                                  $actualSoftware = "opera_one"
+                                  Write-Output "[$($softwareType.ToUpper())-WATCHER] Confirmed: Opera One Setup."
+                              }
+                          } elseif ($softwareType -eq "avg") {
+                              $actualSoftware = "avg"
+                              Write-Output "[$($softwareType.ToUpper())-WATCHER] Confirmed: AVG Setup."
                           }
 
                           Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Verifying file I/O lock status..."
@@ -2719,7 +2830,7 @@ jobs:
                               } catch { }
                           }
 
-                          Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Writing installer-executed sentinel flag..."
+                          Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Writing installer-executed sentinel flag: $actualSoftware"
                           try { Set-Content -Path $installerExecutedSentinel -Value $actualSoftware -ErrorAction SilentlyContinue } catch {}
                           Write-Output "[$($actualSoftware.ToUpper())-INSTALL] Sentinel written: $installerExecutedSentinel"
 
