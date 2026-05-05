@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '- 389 - 390 - 391 - 392 - 393 - 394 - 395 - 396 - 397 - 398 - 399'
+        default: ''
       use_without_proxy:
         description: 'Run without proxy'
         required: true
