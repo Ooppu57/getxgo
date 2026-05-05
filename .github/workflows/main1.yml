@@ -32,12 +32,12 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '5'
+        default: '4'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '5'
+        default: '4'
       num_clicks:
         description: 'Number of Clicks'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '07. Opera - Peggy'
+        default: '03. OperaOne - Harrari'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '- 2115 - 2116 - 2117 - 2118 - 2119 - 2120 - 2121 - 2122 - 2123 - 2124'
+        default: 'States - 2265 States - 2266 States - 2267 States - 2268 States - 2269'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -259,7 +259,7 @@ jobs:
               with open(os.environ["GITHUB_OUTPUT"], "a") as f:
                   f.write("has_tasks=true\n")
 
-          action_list = ["install"] * num_installs + ["click"] * num_clicks
+          action_list =["install"] * num_installs +["click"] * num_clicks
           random.shuffle(action_list)
 
           print(f"[Action Matrix] Total Tasks Queued: {tasks_total}")
@@ -367,7 +367,7 @@ jobs:
           short_os_tag = short_os(os_version)
           short_sw_tag = "MANUAL" if manual_url else short_software(software_choice)
 
-          includes = []
+          includes =[]
           for i in range(tasks_total):
               action_mode = action_list[i]
               absolute_idx = i + 1
@@ -455,6 +455,7 @@ jobs:
           short_os = os.environ.get("SHORT_OS", "OS")
           short_sw = os.environ.get("SHORT_SW", "SW")
           action_cap = os.environ.get("ACTION", "task").capitalize()
+          is_install_action = action_cap.lower() == "install"
 
           # Geography mappings
           country_map = {
@@ -553,8 +554,8 @@ jobs:
               return {'working': False, **pinfo}
 
           # Parse inputs into lists
-          manual_proxies = []
-          scrapeops_keys = []
+          manual_proxies =[]
+          scrapeops_keys =[]
           floppy_keys =[]
           
           if proxy_input and not without_proxy:
@@ -584,8 +585,10 @@ jobs:
               print("Proxy disabled manually.")
           elif manual_proxies:
               print(f"[Manual Proxy] Assigning Proxies via stride distribution (Total Provided: {len(manual_proxies)}, Tasks: {tasks_total})...")
+              
               for attempt in range(len(manual_proxies)):
                   idx = (absolute_idx + attempt * tasks_total) % len(manual_proxies)
+                  
                   raw_p = manual_proxies[idx]
                   pinfo = parse_proxy(raw_p)
                   if not pinfo: continue
@@ -595,12 +598,13 @@ jobs:
                       active_proxy = res
                       active_proxy['proxy_type_label'] = 'manual'
                       use_proxy = True
-                      print(f"SUCCESS: Active manual proxy -> IP: {res['ip']} | CC: {res['country_code']}")
+                      print(f"SUCCESS: Active PRIMARY manual proxy -> IP: {res['ip']} | CC: {res['country_code']}")
                       break
 
           elif floppy_keys:
               FLOPPY_BASE = "https://client-api.floppy.host"
               proxy_type = "mobile" if mobile else "residential"
+              
               for attempt in range(len(floppy_keys)):
                   key_idx = (absolute_idx // 15 + attempt) % len(floppy_keys)
                   current_key = floppy_keys[key_idx]
@@ -632,7 +636,7 @@ jobs:
                           active_proxy = res
                           active_proxy['proxy_type_label'] = 'floppydata'
                           use_proxy = True
-                          print(f"SUCCESS: FloppyData proxy active -> IP: {res['ip']} | CC: {res['country_code']}")
+                          print(f"SUCCESS: FloppyData PRIMARY proxy active -> IP: {res['ip']} | CC: {res['country_code']}")
                           break
                   except Exception as e:
                       print(f"FloppyData error on this key: {e}")
@@ -660,7 +664,7 @@ jobs:
                       active_proxy = res
                       active_proxy['proxy_type_label'] = 'scrapeops'
                       use_proxy = True
-                      print(f"SUCCESS: ScrapeOps proxy active -> IP: {res['ip']} | CC: {res['country_code']}")
+                      print(f"SUCCESS: ScrapeOps PRIMARY proxy active -> IP: {res['ip']} | CC: {res['country_code']}")
                       break
                   else:
                       if attempt == len(scrapeops_keys) - 1:
@@ -1136,21 +1140,56 @@ jobs:
               "view_1", "omnibox",
           ]
           
-          def launch_edge(server_override=None):
+          def launch_edge():
               os.system("taskkill /F /IM msedge.exe >nul 2>&1")
               time.sleep(2)
               user_dir = os.path.join(tempfile.gettempdir(), f"EdgeProfile_{random.randint(100000, 999999)}")
               
               cmd = f'"{EDGE_EXE}" --user-data-dir="{user_dir}" --no-first-run --no-default-browser-check --disable-sync --safebrowsing-disable-download-protection --disable-features=msSmartScreenProtection,SmartScreenPuaEnabled --restore-last-session=false --hide-crash-restore-window --lang={LANG_CODE} --accept-lang={ACCEPT_LANG}'
               
-              srv = server_override if server_override else PROXY_SERVER
-              if USE_PROXY and srv:
-                  cmd += f' --proxy-server="http://{srv}"'
+              if USE_PROXY and PROXY_SERVER:
+                  cmd += f' --proxy-server="http://{PROXY_SERVER}"'
                   
               cmd += f' "{TARGET_URL}"'
               
               log_msg("EdgeLaunch", f"Executing natively: {cmd}")
               subprocess.Popen(cmd, shell=True)
+
+          def detect_edge_error(edge_window):
+              try:
+                  error_kw =[
+                      "can't reach this page",
+                      "err_connection_closed",
+                      "err_proxy_connection_failed",
+                      "err_connection_reset",
+                      "err_connection_timed_out",
+                      "site can't be reached",
+                      "checking the proxy and the firewall",
+                      "err_empty_response",
+                      "err_network_changed"
+                  ]
+                  
+                  title = (edge_window.window_text() or "").lower()
+                  if any(kw in title for kw in error_kw):
+                      return True
+                  
+                  try:
+                      for doc in edge_window.descendants(control_type="Document"):
+                          name = (doc.element_info.name or "").lower()
+                          if any(kw in name for kw in error_kw):
+                              return True
+                  except Exception: pass
+                  
+                  try:
+                      for text_el in edge_window.descendants(control_type="Text"):
+                          txt = (text_el.window_text() or "").lower()
+                          if any(kw in txt for kw in error_kw):
+                              return True
+                  except Exception: pass
+                  
+              except Exception:
+                  pass
+              return False
 
           def click_element_robust(el, label, fallback_x=None, fallback_y=None):
               clicked = False
@@ -1190,6 +1229,45 @@ jobs:
                   clicked = True
                   
               return clicked
+
+          def robust_click_download_button(edge_window, software_type):
+              sw, sh = pyautogui.size()
+              # Default coordinate fallbacks depending on layout
+              fb_cx, fb_cy = int(sw * 0.45), int(sh * 0.5) 
+              if software_type == "opera_gx":
+                  fb_cx, fb_cy = int(sw * 0.5), int(sh * 0.5)
+              elif software_type in["opera_one", "opera_smart_link", "dynamic_opera"]:
+                  fb_cx, fb_cy = int(sw * 0.45), int(sh * 0.5)
+
+              clicked_dl = False
+              try:
+                  DOWNLOAD_KW =[
+                      "download", "télécharger", "descargar", "herunterladen", "baixar", "scarica", "pobierz", 
+                      "tải", "tải xuống", "unduh", "indir", "stáhnout", "letöltés", "skidanje", "preuzimanje", 
+                      "скачать", "下载", "ダウンロード", "downloaden", "تنزيل", "ladda ner", "last ned", "laste ned"
+                  ]
+                  for ctrl_type in ["Button", "Hyperlink", "Text"]:
+                      for el in edge_window.descendants(control_type=ctrl_type):
+                          txt = (el.window_text() or "").lower()
+                          nm = (el.element_info.name or "").lower()
+                          combined = f"{txt} {nm}"
+                          if any(kw in combined for kw in DOWNLOAD_KW) and len(combined) < 50:
+                              log_msg("DL-Engine", f"Match found via '{combined}' ({ctrl_type})")
+                              if click_element_robust(el, "DL-Engine", fallback_x=fb_cx, fallback_y=fb_cy):
+                                  clicked_dl = True
+                                  break
+                      if clicked_dl: break
+              except Exception as e:
+                  log_msg("DL-Engine", f"Text-based DL search failed: {e}")
+
+              if not clicked_dl:
+                  log_msg("DL-Engine", f"Download text not found. Using screen-relative fallback at ({fb_cx}, {fb_cy}).")
+                  pyautogui.moveTo(fb_cx, fb_cy, duration=0.2)
+                  pyautogui.click()
+                  time.sleep(0.5)
+                  pyautogui.click()
+              
+              return True
 
           def _is_address_bar_control(ctrl):
               try:
@@ -1347,7 +1425,7 @@ jobs:
               tl = text.lower()
               if software_type == "avg":
                   return "avg" in tl
-              elif software_type in ["opera_gx"]:
+              elif software_type in["opera_gx"]:
                   return ("opera" in tl and "gx" in tl) or "opera gx" in tl
               elif software_type in["opera_one", "opera_smart_link", "dynamic_opera", "ad_mvn"]:
                   return "opera" in tl and "edge" not in tl and "chrome web store" not in tl
@@ -1372,7 +1450,7 @@ jobs:
                       if not _is_interference_window(wt):
                           continue
 
-                      log_msg("WinGuard", f"Interference window detected: '{wt}' [{label}]")
+                      log_msg("WinGuard", f"Interference window detected: '{wt}'[{label}]")
                       closed = False
 
                       try:
@@ -1735,8 +1813,8 @@ jobs:
                       u_struct, p_struct = _is_auth_dialog_by_structure(window)
                       if u_struct and p_struct:
                           log_msg("ProxyAuth", f"[{label}] Using structural detection (2-field dialog).")
-                          user_fields = [u_struct]
-                          pass_fields = [p_struct]
+                          user_fields =[u_struct]
+                          pass_fields =[p_struct]
 
                   if user_fields and pass_fields:
                       if _is_address_bar_control(user_fields[0]) or _is_address_bar_control(pass_fields[0]):
@@ -2199,9 +2277,10 @@ jobs:
 
               log_msg("UI-Engine", f"Started monitoring. Action Mode: {action_mode.upper()} | "
                       f"Type: {software_type} | ProxyType: {PROXY_TYPE} | UseProxy: {USE_PROXY} | DL Tabs: {DOWNLOAD_TABS}")
-              log_msg("UI-Engine", f"Proxy loaded: User={PROXY_USER[:25]}... | Server={PROXY_SERVER}")
+              log_msg("UI-Engine", f"Proxy credentials ready: User={PROXY_USER[:25]}... | "
+                      f"Server={PROXY_SERVER}")
 
-              log_msg("UI-Engine", "Booting Microsoft Edge Context natively via Python...")
+              log_msg("UI-Engine", "Booting initial Microsoft Edge Context natively via Python...")
               launch_edge()
 
               download_clicked = False
@@ -2253,11 +2332,25 @@ jobs:
                           if "AVG" in wt:
                               avg_window = window
 
-                      # ── PROXY ERROR DETECTION (LOGGING ONLY) ──────────
+                      # ── PROXY ERROR DETECTION & AUTO-RELOAD (RETAINS PRIMARY PROXY) ──────────
                       if edge_window and action_mode == 'install':
                           if detect_edge_error(edge_window):
-                              log_msg("EdgeError", "WARNING: Proxy/Connection error detected on Session! (ERR_CONNECTION_CLOSED / Can't Reach)")
-                              time.sleep(5)
+                              log_msg("EdgeError", "FATAL: Proxy/Connection error detected on Session! Terminating and securely reloading Edge with EXACT SAME PROXY/URL...")
+                              launch_edge()
+                              
+                              # Reset all session timers and sequence trackers for a totally fresh execution flow
+                              start_time = time.time()  # Reset global 450s limit
+                              proxy_auth_time = time.time() # Reset page load wait limit
+                              last_auth_inject_time = 0
+                              download_clicked = False
+                              keep_sequence_pending = False
+                              keep_step = 0
+                              keep_last_try = 0
+                              smart_link_interstitial_done = False
+                              download_windows_closed = False
+                              
+                              time.sleep(8) # Allow Edge instance time to spin up fully
+                              continue # Skip evaluation cycle until new window renders
 
                       now = time.time()
                       if now - last_interference_sweep >= INTERFERENCE_SWEEP_INTERVAL:
@@ -2423,59 +2516,12 @@ jobs:
                                                     "dynamic_opera", "opera_smart_link", "avg"]):
                           elapsed = time.time() - proxy_auth_time
                           if not download_clicked and elapsed > 45: # Make sure webpage is fully loaded
-                              log_msg("DL-Engine", f"{elapsed:.1f}s elapsed. Webpage fully loaded. Executing highly robust multi-point search for Download CTA...")
+                              log_msg("DL-Engine", f"{elapsed:.1f}s elapsed. Webpage assumed fully loaded. Booting Advanced Download Engine...")
                               try: edge_window.set_focus()
                               except Exception: pass
                               
-                              clicked_dl = False
-                              sw, sh = pyautogui.size()
+                              robust_click_download_button(edge_window, software_type)
                               
-                              # Primary UIA text-based search across all relevant element types
-                              try:
-                                  DOWNLOAD_KW =["download", "télécharger", "descargar", "herunterladen", "baixar", "scarica", "pobierz", "tải xuống", "unduh", "indir", "stáhnout", "letöltés", "skidanje", "preuzimanje", "ladda ner", "lasta ned", "stiahnu", "descargue", "yükle", "lataa"]
-                                  for ctrl_type in ["Button", "Hyperlink", "Text", "Image", "Group"]:
-                                      if clicked_dl: break
-                                      for el in edge_window.descendants(control_type=ctrl_type):
-                                          try:
-                                              txt = (el.window_text() or "").lower()
-                                              nm = (el.element_info.name or "").lower()
-                                              combined = f"{txt} {nm}"
-                                              if any(kw in combined for kw in DOWNLOAD_KW):
-                                                  rect = el.rectangle()
-                                                  w = rect.right - rect.left
-                                                  h = rect.bottom - rect.top
-                                                  
-                                                  # Ensure it's a valid sized button, not a tiny hidden element or massive wrapper
-                                                  if 10 < w < 800 and 10 < h < 300:
-                                                      log_msg("DL-Engine", f"Found DL candidate '{combined}' of type {ctrl_type}.")
-                                                      if click_element_robust(el, "DL-Engine"):
-                                                          clicked_dl = True
-                                                          break
-                                          except Exception: pass
-                              except Exception as e:
-                                  log_msg("DL-Engine", f"UI Automation DL search encountered an error: {e}")
-                              
-                              # Fallback: Sequential Multi-Point Blind Coordinate Clicks
-                              if not clicked_dl:
-                                  log_msg("DL-Engine", "Download button not found via explicit text matching. Deploying sequential center-screen blind fallback clicks.")
-                                  
-                                  # Extremely safe coordinates that hit CTA buttons on practically all standard screen scales
-                                  fb_coords =[
-                                      (int(sw * 0.5), int(sh * 0.55)),
-                                      (int(sw * 0.5), int(sh * 0.50)),
-                                      (int(sw * 0.45), int(sh * 0.55)),
-                                      (int(sw * 0.5), int(sh * 0.60))
-                                  ]
-                                  
-                                  for (cx, cy) in fb_coords:
-                                      pyautogui.moveTo(cx, cy, duration=0.2)
-                                      pyautogui.click()
-                                      time.sleep(0.2)
-                                      pyautogui.click() # Double-tap injection
-                                      time.sleep(0.3)
-                                      
-                                  log_msg("DL-Engine", "Multi-point fallback coordinate clicks completed.")
-                                  
                               download_clicked = True
                               last_dl_click_time = time.time()
                               keep_sequence_pending = True
@@ -2486,10 +2532,10 @@ jobs:
                       if keep_sequence_pending:
                           elapsed_since_dl = now - last_dl_click_time
                           
-                          if elapsed_since_dl >= 5 and keep_step < 6:
+                          if elapsed_since_dl >= 5 and keep_step < 5:
                               if (now - keep_last_try) >= 5: # 5 seconds delay between attempts
                                   keep_step += 1
-                                  log_msg("KeepSeq", f"Attempt {keep_step}/6: Pressing Ctrl+J and robustly searching for Keep button...")
+                                  log_msg("KeepSeq", f"Attempt {keep_step}/5: Pressing Ctrl+J and robustly searching for Keep button...")
                                   
                                   try: edge_window.set_focus()
                                   except Exception: pass
@@ -2510,35 +2556,17 @@ jobs:
                                                   clicked_keep = True
                                                   break
                                   except Exception as e:
-                                      log_msg("KeepSeq", f"UI Automation Keep search failed: {e}")
-                                  
-                                  # Coordinate Fallback for top-right flyout button
-                                  if not clicked_keep and keep_step > 3:
-                                      sw, sh = pyautogui.size()
-                                      kx, ky = sw - 150, 160
-                                      log_msg("KeepSeq", f"Blind fallback click for Keep inside Edge flyout area at ({kx}, {ky}).")
-                                      pyautogui.moveTo(kx, ky, duration=0.2)
-                                      pyautogui.click()
+                                      log_msg("KeepSeq", f"UI Automation Keep click failed: {e}")
                                   
                                   if clicked_keep:
-                                      time.sleep(2)
-                                      log_msg("KeepSeq", "Primary Keep clicked. Checking for 'Keep anyway' secondary dialog prompt...")
-                                      try:
-                                          for btn in edge_window.descendants(control_type="Button"):
-                                              txt = (btn.window_text() or "").lower()
-                                              if "anyway" in txt or "quand même" in txt or "trotzdem" in txt or "de todos modos" in txt:
-                                                  click_element_robust(btn, "KeepAnyway")
-                                                  break
-                                      except Exception: pass
-
                                       keep_sequence_pending = False
                                       keep_step = 99
                                       log_msg("KeepSeq", "Keep sequence safely completed.")
                                   else:
                                       keep_last_try = time.time()
                                       
-                          if keep_step >= 6 and keep_sequence_pending:
-                              log_msg("KeepSeq", "All 6 attempts completed but Keep not found. Assuming payload passed safety checks autonomously.")
+                          if keep_step >= 5 and keep_sequence_pending:
+                              log_msg("KeepSeq", "All 5 attempts completed but Keep not found. Assuming payload passed safety checks autonomously.")
                               keep_sequence_pending = False
 
                       # ── AUTOMATIC EXTENSION ADDITION ───────────────────────────
@@ -2652,10 +2680,11 @@ jobs:
                               Start-Sleep -Milliseconds 500
                           }
                           
-                          # Robust Edge Kill to prevent interference with action terminal execution
+                          # Robust Backup: If Edge is still running after soft close, terminate its process 
+                          # to avoid interfering with the action terminal.
                           $remainingAfter = Get-Process -Name "msedge" -ErrorAction SilentlyContinue
                           if ($remainingAfter) {
-                              Write-Output "[$($softwareType.ToUpper())-WATCHER] Executing Edge Force Kill to prevent terminal interference."
+                              Write-Output "[$($softwareType.ToUpper())-WATCHER] Backup Edge Kill: Force closing msedge processes to prevent terminal interference."
                               Stop-Process -Name "msedge" -Force -ErrorAction SilentlyContinue
                           }
 
@@ -2758,11 +2787,11 @@ jobs:
               } -ArgumentList $dlFolder, $timeoutSecs, $softwareType, $exeFilter, $sentinelPath, $installerExecutedSentinel
           }
 
-          Write-Host "[System] Closing any lingering Edge processes to guarantee clean Python initialization..." -ForegroundColor DarkGray
+          Write-Host "[System] Closing any lingering Edge processes to guarantee proxy & URL attachment..." -ForegroundColor DarkGray
           Stop-Process -Name "msedge" -Force -ErrorAction SilentlyContinue
           Start-Sleep -Seconds 2
           
-          Write-Host "[System] UI-Engine (Python) will autonomously launch and manage Microsoft Edge from here..." -ForegroundColor Cyan
+          Write-Host "[System] UI-Engine (Python) will autonomously launch and manage Microsoft Edge..." -ForegroundColor Cyan
           Write-Host "========== RUNTIME EXECUTION ==========" -ForegroundColor Cyan
 
           if ($env:ACTION_MODE -eq "install") {
