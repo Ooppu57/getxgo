@@ -32,12 +32,12 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '10'
+        default: '4'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '10'
+        default: '4'
       num_clicks:
         description: 'Number of Clicks'
         required: true
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '- 2125 - 2126 - 2127 - 2128 - 2129 - 2130 - 2131 - 2132 - 2133 - 2134'
+        default: '- 2115 - 2116 - 2117 - 2118 - 2119 - 2120 - 2121 - 2122 - 2123 - 2124'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -1151,21 +1151,141 @@ jobs:
               "mantieni", "behouden", "zachowaj", "giữ", "simpan", "sakla",
               "säilytä", "zadržet", "megtartás", "retain"
           ]
+
+          # ── IMPROVED: Comprehensive multilingual download button keywords ──
+          DOWNLOAD_BUTTON_KEYWORDS = [
+              # English
+              "download", "download now", "download free", "download opera", "download avg",
+              "get opera", "get avg", "get it now", "get free", "free download",
+              "install", "install now", "install free", "start download",
+              # Portuguese (Brazil/Portugal)
+              "baixar", "baixar agora", "baixar grátis", "baixar gratis", "baixe agora",
+              "baixe grátis", "instalar", "instalar agora", "obter",
+              # Spanish
+              "descargar", "descargar ahora", "descargar gratis", "instalar",
+              "obtener", "descarga gratuita",
+              # French
+              "télécharger", "telecharger", "télécharger maintenant", "téléchargement gratuit",
+              "installer", "obtenir",
+              # German
+              "herunterladen", "jetzt herunterladen", "kostenlos herunterladen",
+              "installieren", "kostenlos installieren",
+              # Italian
+              "scarica", "scarica ora", "scarica gratis", "scarica gratis", "installa",
+              # Dutch
+              "downloaden", "nu downloaden", "gratis downloaden", "installeren",
+              # Polish
+              "pobierz", "pobierz teraz", "pobierz za darmo", "zainstaluj",
+              # Vietnamese
+              "tải xuống", "tải về", "tải ngay", "cài đặt",
+              # Indonesian
+              "unduh", "unduh sekarang", "unduh gratis", "pasang",
+          ]
           
-          def launch_edge():
-              os.system("taskkill /F /IM msedge.exe >nul 2>&1")
-              time.sleep(2)
+          def launch_edge_guaranteed(target_url, edge_exe, proxy_server, use_proxy, lang_code, accept_lang, attempt_num=1):
+              """
+              IMPROVED: Guaranteed Edge launch with URL and proxy always injected.
+              Validates URL is non-empty, verifies Edge exe exists, and retries with fallbacks.
+              """
+              # Guard: URL must never be empty
+              if not target_url or target_url.strip() == "":
+                  log_msg("EdgeLaunch", f"CRITICAL: target_url is empty! Cannot launch Edge without URL.")
+                  return False
+
+              # Guard: find Edge exe
+              edge_candidates = [
+                  edge_exe,
+                  r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                  r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+              ]
+              resolved_exe = None
+              for candidate in edge_candidates:
+                  if candidate and os.path.exists(candidate):
+                      resolved_exe = candidate
+                      break
+
+              if not resolved_exe:
+                  log_msg("EdgeLaunch", "CRITICAL: Microsoft Edge executable not found in any known path!")
+                  return False
+
+              # Kill existing Edge first to guarantee clean slate
+              try:
+                  os.system("taskkill /F /IM msedge.exe >nul 2>&1")
+                  time.sleep(2)
+              except Exception:
+                  pass
+
               user_dir = os.path.join(tempfile.gettempdir(), f"EdgeProfile_{random.randint(100000, 999999)}")
               
-              cmd = f'"{EDGE_EXE}" --user-data-dir="{user_dir}" --no-first-run --no-default-browser-check --disable-sync --safebrowsing-disable-download-protection --disable-features=msSmartScreenProtection,SmartScreenPuaEnabled --restore-last-session=false --hide-crash-restore-window --lang={LANG_CODE} --accept-lang={ACCEPT_LANG}'
-              
-              if USE_PROXY and PROXY_SERVER:
-                  cmd += f' --proxy-server="http://{PROXY_SERVER}"'
-                  
-              cmd += f' "{TARGET_URL}"'
-              
-              log_msg("EdgeLaunch", f"Executing natively: {cmd}")
-              subprocess.Popen(cmd, shell=True)
+              # Base command - always include URL explicitly
+              cmd_parts = [
+                  f'"{resolved_exe}"',
+                  f'--user-data-dir="{user_dir}"',
+                  '--no-first-run',
+                  '--no-default-browser-check',
+                  '--disable-sync',
+                  '--safebrowsing-disable-download-protection',
+                  '--disable-features=msSmartScreenProtection,SmartScreenPuaEnabled',
+                  '--restore-last-session=false',
+                  '--hide-crash-restore-window',
+                  f'--lang={lang_code}',
+                  f'--accept-lang={accept_lang}',
+              ]
+
+              # Always inject proxy if available
+              if use_proxy and proxy_server and proxy_server.strip():
+                  cmd_parts.append(f'--proxy-server="http://{proxy_server}"')
+                  log_msg("EdgeLaunch", f"Attempt {attempt_num}: Proxy injected -> {proxy_server}")
+              else:
+                  log_msg("EdgeLaunch", f"Attempt {attempt_num}: Direct mode (no proxy)")
+
+              # URL is ALWAYS last and ALWAYS present
+              cmd_parts.append(f'"{target_url.strip()}"')
+
+              cmd = ' '.join(cmd_parts)
+              log_msg("EdgeLaunch", f"Attempt {attempt_num} CMD: {cmd[:200]}...")
+
+              try:
+                  subprocess.Popen(cmd, shell=True)
+                  log_msg("EdgeLaunch", f"Attempt {attempt_num}: Edge process spawned successfully.")
+                  return True
+              except Exception as e:
+                  log_msg("EdgeLaunch", f"Attempt {attempt_num}: Popen failed: {e}")
+                  # Fallback: use os.system
+                  try:
+                      os.system(f'start "" {cmd}')
+                      log_msg("EdgeLaunch", f"Attempt {attempt_num}: os.system fallback executed.")
+                      return True
+                  except Exception as e2:
+                      log_msg("EdgeLaunch", f"Attempt {attempt_num}: os.system also failed: {e2}")
+                      return False
+
+          def launch_edge():
+              """Wrapper that calls the guaranteed launcher and verifies Edge actually opened with URL."""
+              success = launch_edge_guaranteed(TARGET_URL, EDGE_EXE, PROXY_SERVER, USE_PROXY, LANG_CODE, ACCEPT_LANG, attempt_num=1)
+              if not success:
+                  log_msg("EdgeLaunch", "Primary launch failed. Retrying in 3s...")
+                  time.sleep(3)
+                  launch_edge_guaranteed(TARGET_URL, EDGE_EXE, PROXY_SERVER, USE_PROXY, LANG_CODE, ACCEPT_LANG, attempt_num=2)
+
+          def verify_edge_has_url(edge_window, expected_url_fragment):
+              """
+              Check if the Edge window actually navigated to something resembling the expected URL.
+              Returns True if URL appears to be loaded, False if it's a blank/new tab.
+              """
+              if not edge_window:
+                  return False
+              try:
+                  wt = (edge_window.window_text() or "").lower()
+                  blank_indicators = ["new tab", "edge", "start", "neues tab", "nouvelle onglet", "nova guia", ""]
+                  # If title is suspiciously short/blank, URL didn't load
+                  if len(wt.strip()) < 3:
+                      return False
+                  if wt.strip() in ["microsoft edge", "edge", "new tab"]:
+                      return False
+                  return True
+              except Exception:
+                  return False
 
           def detect_edge_error(edge_window):
               try:
@@ -1243,43 +1363,142 @@ jobs:
               return clicked
 
           def robust_click_download_button(edge_window, software_type):
+              """
+              IMPROVED: Multi-strategy download button detection with:
+              1. Exact keyword match on Button/Hyperlink/Text controls
+              2. Partial keyword match (broader net)
+              3. aria-label / automation-id scan
+              4. Visual region scan (top half of page for banner buttons)
+              5. Screen-relative coordinate fallback per software type
+              """
               sw, sh = pyautogui.size()
-              # Default coordinate fallbacks depending on layout
-              fb_cx, fb_cy = int(sw * 0.45), int(sh * 0.5) 
-              if software_type == "opera_gx":
-                  fb_cx, fb_cy = int(sw * 0.5), int(sh * 0.5)
-              elif software_type in["opera_one", "opera_smart_link", "dynamic_opera"]:
-                  fb_cx, fb_cy = int(sw * 0.45), int(sh * 0.5)
+
+              # Software-specific fallback coordinates
+              fallback_map = {
+                  "opera_gx":          (int(sw * 0.50), int(sh * 0.48)),
+                  "opera_one":         (int(sw * 0.50), int(sh * 0.48)),
+                  "opera_smart_link":  (int(sw * 0.50), int(sh * 0.48)),
+                  "ad_mvn":            (int(sw * 0.50), int(sh * 0.48)),
+                  "avg":               (int(sw * 0.45), int(sh * 0.50)),
+              }
+              fb_cx, fb_cy = fallback_map.get(software_type, (int(sw * 0.50), int(sh * 0.48)))
 
               clicked_dl = False
-              try:
-                  DOWNLOAD_KW =[
-                      "download", "télécharger", "descargar", "herunterladen", "baixar", "scarica", "pobierz", 
-                      "tải", "tải xuống", "unduh", "indir", "stáhnout", "letöltés", "skidanje", "preuzimanje", 
-                      "скачать", "下载", "ダウンロード", "downloaden", "تنزيل", "ladda ner", "last ned", "laste ned"
-                  ]
-                  for ctrl_type in ["Button", "Hyperlink", "Text"]:
-                      for el in edge_window.descendants(control_type=ctrl_type):
-                          txt = (el.window_text() or "").lower()
-                          nm = (el.element_info.name or "").lower()
-                          combined = f"{txt} {nm}"
-                          if any(kw in combined for kw in DOWNLOAD_KW) and len(combined) < 50:
-                              log_msg("DL-Engine", f"Match found via '{combined}' ({ctrl_type})")
-                              if click_element_robust(el, "DL-Engine", fallback_x=fb_cx, fallback_y=fb_cy):
-                                  clicked_dl = True
-                                  break
-                      if clicked_dl: break
-              except Exception as e:
-                  log_msg("DL-Engine", f"Text-based DL search failed: {e}")
 
+              # ── PASS 1: Exact/partial text match on Button, Hyperlink, Text, Pane ──
+              log_msg("DL-Engine", f"Pass 1: Scanning Button/Hyperlink/Text for download keywords...")
+              try:
+                  for ctrl_type in ["Button", "Hyperlink", "Text", "Pane", "Custom"]:
+                      for el in edge_window.descendants(control_type=ctrl_type):
+                          try:
+                              txt = (el.window_text() or "").strip()
+                              nm  = (el.element_info.name or "").strip()
+                          except Exception:
+                              continue
+                          combined = f"{txt} {nm}".lower()
+                          if not combined.strip():
+                              continue
+                          # Only match if the combined text is not too long (avoid matching entire paragraphs)
+                          if len(combined) > 80:
+                              continue
+                          if any(kw in combined for kw in DOWNLOAD_BUTTON_KEYWORDS):
+                              log_msg("DL-Engine", f"Pass 1 match: '{combined[:60]}' ({ctrl_type})")
+                              if click_element_robust(el, "DL-Engine-P1", fallback_x=fb_cx, fallback_y=fb_cy):
+                                  clicked_dl = True
+                                  return True
+              except Exception as e:
+                  log_msg("DL-Engine", f"Pass 1 failed: {e}")
+
+              # ── PASS 2: Scan all descendants for download keyword, any control type ──
               if not clicked_dl:
-                  log_msg("DL-Engine", f"Download text not found. Using screen-relative fallback at ({fb_cx}, {fb_cy}).")
-                  pyautogui.moveTo(fb_cx, fb_cy, duration=0.2)
-                  pyautogui.click()
-                  time.sleep(0.5)
-                  pyautogui.click()
-              
-              return True
+                  log_msg("DL-Engine", f"Pass 2: Broad descendant scan for download keywords...")
+                  try:
+                      for el in edge_window.descendants():
+                          try:
+                              txt = (el.window_text() or "").strip()
+                          except Exception:
+                              txt = ""
+                          if not txt or len(txt) > 60:
+                              continue
+                          if any(kw in txt.lower() for kw in DOWNLOAD_BUTTON_KEYWORDS):
+                              try:
+                                  ctrl_type = el.element_info.control_type
+                              except Exception:
+                                  ctrl_type = "Unknown"
+                              log_msg("DL-Engine", f"Pass 2 match: '{txt[:60]}' ({ctrl_type})")
+                              if click_element_robust(el, "DL-Engine-P2", fallback_x=fb_cx, fallback_y=fb_cy):
+                                  clicked_dl = True
+                                  return True
+                  except Exception as e:
+                      log_msg("DL-Engine", f"Pass 2 failed: {e}")
+
+              # ── PASS 3: automation_id / class_name hint scan ──
+              if not clicked_dl:
+                  log_msg("DL-Engine", f"Pass 3: Scanning automation IDs for download hints...")
+                  dl_id_hints = ["download", "cta", "btn-download", "hero-btn", "get-btn", "install-btn", "download-btn", "dl-btn"]
+                  try:
+                      for el in edge_window.descendants():
+                          try:
+                              aid = (el.element_info.automation_id or "").lower()
+                              cls = (el.element_info.class_name or "").lower()
+                          except Exception:
+                              continue
+                          if any(hint in aid or hint in cls for hint in dl_id_hints):
+                              log_msg("DL-Engine", f"Pass 3 match via ID/class: aid='{aid}' cls='{cls}'")
+                              if click_element_robust(el, "DL-Engine-P3", fallback_x=fb_cx, fallback_y=fb_cy):
+                                  clicked_dl = True
+                                  return True
+                  except Exception as e:
+                      log_msg("DL-Engine", f"Pass 3 failed: {e}")
+
+              # ── PASS 4: Visible region scan — click prominent buttons in upper-middle screen ──
+              if not clicked_dl:
+                  log_msg("DL-Engine", f"Pass 4: Visual region scan for large buttons in hero area...")
+                  try:
+                      candidate_buttons = []
+                      for el in edge_window.descendants(control_type="Button"):
+                          try:
+                              rect = el.rectangle()
+                              cx_el = rect.mid_point().x
+                              cy_el = rect.mid_point().y
+                              width = rect.right - rect.left
+                              height = rect.bottom - rect.top
+                              # Filter: must be reasonably sized and in the central/upper portion of screen
+                              if width > 80 and height > 25 and cy_el < (sh * 0.75) and cx_el > (sw * 0.15) and cx_el < (sw * 0.85):
+                                  txt = (el.window_text() or "").strip()
+                                  nm  = (el.element_info.name or "").strip()
+                                  candidate_buttons.append((width * height, el, cx_el, cy_el, txt or nm))
+                          except Exception:
+                              continue
+                      # Sort by size descending — largest button is most likely the CTA
+                      candidate_buttons.sort(key=lambda x: x[0], reverse=True)
+                      for area, el, cx_el, cy_el, label in candidate_buttons[:5]:
+                          log_msg("DL-Engine", f"Pass 4 candidate: '{label[:40]}' size={area} at ({cx_el},{cy_el})")
+                          # Skip if label looks like navigation/menu
+                          skip_kw = ["menu", "nav", "close", "sign", "log", "cookie", "privacy", "search", "home", "back", "settings"]
+                          if any(s in label.lower() for s in skip_kw):
+                              continue
+                          if click_element_robust(el, "DL-Engine-P4", fallback_x=cx_el, fallback_y=cy_el):
+                              clicked_dl = True
+                              return True
+                  except Exception as e:
+                      log_msg("DL-Engine", f"Pass 4 failed: {e}")
+
+              # ── PASS 5: Coordinate fallback — software-specific screen position ──
+              if not clicked_dl:
+                  log_msg("DL-Engine", f"Pass 5: All UI passes failed. Coordinate fallback at ({fb_cx}, {fb_cy}).")
+                  try:
+                      pyautogui.moveTo(fb_cx, fb_cy, duration=0.3)
+                      time.sleep(0.2)
+                      pyautogui.click()
+                      time.sleep(0.3)
+                      pyautogui.click()
+                      log_msg("DL-Engine", f"Pass 5: Coordinate click executed at ({fb_cx}, {fb_cy}).")
+                      clicked_dl = True
+                  except Exception as e:
+                      log_msg("DL-Engine", f"Pass 5 coordinate fallback failed: {e}")
+
+              return clicked_dl
 
           def _is_address_bar_control(ctrl):
               try:
@@ -1974,7 +2193,6 @@ jobs:
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 6 COMPLETE.")
 
-              # ── STEP 7: Click "Next" 6 times (0.5s delay) — MULTILINGUAL ────────────────────
               log_msg("PostInstall-OP1", "STEP 7: Clicking 'Next' button 6 times (multilingual, 0.5s delay each)...")
               for i in range(1, 7):
                   desktop = Desktop(backend="uia")
@@ -1984,7 +2202,6 @@ jobs:
                   log_msg("PostInstall-OP1", f"  Next click attempt {i}/6 (multilingual)...")
                   sw_now, sh_now = pyautogui.size()
                   
-                  # EXTREME PRECISION: Bottom-Right standard position across languages
                   fallback_next = (int(sw_now * 0.85), int(sh_now * 0.85))
                   
                   clicked = click_opera_button_multilingual(
@@ -2002,7 +2219,6 @@ jobs:
                   time.sleep(0.5)
               log_msg("PostInstall-OP1", "STEP 7 COMPLETE: All 6 Next clicks attempted (multilingual).")
 
-              # ── STEP 7b: Click "Done" — SAME LOCATION AS NEXT ──────────────────────────
               log_msg("PostInstall-OP1", "STEP 7b: Clicking 'Done'/'Finish' button (multilingual)...")
               desktop = Desktop(backend="uia")
               opera_window = force_maximize_and_focus_target(
@@ -2010,7 +2226,6 @@ jobs:
               )
               sw_now, sh_now = pyautogui.size()
               
-              # EXTREME PRECISION: EXACT Same Coordinate as "Next" to ensure it hits Done reliably
               fallback_done = (int(sw_now * 0.85), int(sh_now * 0.85))
               
               clicked_done = click_opera_button_multilingual(
@@ -2024,14 +2239,12 @@ jobs:
               else:
                   log_msg("PostInstall-OP1", "STEP 7b: Multilingual Done not found — fallback already attempted.")
 
-              # ── STEP 8: Wait 5 seconds ────────────────────────────────────────
               log_msg("PostInstall-OP1", "STEP 8: Waiting 5 seconds after Done click...")
               for s in range(1, 6):
                   log_msg("PostInstall-OP1", f"  Post-Done wait: {s}/5 seconds...")
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 8 COMPLETE.")
 
-              # ── STEP 8b: Backup Keyboard Navigation (Right Arrow x2) ───────────
               log_msg("PostInstall-OP1", "STEP 8b: Backup keyboard navigation — pressing Right Arrow 2 times...")
               desktop = Desktop(backend="uia")
               opera_window = force_maximize_and_focus_target(
@@ -2043,7 +2256,6 @@ jobs:
               time.sleep(0.5)
               log_msg("PostInstall-OP1", "STEP 8b COMPLETE.")
 
-              # ── STEP 9: Press ENTER ───────────────────────────────────────────
               log_msg("PostInstall-OP1", "STEP 9: Pressing ENTER key...")
               desktop = Desktop(backend="uia")
               opera_window = force_maximize_and_focus_target(
@@ -2052,19 +2264,17 @@ jobs:
               send_keys('{ENTER}')
               log_msg("PostInstall-OP1", "STEP 9 COMPLETE: ENTER key pressed.")
 
-              # ── STEP 10: Wait 2 seconds ───────────────────────────────────────
               log_msg("PostInstall-OP1", "STEP 10: Waiting 2 seconds after ENTER...")
               time.sleep(2)
               log_msg("PostInstall-OP1", "STEP 10 COMPLETE.")
 
-              # ── STEP 11: Click "Submit" — MULTILINGUAL (Middle Bottom) ─────────────────────────
               log_msg("PostInstall-OP1", "STEP 11: Clicking 'Submit' button (multilingual)...")
               desktop = Desktop(backend="uia")
               opera_window = force_maximize_and_focus_target(
                   desktop, opera_window, software_type, label="step11-SUBMIT"
               )
               sw_now, sh_now = pyautogui.size()
-              fallback_submit = (sw_now // 2, int(sh_now * 0.85))  # Middle bottom fallback
+              fallback_submit = (sw_now // 2, int(sh_now * 0.85))
               clicked_submit = click_opera_button_multilingual(
                   desktop, opera_window, software_type,
                   keyword_list=OPERA_SUBMIT_KEYWORDS,
@@ -2082,9 +2292,8 @@ jobs:
                   time.sleep(1)
               log_msg("PostInstall-OP1", "STEP 12 COMPLETE.")
 
-              # ── STEP 13: Tab cycle starting at 6 (10 cycles, 60% +1 / 40% +2) ────────────
               log_msg("PostInstall-OP1", "STEP 13: Starting TAB cycle sequence (10 cycles, start=6)...")
-              tab_count = 6  # Opera One starts at 6 (reduced by 2 from original 8)
+              tab_count = 6
 
               for cycle in range(1, 11):
                   log_msg("PostInstall-OP1", f"--- TAB CYCLE {cycle}/10: {tab_count} TAB presses ---")
@@ -2116,7 +2325,6 @@ jobs:
                   log_msg("PostInstall-OP1", f"  Pressing ENTER after {tab_count} TABs...")
                   send_keys('{ENTER}')
 
-                  # 60% chance +1, 40% chance +2
                   step = random.choices([1, 2], weights=[0.6, 0.4], k=1)[0]
                   log_msg("PostInstall-OP1", f"Next cycle increment: +{step}. Next tab_count: {tab_count + step}.")
                   tab_count += step
@@ -2188,9 +2396,8 @@ jobs:
                       opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"wait5-{s}")
                   time.sleep(1)
 
-              # ── Opera GX Tab cycle starting at 5 (-2 from implied 7), 10 cycles, 60% +1 / 40% +2 ──
               log_msg("PostInstall-OPGX", "Starting Random TAB sequence (10 cycles, start=5)...")
-              tab_count = 5  # Opera GX starts at 5 (reduced by 2)
+              tab_count = 5
 
               for cycle in range(1, 11):
                   opera_window = force_maximize_and_focus_target(desktop, opera_window, "opera_gx", label=f"pre-CtrlT-{cycle}")
@@ -2210,7 +2417,6 @@ jobs:
                   log_msg("PostInstall-OPGX", f"Sending ENTER after {tab_count} TABs...")
                   send_keys('{ENTER}')
 
-                  # 60% chance +1, 40% chance +2
                   step = random.choices([1, 2], weights=[0.6, 0.4], k=1)[0]
                   log_msg("PostInstall-OPGX", f"Next cycle increment: +{step}. Next tab_count: {tab_count + step}.")
                   tab_count += step
@@ -2294,20 +2500,56 @@ jobs:
                       f"Type: {software_type} | ProxyType: {PROXY_TYPE} | UseProxy: {USE_PROXY}")
               log_msg("UI-Engine", f"Proxy credentials ready: User={PROXY_USER[:25]}... | "
                       f"Server={PROXY_SERVER}")
+              log_msg("UI-Engine", f"Target URL: {TARGET_URL}")
+
+              # Guard: refuse to launch if URL is missing
+              if not TARGET_URL or TARGET_URL.strip() == "":
+                  log_msg("UI-Engine", "FATAL: TARGET_URL is empty. Cannot proceed. Exiting.")
+                  sys.exit(1)
 
               # Determine hardcoded tab count for this software type (backup method)
               BACKUP_DOWNLOAD_TABS = get_download_tabs_for_type(software_type)
               log_msg("UI-Engine", f"Hardcoded backup download tab presses: {BACKUP_DOWNLOAD_TABS} (for {software_type})")
 
-              log_msg("UI-Engine", "Booting initial Microsoft Edge Context natively via Python...")
+              log_msg("UI-Engine", "Booting initial Microsoft Edge context via guaranteed launcher...")
               launch_edge()
 
-              download_clicked = False      # Whether primary mouse click was attempted
-              download_started = False      # Whether download is confirmed started
+              # ── IMPROVED: Post-launch URL verification loop ──────────────────
+              # Wait up to 15 seconds for Edge to open with actual content.
+              # If Edge opened blank/empty, relaunch with URL explicitly.
+              log_msg("UI-Engine", "Waiting 8s for Edge initial load...")
+              time.sleep(8)
+              
+              edge_url_verified = False
+              for url_check in range(3):
+                  try:
+                      desktop_chk = Desktop(backend="uia")
+                      for w in desktop_chk.windows(visible_only=True):
+                          wt = w.window_text() or ""
+                          if "Microsoft Edge" in wt or "msedge" in wt.lower():
+                              if verify_edge_has_url(w, TARGET_URL):
+                                  log_msg("UI-Engine", f"URL verification pass {url_check+1}: Edge loaded OK -> '{wt}'")
+                                  edge_url_verified = True
+                                  break
+                              else:
+                                  log_msg("UI-Engine", f"URL verification pass {url_check+1}: Edge appears blank ('{wt}'). Relaunching with URL...")
+                                  launch_edge_guaranteed(TARGET_URL, EDGE_EXE, PROXY_SERVER, USE_PROXY, LANG_CODE, ACCEPT_LANG, attempt_num=url_check+2)
+                                  time.sleep(6)
+                  except Exception as ve:
+                      log_msg("UI-Engine", f"URL verification check {url_check+1} error: {ve}")
+                  if edge_url_verified:
+                      break
+                  time.sleep(3)
+
+              if not edge_url_verified:
+                  log_msg("UI-Engine", "WARNING: Could not confirm Edge URL load after 3 attempts. Proceeding anyway...")
+
+              download_clicked = False
+              download_started = False
 
               # Keep Sequence Control Variables
-              keep_mouse_sequence_done = False   # Whether mouse-based keep sequence completed
-              keep_keyboard_done = False         # Whether keyboard backup keep sequence done
+              keep_mouse_sequence_done = False
+              keep_keyboard_done = False
               last_dl_click_time = 0
               keep_mouse_step = 0
               keep_mouse_last_try = 0
@@ -2315,6 +2557,11 @@ jobs:
               # Backup tab+enter for download (secondary)
               backup_tab_enter_done = False
               backup_tab_enter_time = 0
+
+              # IMPROVED: Track download click attempts to re-try if first attempt may have missed
+              download_click_attempts = 0
+              MAX_DOWNLOAD_CLICK_ATTEMPTS = 3
+              last_download_reattempt_time = 0
 
               smart_link_interstitial_done = False
               smart_link_interstitial_time = 0
@@ -2357,16 +2604,29 @@ jobs:
                           if "AVG" in wt:
                               avg_window = window
 
+                      # ── IMPROVED: Detect blank/no-URL Edge and force relaunch ─────────
+                      if edge_window and action_mode == 'install':
+                          wt_check = (edge_window.window_text() or "").strip()
+                          elapsed_total = time.time() - start_time
+                          # If Edge title is just "Microsoft Edge" / "New Tab" after 20+ seconds, URL didn't load
+                          if elapsed_total > 20 and wt_check.lower() in ["microsoft edge", "edge", "new tab", ""]:
+                              log_msg("EdgeURLGuard", f"Edge has blank/generic title '{wt_check}' after {elapsed_total:.0f}s. Relaunching with URL...")
+                              launch_edge_guaranteed(TARGET_URL, EDGE_EXE, PROXY_SERVER, USE_PROXY, LANG_CODE, ACCEPT_LANG, attempt_num=99)
+                              proxy_auth_time = time.time()
+                              time.sleep(8)
+                              continue
+
                       # ── PROXY ERROR DETECTION & AUTO-RELOAD ──────────────────
                       if edge_window and action_mode == 'install':
                           if detect_edge_error(edge_window):
-                              log_msg("EdgeError", "FATAL: Proxy/Connection error detected! Reloading Edge with SAME PROXY/URL...")
-                              launch_edge()
+                              log_msg("EdgeError", "FATAL: Proxy/Connection error detected! Relaunching Edge...")
+                              launch_edge_guaranteed(TARGET_URL, EDGE_EXE, PROXY_SERVER, USE_PROXY, LANG_CODE, ACCEPT_LANG, attempt_num=99)
                               start_time = time.time()
                               proxy_auth_time = time.time()
                               last_auth_inject_time = 0
                               download_clicked = False
                               download_started = False
+                              download_click_attempts = 0
                               keep_mouse_sequence_done = False
                               keep_keyboard_done = False
                               keep_mouse_step = 0
@@ -2519,7 +2779,6 @@ jobs:
                                       log_msg("SmartLink", f"Bypass failed: {e}")
                                   smart_link_interstitial_done = True
                                   smart_link_interstitial_time = time.time()
-                                  # For tab+enter triggered pages, 30s countdown starts now
                                   proxy_auth_time = time.time()
 
                       if action_mode == "click":
@@ -2539,29 +2798,47 @@ jobs:
                               can_click_download = False
 
                       # ══════════════════════════════════════════════════════════
-                      # PRIMARY: ROBUST UI AUTOMATION DOWNLOAD BUTTON CLICK
+                      # PRIMARY: IMPROVED MULTI-PASS DOWNLOAD BUTTON CLICK
                       # Triggered after 30s of page load (or 30s after tab+enter for smart links)
+                      # Re-attempts up to MAX_DOWNLOAD_CLICK_ATTEMPTS times if download not started
                       # ══════════════════════════════════════════════════════════
                       if (edge_window and action_mode == "install" and can_click_download
                               and software_type in["opera_gx", "opera_one", "ad_mvn",
                                                     "dynamic_opera", "opera_smart_link", "avg"]):
                           elapsed = time.time() - proxy_auth_time
+                          
+                          # Initial click after 30s
                           if not download_clicked and elapsed > 30:
-                              log_msg("DL-Engine", f"{elapsed:.1f}s elapsed. PRIMARY: Clicking download button via mouse/UI automation...")
+                              log_msg("DL-Engine", f"{elapsed:.1f}s elapsed. PRIMARY: Initiating multi-pass download button detection...")
                               try: edge_window.set_focus()
                               except Exception: pass
                               
                               robust_click_download_button(edge_window, software_type)
                               
                               download_clicked = True
+                              download_click_attempts = 1
                               last_dl_click_time = time.time()
+                              last_download_reattempt_time = time.time()
                               keep_mouse_step = 0
                               keep_mouse_last_try = 0
-                              backup_tab_enter_time = time.time()  # Start backup timer from here
+                              backup_tab_enter_time = time.time()
+
+                          # IMPROVED: Re-attempt download click if download hasn't started yet
+                          # Re-try every 20s up to MAX_DOWNLOAD_CLICK_ATTEMPTS
+                          elif (download_clicked and not download_started
+                                and download_click_attempts < MAX_DOWNLOAD_CLICK_ATTEMPTS
+                                and (time.time() - last_download_reattempt_time) > 20
+                                and not keep_mouse_sequence_done):
+                              log_msg("DL-Engine", f"Download not confirmed started. Re-attempt {download_click_attempts + 1}/{MAX_DOWNLOAD_CLICK_ATTEMPTS}...")
+                              try: edge_window.set_focus()
+                              except Exception: pass
+                              time.sleep(0.5)
+                              robust_click_download_button(edge_window, software_type)
+                              download_click_attempts += 1
+                              last_download_reattempt_time = time.time()
 
                       # ══════════════════════════════════════════════════════════
                       # KEEP BUTTON — MOUSE/UI AUTOMATION (PRIMARY, 4 attempts every 5s)
-                      # Starts after download button clicked
                       # ══════════════════════════════════════════════════════════
                       if download_clicked and not keep_mouse_sequence_done and edge_window:
                           elapsed_since_dl = now - last_dl_click_time
@@ -2594,7 +2871,7 @@ jobs:
                                   
                                   if clicked_keep:
                                       keep_mouse_sequence_done = True
-                                      keep_keyboard_done = True  # Skip keyboard backup if mouse worked
+                                      keep_keyboard_done = True
                                       download_started = True
                                       log_msg("KeepMouse", "Mouse keep sequence completed successfully.")
                                   else:
@@ -2602,12 +2879,10 @@ jobs:
                                       
                           if keep_mouse_step >= 4 and not keep_mouse_sequence_done:
                               log_msg("KeepMouse", "All 4 mouse attempts done. Switching to keyboard backup keep sequence.")
-                              keep_mouse_sequence_done = True  # Stop mouse attempts
+                              keep_mouse_sequence_done = True
 
                       # ══════════════════════════════════════════════════════════
                       # KEEP BUTTON — KEYBOARD BACKUP
-                      # Fires after 4 mouse attempts complete and keep not found
-                      # Uses: Ctrl+J, 4x TAB, ENTER
                       # ══════════════════════════════════════════════════════════
                       if (download_clicked and keep_mouse_sequence_done and not keep_keyboard_done
                               and edge_window and not download_started):
@@ -2628,8 +2903,6 @@ jobs:
 
                       # ══════════════════════════════════════════════════════════
                       # BACKUP: TAB+ENTER DOWNLOAD METHOD
-                      # Fires 60s after page load OR 30s after mouse click attempt
-                      # Only if download has not started yet
                       # ══════════════════════════════════════════════════════════
                       if (edge_window and action_mode == "install" and can_click_download
                               and not backup_tab_enter_done and not download_started):
@@ -2637,7 +2910,6 @@ jobs:
                           elapsed_page = time.time() - proxy_auth_time
                           elapsed_since_click = (time.time() - last_dl_click_time) if download_clicked else 9999
                           
-                          # Fire backup if: 60s since page load, OR 30s after mouse click attempt
                           should_fire_backup = (
                               (not download_clicked and elapsed_page > 60) or
                               (download_clicked and elapsed_since_click > 30)
@@ -2654,7 +2926,6 @@ jobs:
                                       time.sleep(0.3)
                                   send_keys('{ENTER}')
                                   log_msg("DL-Backup", f"TAB x{BACKUP_DOWNLOAD_TABS} + ENTER sent as backup download trigger.")
-                                  # For tab+enter triggered pages, 30s countdown for page load
                                   backup_tab_enter_done = True
                                   backup_tab_enter_time = time.time()
                               except Exception as e:
@@ -2779,7 +3050,6 @@ jobs:
                           }
 
                           # ── ACCURATE DOWNLOAD EXECUTION DETECTION ────────────────────────────
-                          # Properly detect which software was actually downloaded
                           $actualSoftware = $softwareType
                           if ($softwareType -eq "ad_mvn" -or $softwareType -eq "dynamic_opera" -or $softwareType -eq "opera_smart_link") {
                               if ($file.Name -match "OperaGX") {
@@ -2797,7 +3067,6 @@ jobs:
                                   }
                               }
                           } elseif ($softwareType -eq "opera_gx") {
-                              # Confirm it's really GX
                               if ($file.Name -match "OperaGX") {
                                   $actualSoftware = "opera_gx"
                                   Write-Output "[$($softwareType.ToUpper())-WATCHER] Confirmed: Opera GX Setup."
