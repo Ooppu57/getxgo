@@ -37,12 +37,12 @@ on:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '30'
+        default: '25'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '70'
+        default: '75'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '01. OperaOne - Jimmy'
+        default: '01. Ad-MVN - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 101 States - 100 States - 99 States - 98 States - 97 States - 96 States - 95 States - 94 States - 93 States - 92 States - 91 States - 90 States - 89 States - 88 States - 87 States - 86 States - 85 States - 84 States - 83 States - 82 States - 81 States - 80 States - 79 States - 78 States - 77 States - 76 States - 75 States - 74 States - 73 States - 72 States - 71 States - 70 States - 69 States - 68 States - 67 States - 66 States - 65 States - 64 States - 63 States - 62 States - 61 States - 60 States - 59 States - 58 States - 57 States - 56 States - 55 States - 54 States - 53 States - 52 States - 51 States - 50 States - 49 States - 48 States - 47 States - 46 States - 45 States - 44 States - 43 States - 42 States - 41 States - 40 States - 39 States - 38 States - 37 States - 36 States - 35 States - 34 States - 33 States - 32 States - 31 States - 30 States - 29 States - 28 States - 27 States - 26 States - 25 States - 24 States - 23 States - 22 States - 21 States - 20 States - 19 States - 18 States - 17 States - 16 States - 15 States - 14 States - 13 States - 12 States - 11 States - 10 States - 9 States - 8 States - 7 - 1 States - 6 States - 5 States - 4 States - 3 States - 2 States - 1'
+        default: 'States - 1 States - 2 States - 3 States - 4 States - 5 States - 6 - 1 States - 7 States - 8 States - 9 States - 10 States - 11 States - 12 States - 13 States - 14 States - 15 States - 16 States - 17 States - 18 States - 19 States - 20 States - 21 States - 22 States - 23 States - 24 States - 25 States - 26 States - 27 States - 28 States - 29 States - 30 States - 31 States - 32 States - 33 States - 34 States - 35 States - 36 States - 37 States - 38 States - 39 States - 40 States - 41 States - 42 States - 43 States - 44 States - 45 States - 46 States - 47 States - 48 States - 49 States - 50 States - 51 States - 52 States - 53 States - 54 States - 55 States - 56 States - 57 States - 58 States - 59 States - 60 States - 61 States - 62 States - 63 States - 64 States - 65 States - 66 States - 67 States - 68 States - 69 States - 70 States - 71 States - 72 States - 73 States - 74 States - 75 States - 76 States - 77 States - 78 States - 79 States - 80 States - 81 States - 82 States - 83 States - 84 States - 85 States - 86 States - 87 States - 88 States - 89 States - 90 States - 91 States - 92 States - 93 States - 94 States - 95 States - 96 States - 97 States - 98 States - 99'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
