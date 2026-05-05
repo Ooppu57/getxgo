@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '02. Opera - Fatradez'
+        default: '01. Opera - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '- 1611 - 1612 - 1613 - 1614 - 1615 - 1616 - 1617 - 1618 - 1619 - 1620 - 1621 - 1622 - 1623 - 1624 - 1625 - 1626 - 1627'
+        default: '- 1594 - 1595 - 1596 - 1597 - 1598 - 1599 - 1600 - 1601 - 1602 - 1603 - 1604 - 1605 - 1606 - 1607 - 1608 - 1609 - 400 - 1610'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -180,7 +180,7 @@ jobs:
           for k, v in updates.items():
               if v is None:
                   v = ""
-              if v.lower() in ["true", "false"]:
+              if v.lower() in["true", "false"]:
                   rep = v.lower()
               else:
                   rep = f"\x27{v}\x27"
@@ -455,6 +455,7 @@ jobs:
           short_os = os.environ.get("SHORT_OS", "OS")
           short_sw = os.environ.get("SHORT_SW", "SW")
           action_cap = os.environ.get("ACTION", "task").capitalize()
+          is_install_action = action_cap.lower() == "install"
 
           # Geography mappings
           country_map = {
@@ -584,15 +585,14 @@ jobs:
           if without_proxy:
               print("Proxy disabled manually.")
           elif manual_proxies:
-              print(f"[Manual Proxy] Assigning Primary & Backup proxies using stride distribution (Total Proxies Provided: {len(manual_proxies)}, Total Tasks: {tasks_total})...")
+              print(f"[Manual Proxy] Assigning Proxies via stride distribution (Total Provided: {len(manual_proxies)}, Tasks: {tasks_total})...")
               
               for attempt in range(len(manual_proxies)):
                   idx = (absolute_idx + attempt * tasks_total) % len(manual_proxies)
                   
                   raw_p = manual_proxies[idx]
                   pinfo = parse_proxy(raw_p)
-                  if not pinfo:
-                      continue
+                  if not pinfo: continue
                       
                   res = validate_proxy(pinfo)
                   if res['working']:
@@ -601,18 +601,18 @@ jobs:
                       use_proxy = True
                       print(f"SUCCESS: Active PRIMARY manual proxy -> IP: {res['ip']} | CC: {res['country_code']}")
                       
-                      # Find Backup
-                      for b_attempt in range(1, len(manual_proxies)):
-                          b_idx = (idx + b_attempt * tasks_total) % len(manual_proxies)
-                          b_raw = manual_proxies[b_idx]
-                          b_pinfo = parse_proxy(b_raw)
-                          if not b_pinfo: continue
-                          b_res = validate_proxy(b_pinfo)
-                          if b_res['working'] and b_res['server'] != active_proxy['server']:
-                              backup_proxy = b_res
-                              backup_proxy['proxy_type_label'] = 'manual'
-                              print(f"SUCCESS: Active BACKUP manual proxy -> IP: {b_res['ip']} | CC: {b_res['country_code']}")
-                              break
+                      if is_install_action:
+                          for b_attempt in range(1, len(manual_proxies)):
+                              b_idx = (idx + b_attempt * tasks_total) % len(manual_proxies)
+                              b_raw = manual_proxies[b_idx]
+                              b_pinfo = parse_proxy(b_raw)
+                              if not b_pinfo: continue
+                              b_res = validate_proxy(b_pinfo)
+                              if b_res['working'] and b_res['server'] != active_proxy['server']:
+                                  backup_proxy = b_res
+                                  backup_proxy['proxy_type_label'] = 'manual'
+                                  print(f"SUCCESS: Active BACKUP manual proxy -> IP: {b_res['ip']} | CC: {b_res['country_code']}")
+                                  break
                       break
 
           elif floppy_keys:
@@ -652,26 +652,25 @@ jobs:
                           use_proxy = True
                           print(f"SUCCESS: FloppyData PRIMARY proxy active -> IP: {res['ip']} | CC: {res['country_code']}")
                           
-                          # Backup Floppy
-                          params2 = {"type": proxy_type, "country": cc_input.upper(), "protocol": "http", "rotation": "0" if sticky else "-1"}
-                          if sticky: params2["session"] = f"t{task_index}b_{str(uuid.uuid4())[:4]}"
-                          builder_resp2 = requests.get(f"{FLOPPY_BASE}/v1/rotating/smartParamsBuilder", headers={"X-Api-Key": current_key}, params=params2, timeout=12)
-                          b_data2 = builder_resp2.json()
-                          user2 = b_data2.get("username", creds_data.get("username", ""))
-                          pwd2 = b_data2.get("password", creds_data.get("password", ""))
-                          
-                          backup_proxy = {
-                              'username': user2, 'password': pwd2, 'host': host, 'port': int(port),
-                              'server': f"{host}:{port}", 'proxy_type_label': 'floppydata'
-                          }
-                          print(f"SUCCESS: FloppyData BACKUP proxy dynamically generated.")
+                          if is_install_action:
+                              params2 = {"type": proxy_type, "country": cc_input.upper(), "protocol": "http", "rotation": "0" if sticky else "-1"}
+                              if sticky: params2["session"] = f"t{task_index}b_{str(uuid.uuid4())[:4]}"
+                              builder_resp2 = requests.get(f"{FLOPPY_BASE}/v1/rotating/smartParamsBuilder", headers={"X-Api-Key": current_key}, params=params2, timeout=12)
+                              b_data2 = builder_resp2.json()
+                              user2 = b_data2.get("username", creds_data.get("username", ""))
+                              pwd2 = b_data2.get("password", creds_data.get("password", ""))
+                              
+                              backup_proxy = {
+                                  'username': user2, 'password': pwd2, 'host': host, 'port': int(port),
+                                  'server': f"{host}:{port}", 'proxy_type_label': 'floppydata'
+                              }
+                              print(f"SUCCESS: FloppyData BACKUP proxy dynamically generated.")
                           break
                   except Exception as e:
                       print(f"FloppyData error on this key: {e}")
 
           elif scrapeops_keys:
               for attempt in range(len(scrapeops_keys)):
-                  # 1 API Key per 15 Tasks
                   key_idx = (absolute_idx // 15 + attempt) % len(scrapeops_keys)
                   current_key = scrapeops_keys[key_idx]
                   print(f"[ScrapeOps] Testing API Key ending in ...{current_key[-4:]} (Attempt {attempt+1})")
@@ -698,12 +697,13 @@ jobs:
                       use_proxy = True
                       print(f"SUCCESS: ScrapeOps PRIMARY proxy active -> IP: {res['ip']} | CC: {res['country_code']}")
                       
-                      backup_proxy = {
-                          'username': user2, 'password': current_key, 'host': 'residential-proxy.scrapeops.io',
-                          'port': 8181, 'server': 'residential-proxy.scrapeops.io:8181', 
-                          'proxy_type_label': 'scrapeops'
-                      }
-                      print(f"SUCCESS: ScrapeOps BACKUP proxy dynamically generated.")
+                      if is_install_action:
+                          backup_proxy = {
+                              'username': user2, 'password': current_key, 'host': 'residential-proxy.scrapeops.io',
+                              'port': 8181, 'server': 'residential-proxy.scrapeops.io:8181', 
+                              'proxy_type_label': 'scrapeops'
+                          }
+                          print(f"SUCCESS: ScrapeOps BACKUP proxy dynamically generated.")
                       break
                   else:
                       if attempt == len(scrapeops_keys) - 1:
@@ -719,13 +719,13 @@ jobs:
                           active_proxy['proxy_type_label'] = 'scrapeops'
                           use_proxy = True
                           
-                          backup_proxy = {
-                              'username': user2, 'password': current_key, 'host': 'residential-proxy.scrapeops.io',
-                              'port': 8181, 'server': 'residential-proxy.scrapeops.io:8181', 
-                              'proxy_type_label': 'scrapeops'
-                          }
+                          if is_install_action:
+                              backup_proxy = {
+                                  'username': user2, 'password': current_key, 'host': 'residential-proxy.scrapeops.io',
+                                  'port': 8181, 'server': 'residential-proxy.scrapeops.io:8181', 
+                                  'proxy_type_label': 'scrapeops'
+                              }
 
-          # Default Fallback if completely proxy-less
           if not active_proxy:
               active_proxy = {
                   'server': '', 'username': '', 'password': '', 'proxy_type_label': 'none',
@@ -1212,32 +1212,23 @@ jobs:
           
           def launch_edge(server_override=None):
               os.system("taskkill /F /IM msedge.exe >nul 2>&1")
-              time.sleep(1.5)
-              user_dir = os.path.join(tempfile.gettempdir(), f"EdgeProfile_{random.randint(10000, 99999)}")
-              args =[
-                  EDGE_EXE,
-                  f"--user-data-dir={user_dir}",
-                  "--no-first-run",
-                  "--no-default-browser-check",
-                  "--disable-sync",
-                  "--safebrowsing-disable-download-protection",
-                  "--disable-features=msSmartScreenProtection,SmartScreenPuaEnabled",
-                  "--restore-last-session=false",
-                  "--hide-crash-restore-window",
-                  f"--lang={LANG_CODE}",
-                  f"--accept-lang={ACCEPT_LANG}"
-              ]
-              if USE_PROXY:
-                  srv = server_override if server_override else PROXY_SERVER
-                  if srv:
-                      args.append(f"--proxy-server=http://{srv}")
-              args.append(TARGET_URL)
-              log_msg("EdgeLaunch", f"Launching Edge Process with Proxy Node: {server_override or PROXY_SERVER}")
-              subprocess.Popen(args)
+              time.sleep(2)
+              user_dir = os.path.join(tempfile.gettempdir(), f"EdgeProfile_{random.randint(100000, 999999)}")
+              
+              cmd = f'"{EDGE_EXE}" --user-data-dir="{user_dir}" --no-first-run --no-default-browser-check --disable-sync --safebrowsing-disable-download-protection --disable-features=msSmartScreenProtection,SmartScreenPuaEnabled --restore-last-session=false --hide-crash-restore-window --lang={LANG_CODE} --accept-lang={ACCEPT_LANG}'
+              
+              srv = server_override if server_override else PROXY_SERVER
+              if USE_PROXY and srv:
+                  cmd += f' --proxy-server="http://{srv}"'
+                  
+              cmd += f' "{TARGET_URL}"'
+              
+              log_msg("EdgeLaunch", f"Executing natively: {cmd}")
+              subprocess.Popen(cmd, shell=True)
 
           def switch_to_backup_proxy():
               global PROXY_USER, PROXY_PASS, PROXY_SERVER
-              log_msg("ProxySwitch", "Executing Proxy Failover... Injecting Backup Proxy details globally.")
+              log_msg("ProxySwitch", "Executing Proxy Failover... Injecting Backup Proxy credentials globally.")
               PROXY_USER = BACKUP_USER
               PROXY_PASS = BACKUP_PASS
               PROXY_SERVER = BACKUP_SERVER
@@ -1245,7 +1236,6 @@ jobs:
 
           def detect_edge_error(edge_window):
               try:
-                  title = (edge_window.window_text() or "").lower()
                   error_kw =[
                       "can't reach this page",
                       "err_connection_closed",
@@ -1257,6 +1247,8 @@ jobs:
                       "err_empty_response",
                       "err_network_changed"
                   ]
+                  
+                  title = (edge_window.window_text() or "").lower()
                   if any(kw in title for kw in error_kw):
                       return True
                   
@@ -1277,6 +1269,45 @@ jobs:
               except Exception:
                   pass
               return False
+
+          def click_element_robust(el, label, fallback_x=None, fallback_y=None):
+              clicked = False
+              try:
+                  el.click_input()
+                  log_msg(label, "Clicked successfully via pywinauto click_input()")
+                  clicked = True
+              except Exception: pass
+
+              if not clicked:
+                  try:
+                      el.invoke()
+                      log_msg(label, "Clicked successfully via UIA Invoke pattern")
+                      clicked = True
+                  except Exception: pass
+
+              if not clicked:
+                  try:
+                      rect = el.rectangle()
+                      cx, cy = rect.mid_point().x, rect.mid_point().y
+                      sw, sh = pyautogui.size()
+                      if 0 <= cx <= sw and 0 <= cy <= sh:
+                          pyautogui.moveTo(cx, cy, duration=0.2)
+                          pyautogui.click()
+                          time.sleep(0.1)
+                          pyautogui.click() # Double click just to be safe
+                          log_msg(label, f"Clicked via PyAutoGUI explicit coordinates at ({cx}, {cy})")
+                          clicked = True
+                  except Exception: pass
+
+              if not clicked and fallback_x is not None and fallback_y is not None:
+                  pyautogui.moveTo(fallback_x, fallback_y, duration=0.2)
+                  pyautogui.click()
+                  time.sleep(0.1)
+                  pyautogui.click()
+                  log_msg(label, f"Clicked via PyAutoGUI blind fallback at ({fallback_x}, {fallback_y})")
+                  clicked = True
+                  
+              return clicked
 
           def _is_address_bar_control(ctrl):
               try:
@@ -2297,7 +2328,6 @@ jobs:
 
               download_clicked = False
               using_backup = False
-              backup_switched_time = 0
               
               # Keep Sequence Control Variables
               keep_sequence_pending = False
@@ -2347,16 +2377,25 @@ jobs:
                               avg_window = window
 
                       # ── PROXY ERROR DETECTION & AUTO-BACKUP SWITCHOVER ──────────
-                      if edge_window:
-                          if not using_backup and BACKUP_SERVER and BACKUP_USER:
-                              if detect_edge_error(edge_window):
-                                  log_msg("EdgeError", "FATAL: Proxy/Connection error detected on Primary Session! (ERR_CONNECTION_CLOSED / Can't Reach)")
-                                  using_backup = True
-                                  backup_switched_time = time.time()
-                                  switch_to_backup_proxy()
-                                  proxy_auth_time = time.time() # Reset UI operational timers
-                                  time.sleep(5) # Allow Edge instance time to initialize
-                                  continue # Force skip rest of evaluation cycle until window recovers
+                      if edge_window and action_mode == 'install' and not using_backup and BACKUP_SERVER and BACKUP_USER:
+                          if detect_edge_error(edge_window):
+                              log_msg("EdgeError", "FATAL: Proxy/Connection error detected on Primary Session! Terminating and applying Backup Proxy...")
+                              using_backup = True
+                              switch_to_backup_proxy()
+                              
+                              # Reset all session timers and sequence trackers for a totally fresh execution flow
+                              start_time = time.time()  # Reset global 450s limit
+                              proxy_auth_time = time.time() # Reset page load wait limit
+                              last_auth_inject_time = 0
+                              download_clicked = False
+                              keep_sequence_pending = False
+                              keep_step = 0
+                              keep_last_try = 0
+                              smart_link_interstitial_done = False
+                              download_windows_closed = False
+                              
+                              time.sleep(8) # Allow Edge instance time to spin up fully
+                              continue # Skip evaluation cycle until new window renders
 
                       now = time.time()
                       if now - last_interference_sweep >= INTERFERENCE_SWEEP_INTERVAL:
@@ -2522,13 +2561,14 @@ jobs:
                                                     "dynamic_opera", "opera_smart_link", "avg"]):
                           elapsed = time.time() - proxy_auth_time
                           if not download_clicked and elapsed > 45: # Make sure webpage is fully loaded
-                              log_msg("DL-Engine", f"{elapsed:.1f}s elapsed. Webpage fully loaded. Executing Mouse UI search for download button...")
-                              try:
-                                  edge_window.set_focus()
-                                  time.sleep(0.5)
+                              log_msg("DL-Engine", f"{elapsed:.1f}s elapsed. Webpage fully loaded. Searching for robust download button...")
+                              try: edge_window.set_focus()
                               except Exception: pass
                               
                               clicked_dl = False
+                              sw, sh = pyautogui.size()
+                              fb_cx, fb_cy = int(sw * 0.45), int(sh * 0.5)
+                              
                               try:
                                   DOWNLOAD_KW =["download", "télécharger", "descargar", "herunterladen", "baixar", "scarica", "pobierz", "tải xuống", "unduh", "indir", "stáhnout", "letöltés", "skidanje", "preuzimanje"]
                                   for el in edge_window.descendants(control_type="Button"):
@@ -2536,29 +2576,17 @@ jobs:
                                       nm = (el.element_info.name or "").lower()
                                       combined = f"{txt} {nm}"
                                       if any(kw in combined for kw in DOWNLOAD_KW):
-                                          rect = el.rectangle()
-                                          cx, cy = rect.mid_point().x, rect.mid_point().y
-                                          sw, sh = pyautogui.size()
-                                          if 0 <= cx <= sw and 0 <= cy <= sh:
-                                              pyautogui.moveTo(cx, cy, duration=0.2)
-                                              pyautogui.click()
-                                              time.sleep(0.5)
-                                              pyautogui.click() # Double click just in case
-                                              log_msg("DL-Engine", f"Found Download button '{combined}' at ({cx}, {cy}). Clicked via Mouse.")
+                                          if click_element_robust(el, "DL-Engine", fallback_x=fb_cx, fallback_y=fb_cy):
                                               clicked_dl = True
                                               break
                               except Exception as e:
                                   log_msg("DL-Engine", f"UI Automation DL search failed: {e}")
                               
                               if not clicked_dl:
-                                  # Fallback to coordinate logic.
-                                  sw, sh = pyautogui.size()
-                                  cx = int(sw * 0.45)
-                                  cy = int(sh * 0.5) # Middle center-left where main CTA usually resides
-                                  log_msg("DL-Engine", f"Download button not found by text. Using fallback coordinates at ({cx}, {cy}).")
-                                  pyautogui.moveTo(cx, cy, duration=0.2)
+                                  log_msg("DL-Engine", f"Download button not found by text. Using blind screen-relative fallback at ({fb_cx}, {fb_cy}).")
+                                  pyautogui.moveTo(fb_cx, fb_cy, duration=0.2)
                                   pyautogui.click()
-                                  time.sleep(1)
+                                  time.sleep(0.5)
                                   pyautogui.click()
                                   
                               download_clicked = True
@@ -2574,47 +2602,38 @@ jobs:
                           if elapsed_since_dl >= 5 and keep_step < 5:
                               if (now - keep_last_try) >= 5: # 5 seconds delay between attempts
                                   keep_step += 1
-                                  log_msg("KeepSeq", f"Attempt {keep_step}/5: Pressing Ctrl+J and searching for Keep button...")
+                                  log_msg("KeepSeq", f"Attempt {keep_step}/5: Pressing Ctrl+J and robustly searching for Keep button...")
                                   
-                                  if edge_window:
-                                      try:
-                                          edge_window.set_focus()
-                                      except Exception: pass
+                                  try: edge_window.set_focus()
+                                  except Exception: pass
+                                  
                                   time.sleep(0.5)
                                   send_keys('^j')
                                   time.sleep(1.5) # Allow flyout to render
                                   
                                   clicked_keep = False
-                                  if edge_window:
-                                      try:
-                                          KEEP_KW =["keep", "conserver", "manter", "behalten", "conservar", "mantieni", "behouden", "zachowaj", "giữ", "simpan", "sakla", "säilytä", "zadržet", "megtartás", "retain"]
-                                          for btn in edge_window.descendants(control_type="Button"):
-                                              txt = (btn.window_text() or "").lower()
-                                              nm = (btn.element_info.name or "").lower()
-                                              combined = f"{txt} {nm}"
-                                              
-                                              if any(kw in combined for kw in KEEP_KW):
-                                                  rect = btn.rectangle()
-                                                  cx, cy = rect.mid_point().x, rect.mid_point().y
-                                                  sw_max, sh_max = pyautogui.size()
-                                                  if 0 <= cx <= sw_max and 0 <= cy <= sh_max:
-                                                      pyautogui.moveTo(cx, cy, duration=0.2)
-                                                      pyautogui.click()
-                                                      log_msg("KeepSeq", f"Found Keep button '{combined}' at ({cx}, {cy}). Clicked via Mouse.")
-                                                      clicked_keep = True
-                                                      break
-                                      except Exception as e:
-                                          log_msg("KeepSeq", f"UI Automation Keep click failed: {e}")
+                                  try:
+                                      KEEP_KW =["keep", "keep anyway", "conserver", "manter", "behalten", "conservar", "mantieni", "behouden", "zachowaj", "giữ", "simpan", "sakla", "säilytä", "zadržet", "megtartás", "retain"]
+                                      for btn in edge_window.descendants(control_type="Button"):
+                                          txt = (btn.window_text() or "").lower()
+                                          nm = (btn.element_info.name or "").lower()
+                                          combined = f"{txt} {nm}"
+                                          if any(kw in combined for kw in KEEP_KW):
+                                              if click_element_robust(btn, "KeepSeq"):
+                                                  clicked_keep = True
+                                                  break
+                                  except Exception as e:
+                                      log_msg("KeepSeq", f"UI Automation Keep click failed: {e}")
                                   
                                   if clicked_keep:
                                       keep_sequence_pending = False
                                       keep_step = 99
-                                      log_msg("KeepSeq", "Keep button successfully clicked. Sequence complete.")
+                                      log_msg("KeepSeq", "Keep sequence safely completed.")
                                   else:
                                       keep_last_try = time.time()
                                       
                           if keep_step >= 5 and keep_sequence_pending:
-                              log_msg("KeepSeq", "All 5 attempts completed but Keep not found. Assuming file is safe.")
+                              log_msg("KeepSeq", "All 5 attempts completed but Keep not found. Assuming payload passed safety checks autonomously.")
                               keep_sequence_pending = False
 
                       # ── AUTOMATIC EXTENSION ADDITION ───────────────────────────
