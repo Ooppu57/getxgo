@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '3'
+        default: '4'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '40'
+        default: '4'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '60'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '04. Opera - Oliver'
+        default: '03. OperaOne - Harrari'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '- 1649 - 1650 - 1651 - 1652 - 1653 - 1654 - 1655 - 1656 - 1657 - 1658 - 1659 - 1660 - 1661 - 1662 - 1663 - 1664 - 1665 - 1666 - 1667 - 1668 - 1669 - 1670 - 1671 - 1672 - 1673 - 1674 - 1675 - 1676 - 1677 - 1678'
+        default: 'States - 2265 States - 2266 States - 2267 States - 2268 States - 2269'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
