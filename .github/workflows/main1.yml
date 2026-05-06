@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '1'
+        default: '5'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '34'
+        default: '10'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '66'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '04. Ad-MVN - A2Z'
+        default: '01. Opera - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 5 States - 4 States - 3 States - 2 States - 1 States - 3314 States - 3313 States - 3312 States - 3311 States - 3310 States - 3309 States - 3308 States - 3307 States - 3306 States - 3305 States - 3304 States - 3303 States - 3302 States - 3301 States - 3300 States - 3299 States - 3298 States - 3297 States - 3296 States - 3295 States - 3294 States - 3293 States - 3292 States - 3291 States - 3290 States - 3289 States - 3288 States - 3287 States - 3286 States - 3285 States - 3284 States - 3283 States - 3282 States - 3281 States - 3280 States - 3279 States - 3278 States - 3277 States - 3276 States - 3275 States - 3274 States - 3273 States - 3272 States - 3271 States - 3270 States - 3269 States - 3268 States - 3267 States - 3266 States - 3265 States - 3264 States - 3263 States - 3262 States - 3261 States - 3260 States - 3259 States - 3258 States - 3257 States - 3256 States - 3255 States - 3254 States - 3253 States - 3252 States - 3251 States - 3250 States - 3249 States - 3248 States - 3247 States - 3246 States - 3245 States - 3244 States - 3243 States - 3242 States - 3241 States - 3240 States - 3239 States - 3238 States - 3237 States - 3236 States - 3235 States - 3234 States - 3233 States - 3232 States - 3231 States - 3230 States - 3229 States - 3228 States - 3227 States - 3226 States - 3225 States - 3224 States - 3223 States - 3222 States - 3221 States - 3220'
+        default: '- 2191 - 2192 - 2194 - 2193 - 2195 - 2196 - 2197 - 2198 - 2199 - 2200'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
