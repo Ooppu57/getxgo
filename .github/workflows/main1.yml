@@ -37,12 +37,12 @@ on:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '5'
+        default: '50'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '0'
+        default: '50'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '06. Opera - AD'
+        default: '01. Opera - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -81,12 +81,12 @@ on:
         description: 'Run manual link'
         required: true
         type: boolean
-        default: true
+        default: false
       scrapeops_api_key:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 3328 States - 3327 Kingdom - 7 - 9 - 423'
+        default: '- 2804 - 2803 - 2802 - 2801 - 2800 - 2799 - 2798 - 2797 - 2796 - 2795 - 2794 - 2793 - 2792 - 2791 - 2790 - 2789 - 2788 - 2787 - 2786 - 2785 - 2784 - 2783 - 2782 - 2781 - 2780 - 2779 - 2778 - 2777 - 2776 - 2775 - 2774 - 2773 - 2772 - 2771 - 2770 - 2769 - 2768 - 2767 - 2766 - 2765 - 2764 - 2763 - 2762 - 2761 - 2760 - 2759 - 2758 - 2757 - 2756 - 2755 - 2754 - 2753 - 2752 - 2751 - 2750 - 2749 - 2748 - 2747 - 2746 - 2745 - 2744 - 2743 - 2742 - 2741 - 2740 - 2739 - 424 - 2738 - 2737 - 2736 - 2735 - 2734 - 2733 - 2732 - 2731 - 2730 - 2729 - 2728 - 2727 - 2726 - 2725 - 2724 - 2723 - 2722 - 2721 - 2720 - 2719 - 2718 - 2717 - 2716 - 2715 - 2714 - 2713 - 2712 - 2711 - 2710 - 2709 - 2708 - 2707 - 2706'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
