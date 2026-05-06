@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '08. Opera - Harrari'
+        default: '02. Opera - Fatradez'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '- 2149 - 2150 - 2151 - 2152 - 2153 - 2154 - 2155 - 2156 - 2157 - 2158 - 2159'
+        default: '- 2170 - 2171 - 2172 - 2173 - 2174 - 2175 - 2176 - 2177 - 2178 - 2179'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
