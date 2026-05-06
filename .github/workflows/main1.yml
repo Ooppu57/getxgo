@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '5'
+        default: '1'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '8'
+        default: '40'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '2'
+        default: '60'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '01. Opera - Techx'
+        default: '01. Ad-MVN - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'd0f7431f-9fbc-4550-b507-20e3fd0c7297'
+        default: 'States States - 2985 States - 2941 States - 2988 States - 2986 States - 2990 States - 2993 States - 2972 States - 3000 States - 2976 States - 2961 States - 2969 States - 2971 States - 2936 States - 2965 States - 2962 States - 2945 States - 2979 States - 2953 States - 2973 States - 2956 States - 2968 States - 2966 States - 2967 States - 2963 States - 2955 States - 2954 States - 2970 States - 2934 States - 2959 States - 2928 States - 2991 States - 2957 States - 2975 States - 2960 States - 2964 States - 2938 States - 2920 States - 2947 States - 2923 States - 2914 States - 2939 States - 2951 States - 2924 States - 2929 States - 2935 States - 2901 States - 2933 States - 2919 States - 2950 States - 2949 States - 2940 States - 2925 States - 2906 States - 2930 States - 2952 States - 2944 States - 2937 States - 2913 States - 2943 States - 2932 States - 2948 States - 2942 States - 2899 States - 2921 States - 2911 States - 2931 States - 2926 States - 2903 States - 2917 States - 2905 States - 2915 States - 2922 States - 2909 States - 2907 States - 2900 States - 2902 States - 2918 States - 2912 States - 2916 States - 2927 States - 2910 States - 2904 States - 2908 States - 2946 States - 3002 States - 3003 States - 3004 States - 3005 States - 3006 States - 3007 States - 3008 States - 3009 States - 3010 States - 3011 States - 3012 States - 3013 States - 3014 States - 3015 States - 3016 States - 2989 States - 2974 States - 2978 States - 2997 States - 2995 States - 2977 States - 2996 States - 2980 States - 2982 States - 2984 States - 2994 States - 2983 States - 2987'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
