@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '5'
+        default: '1'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '10'
+        default: '40'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '0'
+        default: '60'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '03. Opera - James'
+        default: '01. AVG - TechxTrader'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '- 2180 - 2181 - 2182 - 2183 - 2184 - 2185 - 2186 - 2187 - 2188 - 2189'
+        default: 'States - 2596 States - 2597 States - 2598 States - 2599 States - 2600 States - 2601 States - 2602 States - 2603 States - 2604 States - 2605 States - 2606 States - 2607 States - 2608 States - 2609 States - 2610 States - 2611 States - 2612 States - 2613 States - 2614 States - 2615 States - 2616 States - 2617 States - 2618 States - 2619 States - 2620 States - 2621 States - 2622 States - 2623 States - 2624 States - 2625 States - 2626 States - 2627 States - 2628 States - 2629 States - 2630 States - 2631 States - 2632 States - 2633 States - 2634 States - 2635 States - 2636 States - 2637 States - 2638 States - 2639 States - 2640 States - 2641 States - 2642 States - 2643 States - 2644 States - 2645 States - 2646 States - 2647 States - 2648 States - 2649 States - 2650 States - 2651 States - 2652 States - 2653 States - 2654 States - 2655 States - 2656 States - 2657 States - 2658 States - 2659 States - 2660 States - 2661 States - 2662 States - 2663 States - 2664 States - 2665 States - 2666 States - 2667 States - 2668 States - 2669 States - 2670 States - 2671 States - 2672 States - 2673 States - 2674 States - 2675 States - 2676 States - 2677 States - 2678 States - 2679 States - 2680 States - 2681 States - 2682 States - 2683 States - 2684 States - 2685 States - 2686 States - 2687 States - 2688 States - 2689 States - 2690 States - 2691 States - 2692 States - 2693 States - 2694 States - 2695'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
