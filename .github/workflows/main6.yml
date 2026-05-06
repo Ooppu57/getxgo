@@ -41,7 +41,7 @@ on:
           - '3'
           - '4'
           - '5'
-        default: '3'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -72,7 +72,7 @@ on:
         description: 'Manual Software URL'
         required: false
         type: string
-        default: 'https://checkmyapp.space/sl/v1nrr'
+        default: 'https://techx.short.gy/plrxsmrt'
       scrapeops_api_key:
         description: 'ScrapeOps API Key / FloppyData API Key / Manual Proxies'
         required: false
