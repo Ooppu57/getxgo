@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '1'
+        default: '3'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '25'
+        default: '3'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '75'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -81,12 +81,12 @@ on:
         description: 'Run manual link'
         required: true
         type: boolean
-        default: false
+        default: true
       scrapeops_api_key:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 3736 States - 3735 States - 3734 States - 3733 States - 3732 States - 3731 States - 3730 States - 3729 States - 3728 States - 3727 States - 3722 States - 3720 States - 3721 States - 3726 States - 3724 States - 3719 States - 3725 States - 3718 States - 3717 States - 3723 States - 3714 States - 3715 States - 3711 States - 3712 States - 3716 States - 3713 States - 3710 States - 3709 States - 3708 States - 3707 States - 3706 States - 3705 States - 3704 States - 3703 States - 3702 States - 3701 States - 3700 States - 3699 States - 3698 States - 3697 States - 3696 States - 3695 States - 3694 States - 3693 States - 3692 States - 3691 States - 3690 States - 3689 States - 3688 States - 3687 States - 3686 States - 3685 States - 3684 States - 3683 States - 3682 States - 3681 States - 3680 States - 3679 States - 3678 States - 3677 States - 3676 - 436 States - 3675 States - 3674 States - 3673 States - 3672 States - 3671 States - 3670 States - 3669 States - 3668 States - 3667 States - 3666 States - 3665 States - 3664 States - 3663 States - 3662 States - 3661 States - 3660 States - 3659 States - 3658 States - 3657 States - 3656 States - 3655 States - 3654 States - 3653 States - 3652 States - 3651 States - 3650 States - 3649 States - 3648 States - 3647 States - 3646 States - 3645 States - 3644 States - 3643 States - 3642 States - 3641 States - 3640 States - 3639 States - 3638'
+        default: 'States - 3736 States - 3735 States - 3734 States - 3733'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
