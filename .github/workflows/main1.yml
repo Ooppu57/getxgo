@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '1'
+        default: '5'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '50'
+        default: '5'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '50'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '02. AVG - B4Books'
+        default: '01. Opera - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 3528 States - 3527 States - 3526 States - 3525 States - 3524 States - 3523 States - 3522 States - 3521 States - 3520 States - 3519 States - 3518 States - 3517 States - 3516 States - 3515 States - 3514 States - 3513 States - 3512 States - 3511 States - 3510 States - 3509 States - 3508 States - 3507 States - 3506 States - 3505 States - 3504 States - 3503 States - 3502 States - 3501 States - 3500 States - 3499 States - 3498 States - 3497 States - 3496 States - 3495 States - 3494 States - 3493 States - 3492 States - 3491 States - 3490 States - 3489 States - 3488 States - 3487 States - 3486 States - 3485 States - 3484 States - 3483 States - 3482 States - 3481 States - 3480 States - 3479 States - 3478 States - 3477 States - 3476 States - 3475 States - 3474 States - 3473 States - 3472 States - 3471 States - 3470 States - 3469 States - 3468 States - 3467 States - 3466 States - 3465 States - 3464 States - 3463 States - 3462 States - 3461 States - 3460 States - 3459 States - 3458 States - 3457 States - 3456 States - 3455 States - 3454 States - 3453 States - 3452 States - 3451 States - 3450 States - 3449 States - 3448 States - 3447 States - 3446 States - 3445 States - 3444 States - 3443 States - 3442 States - 3441 States - 3440 States - 3439 States - 3438 States - 3437 States - 3436 States - 3435 States - 3434 States - 3433 States - 3432 States - 3431 States - 3430 States - 3429'
+        default: 'd0f7431f-9fbc-4550-b507-20e3fd0c7297'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -112,7 +112,7 @@ on:
           - 'Italy'
           - 'Netherlands'
           - 'Poland'
-        default: 'Australia'
+        default: 'Netherlands'
       mobile_proxies:
         description: 'Use Mobile Proxies'
         required: true
