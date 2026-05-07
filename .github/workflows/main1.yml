@@ -76,17 +76,17 @@ on:
         description: 'Manual Software URL'
         required: false
         type: string
-        default: 'https://techx.short.gy/plrxsmrt'
+        default: 'https://techx.short.gy/ogxsmrt'
       run_manual_link:
         description: 'Run manual link'
         required: true
         type: boolean
-        default: false
+        default: true
       scrapeops_api_key:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '- 432 - 431 - 430 - 429 - 428'
+        default: 'States - 3637 States - 3636 States - 3635'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
