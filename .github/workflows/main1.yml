@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '1'
+        default: '3'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '50'
+        default: '3'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '50'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '03. AVG - F.Ahmad'
+        default: '01. Opera - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 3630 States - 3629 States - 3628 States - 3627 States - 3626 States - 3625 States - 3624 States - 3623 States - 3622 States - 3621 States - 3620 States - 3619 States - 3618 States - 3617 States - 3616 States - 3615 States - 3614 States - 3613 States - 3612 States - 3611 States - 3610 States - 3609 States - 3608 States - 3607 States - 3606 States - 3605 States - 3604 States - 3603 States - 3602 States - 3601 States - 3600 States - 3599 States - 3598 States - 3597 States - 3596 States - 3595 States - 3594 States - 3593 States - 3592 States - 3591 States - 3590 States - 3589 States - 3588 States - 3587 States - 3586 States - 3585 States - 3584 States - 3583 States - 3582 States - 3581 States - 3580 States - 3579 States - 3578 States - 3577 States - 3576 States - 3575 States - 3574 States - 3573 States - 3572 States - 3571 States - 3570 States - 3568 States - 3569 States - 3567 States - 3566 States - 3565 States - 3564 States - 3563 States - 3562 States - 3561 States - 3560 States - 3559 States - 3558 States - 3557 States - 3556 States - 3555 States - 3554 States - 3553 States - 3552 States - 3551 States - 3550 States - 3549 States - 3548 States - 3547 States - 3546 States - 3545 States - 3544 States - 3543 States - 3542 States - 3541 States - 3540 States - 3539 States - 3538 States - 3537 States - 3536 States - 3535 States - 3534 States - 3533 States - 3532 States - 3531'
+        default: '- 432 - 431 - 430 - 429 - 428'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
