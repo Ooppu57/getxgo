@@ -76,7 +76,7 @@ on:
         description: 'Manual Software URL'
         required: false
         type: string
-        default: 'https://techx.short.gy/ogxsmrt'
+        default: 'https://nx2bs.com/c?o=11&a=18444'
       run_manual_link:
         description: 'Run manual link'
         required: true
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 3736 States - 3735 States - 3734 States - 3733'
+        default: 'States - 3769 States - 3768 States - 3767 States - 3766 States - 3765'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
