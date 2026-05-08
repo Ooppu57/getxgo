@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '03. OperaOne - Harrari'
+        default: '02. OperaOne - Esmeel'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 4174 States - 4173 States - 4172 States - 4171'
+        default: 'States - 4171 States - 4170 States - 4169 States - 4168'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
