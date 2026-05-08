@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '3'
+        default: '1'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '3'
+        default: '30'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '0'
+        default: '70'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 4171 States - 4170 States - 4169 States - 4168'
+        default: 'States - 4282 States - 4283 States - 4285 States - 4287 States - 4284 States - 4281 States - 4280 States - 4279 States - 4278 States - 4277 States - 4276 States - 4275 States - 4274 States - 4273 States - 4272 States - 4271 States - 4270 States - 4269 States - 4268 States - 4267 States - 4266 States - 4265 States - 4264 States - 4263 States - 4262 States - 4261 States - 4260 States - 4259 States - 4258 States - 4257 States - 4256 States - 4255 States - 4254 States - 4253 States - 4252 States - 4251 States - 4250 States - 4249 States - 4248 States - 4243 States - 4239 States - 4242 States - 4238 States - 4240 States - 4241 States - 4247 States - 4237 States - 4246 States - 4244 States - 4245 States - 4236 States - 4235 States - 4234 States - 4233 States - 4232 States - 4231 States - 4230 States - 4229 States - 4228 States - 4227 States - 4226 States - 4225 States - 4224 States - 4223 States - 4222 States - 4221 States - 4220 States - 4219 - 438 States - 4218 States - 4217 States - 4216 States - 4215 States - 4214 States - 4213 States - 4212 States - 4211 States - 4210 States - 4209 States - 4208 States - 4207 States - 4206 States - 4205 States - 4204 States - 4203 States - 4202 States - 4201 States - 4200 States - 4199 States - 4198 States - 4196 States - 4195 States - 4194 States - 4193 States - 4192 States - 4191 States - 4190 States - 4189 States - 4188 States - 4187 States - 4186'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
