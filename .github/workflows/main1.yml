@@ -37,12 +37,12 @@ on:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '44'
+        default: '46'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '56'
+        default: '54'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '01. AVG - TechxTrader'
+        default: '03. AVG - F.Ahmad'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 3970 States - 3969 States - 3968 States - 3967 States - 3966 States - 3965 States - 3964 States - 3963 States - 3962 States - 3961 States - 3960 States - 3959 States - 3958 States - 3957 States - 3956 States - 3955 States - 3954 States - 3953 States - 3952 States - 3951 States - 3950 States - 3949 States - 3948 States - 3947 States - 3946 States - 3945 States - 3944 States - 3943 States - 3942 States - 3941 States - 3940 States - 3939 States - 3938 States - 3937 States - 3936 States - 3935 States - 3934 States - 3933 States - 3932 States - 3931 States - 3930 States - 3929 States - 3928 States - 3927 States - 3926 States - 3925 States - 3924 States - 3923 States - 3922 States - 3921 States - 3920 States - 3919 States - 3918 States - 3917 States - 3916 States - 3915 States - 3914 States - 3913 States - 3912 States - 3911 States - 3910 States - 3909 States - 3908 States - 3907 States - 3906 States - 3905 States - 3904 States - 3903 States - 3902 States - 3901 States - 3900 States - 3899 States - 3898 States - 3897 States - 3896 States - 3895 States - 3894 States - 3893 States - 3892 States - 3891 States - 3890 States - 3889 States - 3888 States - 3887 States - 3886 States - 3885 States - 3884 States - 3883 States - 3882 States - 3881 States - 3880 States - 3879 States - 3878 States - 3877 States - 3876 States - 3875 States - 3874 States - 3873 States - 3872 States - 3871'
+        default: 'States - 4072 States - 4071 States - 4070 States - 4069 States - 4068 States - 4067 States - 4066 States - 4065 States - 4064 States - 4063 States - 4062 States - 4061 States - 4060 States - 4059 States - 4058 States - 4057 States - 4056 States - 4055 States - 4054 States - 4053 States - 4052 States - 4051 States - 4050 States - 4049 States - 4048 States - 4047 States - 4046 States - 4045 States - 4044 States - 4043 States - 4042 States - 4041 States - 4040 States - 4039 States - 4038 States - 4037 States - 4036 States - 4035 States - 4034 States - 4033 States - 4032 States - 4031 States - 4030 States - 4029 States - 4028 States - 4027 States - 4026 States - 4025 States - 4024 States - 4023 States - 4022 States - 4021 States - 4020 States - 4019 States - 4018 States - 4017 States - 4016 States - 4015 States - 4014 States - 4013 States - 4012 States - 4011 States - 4010 States - 4009 States - 4008 States - 4007 States - 4006 States - 4005 States - 4004 States - 4003 States - 4002 States - 4001 States - 4000 States - 3999 States - 3998 States - 3997 States - 3996 States - 3995 States - 3994 States - 3993 States - 3992 States - 3991 States - 3990 States - 3989 States - 3988 States - 3987 States - 3986 States - 3985 States - 3984 States - 3983 States - 3982 States - 3981 States - 3980 States - 3979 States - 3978 States - 3977 States - 3976 States - 3975 States - 3974 States - 3973'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
