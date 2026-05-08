@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '04. OperaOne - Chloe'
+        default: '03. OperaOne - Harrari'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 4390 States - 4389 States - 4388 States - 4387 States - 4386 States - 4385 States - 4384 States - 4383 States - 4382 States - 4381 States - 4380 States - 4379 States - 4378 States - 4377 States - 4376 States - 4375 States - 4374 States - 4373 States - 4372 States - 4371 States - 4370 States - 4369 States - 4368 States - 4367 States - 4366 States - 4365 States - 4364 States - 4363 States - 4362 States - 4361 States - 4360 States - 4359 States - 4358 States - 4357 States - 4356 States - 4355 States - 4354 States - 4353 States - 4352 States - 4351 States - 4350 States - 4349 States - 4348 States - 4347 States - 4346 States - 4345 States - 4344 States - 4343 States - 4342 States - 4341 States - 4340 States - 4339 States - 4338 States - 4337 States - 4336 States - 4335 States - 4334 States - 4333 States - 4332 States - 4331 States - 4329 States - 4330 States - 4328 States - 4325 States - 4324 States - 4327 States - 4326 States - 4322 States - 4323 States - 4321 States - 4320 States - 4319 States - 4318 States - 4317 States - 4316 States - 4315 States - 4314 States - 4313 States - 4312 States - 4311 States - 4310 States - 4309 States - 4308 States - 4307 States - 4306 States - 4305 States - 4304 States - 4303 States - 4302 States - 4301 States - 4300 States - 4299 States - 4298 States - 4297 States - 4296 States - 4295 States - 4294 States - 4293 States - 4292 States - 4291'
+        default: 'States - 4492 States - 4490 States - 4489 States - 4488 States - 4487 States - 4486 States - 4485 States - 4484 States - 4483 States - 4482 States - 4481 States - 4480 States - 4479 States - 4478 States - 4477 States - 4476 States - 4475 States - 4464 States - 4462 States - 4465 States - 4463 States - 4472 States - 4461 States - 4471 States - 4473 States - 4460 States - 4474 States - 4469 States - 4470 States - 4466 States - 4468 States - 4467 States - 4459 States - 4458 States - 4457 States - 4456 States - 4455 States - 4454 States - 4453 States - 4452 States - 4451 States - 4450 States - 4449 States - 4448 States - 4447 States - 4446 States - 4445 States - 4444 States - 4443 States - 4442 States - 4441 States - 4440 States - 4439 States - 4438 States - 4437 States - 4436 States - 4435 States - 4434 States - 4433 States - 4432 States - 4431 States - 4430 States - 4429 States - 4428 States - 4427 States - 4426 States - 4425 States - 4424 States - 4423 States - 4422 States - 4421 States - 4420 States - 4419 States - 4418 States - 4417 States - 4416 States - 4415 States - 4414 States - 4413 States - 4412 States - 4411 States - 4410 States - 4409 States - 4408 States - 4407 States - 4406 States - 4405 States - 4404 States - 4403 States - 4402 States - 4401 States - 4400 States - 4399 States - 4398 States - 4397 States - 4396 States - 4395 States - 4394 States - 4393 States - 4392'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
