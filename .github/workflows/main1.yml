@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '1'
+        default: '5'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '40'
+        default: '5'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '60'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '05. OperaOne - Daisy'
+        default: '01. Opera - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 4622 States - 4621 States - 4620 States - 4619 States - 4618 States - 4617 States - 4616 States - 4615 States - 4614 States - 4613 States - 4612 States - 4611 States - 4610 States - 4609 States - 4608 States - 4607 States - 4606 States - 4605 States - 4604 States - 4603 States - 4602 States - 4601 States - 4600 States - 4599 States - 4598 States - 4597 States - 4596 States - 4595 States - 4594 States - 4593 States - 4592 States - 4591 States - 4590 States - 4589 States - 4588 States - 4587 States - 4586 States - 4585 States - 4584 States - 4583 States - 4582 States - 4581 States - 4580 States - 4579 States - 4578 States - 4577 States - 4576 States - 4575 States - 4574 States - 4573 States - 4572 States - 4571 States - 4570 States - 4569 States - 4568 States - 4567 States - 4566 States - 4565 States - 4564 States - 4563 States - 4562 States - 4561 States - 4560 States - 4559 States - 4558 States - 4557 States - 4556 States - 4555 States - 4554 States - 4553 States - 4552 States - 4551 States - 4550 States - 4549 States - 4548 States - 4547 States - 4546 States - 4545 States - 4544 States - 4543 States - 4542 States - 4541 States - 4540 States - 4539 States - 4538 States - 4537 States - 4536 States - 4535 States - 4534 States - 4533 States - 4532 States - 4531 States - 4530 States - 4529 States - 4528 States - 4527 States - 4526 States - 4525 States - 4524 States - 4523'
+        default: '- 444 - 443 - 442 - 441 - 440'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
