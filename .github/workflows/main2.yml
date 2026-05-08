@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '01. Ad-MVN - Techx'
+        default: '01. Opera - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -81,12 +81,12 @@ on:
         description: 'Run manual link'
         required: true
         type: boolean
-        default: true
+        default: false
       scrapeops_api_key:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '10e33d45-0eda-4de7-ba1e-de2ae246b31e'
+        default: 'Kingdom - 12 Kingdom - 11 Kingdom - 10'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
