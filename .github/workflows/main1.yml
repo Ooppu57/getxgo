@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '1'
+        default: '3'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '30'
+        default: '3'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '70'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '01. Ad-MVN - Techx'
+        default: '03. OperaOne - Harrari'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 4174 States - 4173 States - 4172 States - 4171 States - 4170 States - 4169 States - 4168 States - 4167 States - 4166 States - 4165 States - 4164 States - 4163 States - 4162 States - 4161 States - 4160 States - 4159 States - 4158 States - 4157 States - 4156 States - 4155 States - 4154 States - 4153 States - 4152 States - 4151 States - 4149 States - 4148 States - 4147 States - 4146 States - 4145 States - 4144 States - 4143 States - 4142 States - 4141 States - 4140 States - 4139 States - 4138 States - 4137 States - 4136 States - 4135 States - 4134 States - 4133 States - 4132 States - 4131 States - 4130 States - 4129 States - 4128 States - 4127 States - 4126 States - 4125 States - 4124 States - 4123 States - 4122 States - 4121 States - 4120 States - 4119 States - 4118 States - 4117 States - 4116 States - 4115 States - 4114 States - 4113 States - 4112 States - 4111 States - 4110 States - 4109 States - 4108 States - 4107 States - 4106 States - 4105 States - 4104 States - 4103 States - 4102 States - 4101 States - 4100 States - 4099 States - 4098 States - 4097 States - 4096 States - 4095 States - 4094 States - 4093 States - 4092 States - 4091 States - 4090 States - 4089 States - 4088 States - 4087 States - 4086 States - 4085 States - 4084 States - 4083 States - 4082 States - 4081 States - 4080 States - 4079 States - 4077 States - 4075 States - 4078 States - 4074 States - 4076'
+        default: 'States - 4174 States - 4173 States - 4172 States - 4171'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
