@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '01. Opera - Techx'
+        default: '03. OperaOne - Harrari'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 5146 States - 5145 States - 5144 States - 5143 States - 5142 States - 5141 States - 5140 States - 5139 States - 5138 States - 5137 States - 5136 States - 5135 States - 5134 States - 5133 States - 5132 States - 5131 States - 5130 States - 5129 States - 5128 States - 5127 States - 5126 States - 5125 States - 5124 States - 5122 States - 5123 States - 5121 States - 5120 States - 5119 States - 5118 States - 5117 States - 5116 States - 5115 States - 5114 States - 5113 States - 5112 States - 5111 States - 5110 States - 5109 States - 5108 States - 5107 States - 5106 States - 5105 States - 5104 States - 5103 States - 5102 States - 5101 States - 5100 States - 5099 States - 5098 States - 5097 States - 5096 States - 5095 States - 5094 States - 5093 States - 5092 States - 5091 States - 5090 States - 5089 States - 5088 States - 5087 States - 5086 States - 5085 States - 5084 States - 5083 States - 5081 States - 5080 States - 5079 States - 5078 States - 5077 States - 5076 States - 5075 States - 5074 States - 5073 States - 5072 States - 5071 States - 5070 States - 5069 States - 5068 States - 5067 States - 5066 States - 5065 States - 5064 States - 5063 States - 5062 States - 5061 States - 5060 States - 5059 States - 5058 States - 5057 States - 5056 States - 5055 States - 5054 States - 5053 States - 5052 States - 5051 States - 5050 States - 5049 States - 5048 States - 5047 States - 5046'
+        default: 'States - 5243 States - 5242 States - 5241 States - 5240 States - 5239 States - 5238 States - 5237 States - 5236 States - 5235 States - 5234 States - 5233 States - 5232 States - 5231 States - 5230 States - 5229 States - 5228 States - 5227 States - 5226 States - 5225 States - 5224 States - 5223 States - 5222 States - 5221 States - 5220 States - 5219 States - 5218 States - 5217 States - 5216 States - 5215 States - 5214 States - 5213 States - 5212 States - 5211 States - 5210 States - 5209 States - 5208 States - 5207 States - 5206 States - 5205 States - 5204 States - 5203 States - 5202 States - 5201 States - 5200 States - 5199 States - 5198 States - 5197 States - 5196 States - 5195 States - 5194 States - 5193 States - 5192 States - 5191 States - 5190 States - 5189 States - 5188 States - 5187 States - 5186 States - 5185 States - 5184 States - 5183 States - 5182 States - 5181 States - 5180 States - 5179 States - 5178 States - 5176 States - 5177 States - 5169 States - 5171 States - 5168 States - 5172 States - 5173 States - 5170 States - 5166 States - 5167 States - 5165 States - 5162 States - 5163 States - 5160 States - 5159 States - 5164 States - 5161 States - 5162 States - 5163 States - 5164 States - 5160 States - 5161 States - 5159 States - 5158 States - 5157 States - 5156 States - 5155 States - 5154 States - 5153 States - 5152 States - 5148 States - 5151 States - 5150 States - 5149'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
