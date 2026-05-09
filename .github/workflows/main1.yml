@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '1'
+        default: '10'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '32'
+        default: '10'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '68'
+        default: '0'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '05. OperaOne - Daisy'
+        default: '01. Opera - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 5445 States - 5443 States - 5444 States - 5442 States - 5441 States - 5440 States - 5439 States - 5438 States - 5437 States - 5436 States - 5435 States - 5434 States - 5433 States - 5428 States - 5432 States - 5431 States - 5429 States - 5430 States - 5427 States - 5426 States - 5425 States - 5424 States - 5423 States - 5422 States - 5421 States - 5420 States - 5419 States - 5418 States - 5417 States - 5416 States - 5415 States - 5414 States - 5413 States - 5412 States - 5411 States - 5410 States - 5409 States - 5408 States - 5407 States - 5406 States - 5405 States - 5404 States - 5403 States - 5402 States - 5401 States - 5400 States - 5399 States - 5398 States - 5397 States - 5396 States - 5395 States - 5394 States - 5393 States - 5392 States - 5391 States - 5389 States - 5390 States - 5388 States - 5387 States - 5386 States - 5385 States - 5384 States - 5383 States - 5382 States - 5381 States - 5380 States - 5379 States - 5378 States - 5377 States - 5376 States - 5375 States - 5374 States - 5373 States - 5372 States - 5371 States - 5370 States - 5369 States - 5368 States - 5367 States - 5366 States - 5365 States - 5364 States - 5363 States - 5362 States - 5361 States - 5360 States - 5359 States - 5358 States - 5357 - 452 States - 5356 States - 5355 States - 5354 States - 5353 States - 5352 States - 5351 States - 5350 States - 5349 States - 5348 States - 5347'
+        default: 'Kingdom - 57 Kingdom - 56 Kingdom - 55 Kingdom - 54 Kingdom - 53 Kingdom - 52 Kingdom - 51 Kingdom - 50 Kingdom - 49 Kingdom - 48 Kingdom - 47 Kingdom - 46 Kingdom - 45 Kingdom - 44 Kingdom - 43 Kingdom - 42'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
