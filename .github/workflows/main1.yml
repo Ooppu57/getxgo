@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '5'
+        default: '1'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '5'
+        default: '50'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '0'
+        default: '50'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '01. Opera - Techx'
+        default: '01. AVG - TechxTrader'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: '- 444 - 443 - 442 - 441 - 440'
+        default: 'States - 4724 States - 4723 States - 4722 States - 4721 States - 4720 States - 4719 States - 4718 States - 4717 States - 4716 States - 4715 States - 4714 - 450 States - 4713 States - 4712 States - 4711 States - 4710 States - 4709 States - 4708 States - 4707 States - 4706 States - 4705 States - 4704 States - 4703 States - 4702 States - 4701 States - 4700 States - 4699 States - 4698 States - 4697 States - 4696 States - 4695 States - 4694 States - 4693 States - 4692 States - 4691 States - 4690 States - 4689 States - 4688 States - 4687 States - 4686 States - 4685 States - 4684 States - 4683 States - 4682 States - 4681 States - 4680 States - 4679 States - 4678 States - 4677 States - 4676 States - 4675 States - 4674 States - 4673 States - 4672 States - 4671 States - 4670 States - 4669 States - 4668 States - 4667 States - 4666 States - 4665 States - 4664 States - 4663 States - 4662 States - 4661 States - 4660 States - 4659 States - 4658 States - 4657 States - 4656 States - 4655 States - 4654 States - 4653 States - 4652 States - 4651 States - 4650 States - 4649 States - 4648 States - 4647 States - 4646 States - 4645 States - 4644 States - 4643 States - 4642 States - 4641 States - 4640 States - 4639 States - 4638 States - 4637 States - 4636 States - 4635 States - 4634 States - 4633 States - 4632 States - 4631 States - 4630 States - 4629 States - 4628 States - 4627 States - 4626'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
