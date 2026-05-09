@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '02. OperaOne - Esmeel'
+        default: '01. Opera - Techx'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 5043 States - 5042 States - 5041 States - 5040 States - 5039 States - 5038 States - 5037 States - 5036 States - 5035 States - 5034 States - 5033 States - 5032 States - 5031 States - 5030 States - 5029 States - 5028 States - 5027 States - 5026 States - 5025 States - 5024 States - 5023 States - 5022 States - 5021 States - 5020 States - 5019 States - 5018 States - 5017 States - 5016 States - 5015 States - 5014 States - 5013 States - 5012 States - 5011 States - 5010 States - 5009 States - 5008 States - 5007 States - 5006 States - 5005 States - 5004 States - 5003 States - 5002 States - 5001 States - 5000 States - 4999 States - 4998 States - 4997 States - 4996 States - 4995 States - 4994 States - 4993 States - 4992 States - 4991 States - 4990 States - 4989 States - 4988 States - 4987 States - 4986 States - 4985 States - 4984 States - 4983 States - 4982 States - 4981 States - 4980 States - 4979 States - 4978 States - 4977 States - 4976 States - 4975 States - 4974 States - 4973 States - 4972 States - 4971 States - 4970 States - 4969 States - 4967 States - 4968 States - 4966 States - 4965 States - 4964 States - 4963 States - 4962 States - 4961 States - 4960 States - 4959 States - 4958 States - 4957 States - 4956 States - 4955 States - 4954 States - 4953 States - 4952 States - 4951 States - 4950 States - 4949 States - 4948 States - 4947 States - 4946 States - 4945 States - 4944'
+        default: 'States - 5146 States - 5145 States - 5144 States - 5143 States - 5142 States - 5141 States - 5140 States - 5139 States - 5138 States - 5137 States - 5136 States - 5135 States - 5134 States - 5133 States - 5132 States - 5131 States - 5130 States - 5129 States - 5128 States - 5127 States - 5126 States - 5125 States - 5124 States - 5122 States - 5123 States - 5121 States - 5120 States - 5119 States - 5118 States - 5117 States - 5116 States - 5115 States - 5114 States - 5113 States - 5112 States - 5111 States - 5110 States - 5109 States - 5108 States - 5107 States - 5106 States - 5105 States - 5104 States - 5103 States - 5102 States - 5101 States - 5100 States - 5099 States - 5098 States - 5097 States - 5096 States - 5095 States - 5094 States - 5093 States - 5092 States - 5091 States - 5090 States - 5089 States - 5088 States - 5087 States - 5086 States - 5085 States - 5084 States - 5083 States - 5081 States - 5080 States - 5079 States - 5078 States - 5077 States - 5076 States - 5075 States - 5074 States - 5073 States - 5072 States - 5071 States - 5070 States - 5069 States - 5068 States - 5067 States - 5066 States - 5065 States - 5064 States - 5063 States - 5062 States - 5061 States - 5060 States - 5059 States - 5058 States - 5057 States - 5056 States - 5055 States - 5054 States - 5053 States - 5052 States - 5051 States - 5050 States - 5049 States - 5048 States - 5047 States - 5046'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
