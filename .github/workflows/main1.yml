@@ -32,17 +32,17 @@ on:
           - '8'
           - '9'
           - '10'
-        default: '10'
+        default: '1'
       num_installs:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '10'
+        default: '50'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '0'
+        default: '50'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '01. Opera - Techx'
+        default: '01. AVG - TechxTrader'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'Kingdom - 57 Kingdom - 56 Kingdom - 55 Kingdom - 54 Kingdom - 53 Kingdom - 52 Kingdom - 51 Kingdom - 50 Kingdom - 49 Kingdom - 48 Kingdom - 47 Kingdom - 46 Kingdom - 45 Kingdom - 44 Kingdom - 43 Kingdom - 42'
+        default: 'States - 5567 States - 5566 States - 5565 States - 5564 States - 5563 States - 5562 States - 5561 States - 5560 States - 5559 States - 5558 States - 5557 States - 5556 States - 5555 States - 5554 States - 5553 States - 5552 States - 5551 States - 5550 States - 5549 States - 5548 States - 5547 States - 5546 States - 5545 States - 5544 States - 5543 States - 5542 States - 5541 States - 5540 States - 5539 States - 5538 States - 5537 States - 5536 States - 5535 States - 5534 States - 5533 States - 5532 States - 5531 - 460 States - 5530 States - 5526 States - 5525 States - 5524 States - 5523 States - 5522 States - 5521 States - 5520 States - 5519 States - 5518 States - 5517 States - 5516 States - 5515 States - 5514 States - 5513 States - 5512 - 459 States - 5511 States - 5510 States - 5509 States - 5508 States - 5507 States - 5506 States - 5505 States - 5504 States - 5503 States - 5502 States - 5501 States - 5500 States - 5499 States - 5498 States - 5497 States - 5496 States - 5495 States - 5494 States - 5493 States - 5492 States - 5491 States - 5490 States - 5489 States - 5488 States - 5487 States - 5486 States - 5485 States - 5484 States - 5483 States - 5482 States - 5481 States - 5480 States - 5479 States - 5478 States - 5477 States - 5476 States - 5475 States - 5474 States - 5473 States - 5472 States - 5471 States - 5470 States - 5469 States - 5468 States - 5467'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
@@ -122,7 +122,7 @@ on:
         description: 'Enable Unique Sticky Sessions'
         required: true
         type: boolean
-        default: true
+        default: false
 
 permissions:
   actions: write
