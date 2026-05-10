@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '01. AVG - TechxTrader'
+        default: '02. AVG - B4Books'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 5567 States - 5566 States - 5565 States - 5564 States - 5563 States - 5562 States - 5561 States - 5560 States - 5559 States - 5558 States - 5557 States - 5556 States - 5555 States - 5554 States - 5553 States - 5552 States - 5551 States - 5550 States - 5549 States - 5548 States - 5547 States - 5546 States - 5545 States - 5544 States - 5543 States - 5542 States - 5541 States - 5540 States - 5539 States - 5538 States - 5537 States - 5536 States - 5535 States - 5534 States - 5533 States - 5532 States - 5531 - 460 States - 5530 States - 5526 States - 5525 States - 5524 States - 5523 States - 5522 States - 5521 States - 5520 States - 5519 States - 5518 States - 5517 States - 5516 States - 5515 States - 5514 States - 5513 States - 5512 - 459 States - 5511 States - 5510 States - 5509 States - 5508 States - 5507 States - 5506 States - 5505 States - 5504 States - 5503 States - 5502 States - 5501 States - 5500 States - 5499 States - 5498 States - 5497 States - 5496 States - 5495 States - 5494 States - 5493 States - 5492 States - 5491 States - 5490 States - 5489 States - 5488 States - 5487 States - 5486 States - 5485 States - 5484 States - 5483 States - 5482 States - 5481 States - 5480 States - 5479 States - 5478 States - 5477 States - 5476 States - 5475 States - 5474 States - 5473 States - 5472 States - 5471 States - 5470 States - 5469 States - 5468 States - 5467'
+        default: 'States - 5668 States - 5667 States - 5666 States - 5665 States - 5664 States - 5663 States - 5662 States - 5661 States - 5660 States - 5659 States - 5658 States - 5657 States - 5656 States - 5655 States - 5654 States - 5653 States - 5652 States - 5651 States - 5650 States - 5649 States - 5648 States - 5647 States - 5646 States - 5645 States - 5644 States - 5643 States - 5642 States - 5641 States - 5640 States - 5639 States - 5638 States - 5637 States - 5636 States - 5635 States - 5634 States - 5633 States - 5632 States - 5631 States - 5630 States - 5629 States - 5628 States - 5627 States - 5626 States - 5625 States - 5624 States - 5623 States - 5622 States - 5621 States - 5620 States - 5619 States - 5618 States - 5617 States - 5616 States - 5615 States - 5614 States - 5613 States - 5612 States - 5611 States - 5610 States - 5609 States - 5608 States - 5607 States - 5606 States - 5605 States - 5604 States - 5603 States - 5602 States - 5601 States - 5600 States - 5599 States - 5598 States - 5597 States - 5596 States - 5595 States - 5594 States - 5593 States - 5592 States - 5591 States - 5590 States - 5589 States - 5588 States - 5587 States - 5586 States - 5585 States - 5584 States - 5583 States - 5582 States - 5581 States - 5580 States - 5579 States - 5578 States - 5577 States - 5576 States - 5575 States - 5574 States - 5573 States - 5572 States - 5571 States - 5570 States - 5569'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
