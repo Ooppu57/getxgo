@@ -37,12 +37,12 @@ on:
         description: 'Number of Installs'
         required: true
         type: string
-        default: '30'
+        default: '50'
       num_clicks:
         description: 'Number of Clicks'
         required: true
         type: string
-        default: '70'
+        default: '100'
       software_choice:
         description: 'Select Software & Link'
         required: true
@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '01. Ad-MVN - Techx'
+        default: '01. AVG - TechxTrader'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 6206 States - 6207 States - 6208 States - 6209 States - 6210 States - 6211 States - 6212 States - 6213 States - 6214 States - 6215 States - 6216 States - 6217 States - 6218 States - 6219 States - 6220 States - 6221 States - 6222 States - 6223 States - 6224 States - 6225 States - 6226 States - 6227 States - 6228 States - 6229 States - 6230 States - 6231 States - 6232 States - 6233 States - 6234 States - 6235 States - 6236 States - 6237 States - 6238 States - 6239 States - 6240 States - 6241 States - 6242 States - 6243 States - 6244 States - 6245 States - 6246 States - 6247 States - 6248 States - 6249 States - 6250 States - 6251 States - 6252 States - 6253 States - 6255 States - 6254 States - 6256 States - 6257 States - 6258 States - 6259 States - 6260 States - 6261 States - 6262 States - 6263 States - 6264 States - 6265 States - 6266 States - 6267 States - 6268 States - 6269 States - 6270 States - 6271 States - 6272 States - 6273 States - 6274 States - 6275 States - 6276 States - 6277 States - 6278 States - 6279 States - 6280 States - 6281 States - 6282 States - 6283 States - 6284 States - 6285 States - 6286 States - 6287 States - 6288 States - 6289 States - 6290 States - 6291 States - 6292 States - 6293 States - 6294 States - 6295 States - 6296 States - 6297 States - 6298 States - 6299 States - 6300 States - 6301 States - 6302 States - 6303 States - 6304 States - 6305'
+        default: 'States - 6309 States - 6310 States - 6311 States - 6312 States - 6317 States - 6313 States - 6319 States - 6315 States - 6316 States - 6314 States - 6318 States - 6320 States - 6321 States - 6322 States - 6323 States - 6324 States - 6325 States - 6326 States - 6327 States - 6328 States - 6329 States - 6330 States - 6331 States - 6332 States - 6333 States - 6334 States - 6335 States - 6336 States - 6337 States - 6338 States - 6339 States - 6340 States - 6341 States - 6342 States - 6343 States - 6344 States - 6345 States - 6346 States - 6347 States - 6348 States - 6349 States - 6350 States - 6351 States - 6352 States - 6353 States - 6354 States - 6355 States - 6356 States - 6357 States - 6358 States - 6359 States - 6360 States - 6361 States - 6362 States - 6363 States - 6364 States - 6365 States - 6366 States - 6368 States - 6367 States - 6369 States - 6371 States - 6372 States - 6373 States - 6374 States - 6375 States - 6376 States - 6377 States - 6378 States - 6379 States - 6380 States - 6381 States - 6382 States - 6383 States - 6384 States - 6385 States - 6386 States - 6387 States - 6388 States - 6389 States - 6390 States - 6391 States - 6392 States - 6393 States - 6394 States - 6395 States - 6396 States - 6397 States - 6398 States - 6399 States - 6400 States - 6401 States - 6402 States - 6403 States - 6404 States - 6405 States - 6406 States - 6407 States - 6408 States - 6410'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
