@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '04. OperaOne - Chloe'
+        default: '05. OperaOne - Daisy'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 6817 States - 6818 States - 6819 States - 6820 States - 6821 States - 6822 States - 6823 States - 6824 States - 6825 States - 6826 States - 6827 States - 6828 States - 6829 States - 6830 States - 6831 States - 6832 States - 6833 States - 6834 States - 6835 States - 6836 States - 6837 States - 6838 States - 6839 States - 6840 States - 6841 States - 6842 States - 6843 States - 6844 States - 6845 States - 6846 States - 6847 States - 6848 States - 6849 States - 6850 States - 6851 States - 6852 States - 6853 States - 6854 States - 6855 States - 6856 States - 6857 States - 6858 States - 6859 States - 6860 States - 6861 States - 6862 States - 6863 States - 6864 States - 6865 States - 6866 States - 6867 States - 6868 States - 6869 States - 6870 States - 6871 States - 6872 States - 6873 States - 6874 States - 6875 States - 6876 States - 6877 States - 6878 States - 6879 States - 6881 States - 6880 States - 6882 States - 6883 States - 6884 States - 6885 States - 6886 States - 6887 States - 6888 States - 6889 States - 6890 States - 6891 States - 6892 States - 6893 States - 6894 States - 6895 States - 6896 States - 6897 States - 6898 States - 6899 States - 6900 States - 6901 States - 6902 States - 6903 States - 6904 States - 6905 States - 6906 States - 6907 States - 6908 States - 6909 States - 6910 States - 6911 States - 6912 States - 6913 States - 6914 States - 6915 States - 6916'
+        default: 'States - 6929 States - 6930 States - 6931 States - 6932 States - 6933 States - 6934 States - 6935 States - 6936 States - 6937 States - 6938 States - 6939 States - 6940 States - 6941 States - 6942 States - 6943 States - 6944 States - 6945 States - 6946 States - 6947 States - 6948 States - 6949 States - 6950 States - 6951 States - 6952 States - 6953 States - 6954 States - 6955 States - 6956 States - 6957 States - 6958 States - 6959 States - 6960 States - 6961 States - 6962 States - 6963 States - 6964 States - 6965 States - 6966 States - 6967 States - 6968 States - 6969 States - 6970 States - 6971 States - 6972 States - 6973 States - 6974 States - 6975 States - 6976 States - 6977 States - 6978 States - 6979 States - 6980 States - 6981 States - 6982 States - 6983 States - 6984 States - 6985 States - 6986 States - 6987 States - 6988 States - 6989 States - 6990 States - 6991 States - 6992 States - 6993 States - 6994 States - 6995 States - 6996 States - 6997 States - 6998 States - 6999 States - 7000 States - 7001 States - 7002 States - 7003 States - 7004 States - 7005 States - 7006 States - 7007 States - 7008 States - 7009 States - 7010 States - 7011 States - 7012 States - 7013 States - 7014 States - 7015 States - 7016 States - 7017 States - 7018 States - 7019 States - 7020 States - 7021 States - 7022 States - 7023 States - 7024 States - 7025 States - 7026 States - 7027 States - 7028 States - 7029'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
