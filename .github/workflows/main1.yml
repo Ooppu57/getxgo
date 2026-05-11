@@ -71,7 +71,7 @@ on:
           - '02. Ad-MVN - B4Books'
           - '03. Ad-MVN - Orderflowz'
           - '04. Ad-MVN - A2Z'
-        default: '01. AVG - TechxTrader'
+        default: '02. AVG - B4Books'
       manual_software_url:
         description: 'Manual Software URL'
         required: false
@@ -86,7 +86,7 @@ on:
         description: 'ScrapeOps / FloppyData / Manual Proxies'
         required: false
         type: string
-        default: 'States - 6309 States - 6310 States - 6311 States - 6312 States - 6317 States - 6313 States - 6319 States - 6315 States - 6316 States - 6314 States - 6318 States - 6320 States - 6321 States - 6322 States - 6323 States - 6324 States - 6325 States - 6326 States - 6327 States - 6328 States - 6329 States - 6330 States - 6331 States - 6332 States - 6333 States - 6334 States - 6335 States - 6336 States - 6337 States - 6338 States - 6339 States - 6340 States - 6341 States - 6342 States - 6343 States - 6344 States - 6345 States - 6346 States - 6347 States - 6348 States - 6349 States - 6350 States - 6351 States - 6352 States - 6353 States - 6354 States - 6355 States - 6356 States - 6357 States - 6358 States - 6359 States - 6360 States - 6361 States - 6362 States - 6363 States - 6364 States - 6365 States - 6366 States - 6368 States - 6367 States - 6369 States - 6371 States - 6372 States - 6373 States - 6374 States - 6375 States - 6376 States - 6377 States - 6378 States - 6379 States - 6380 States - 6381 States - 6382 States - 6383 States - 6384 States - 6385 States - 6386 States - 6387 States - 6388 States - 6389 States - 6390 States - 6391 States - 6392 States - 6393 States - 6394 States - 6395 States - 6396 States - 6397 States - 6398 States - 6399 States - 6400 States - 6401 States - 6402 States - 6403 States - 6404 States - 6405 States - 6406 States - 6407 States - 6408 States - 6410'
+        default: 'States - 6412 States - 6412 States - 6413 States - 6414 States - 6415 States - 6416 States - 6417 States - 6418 States - 6419 States - 6420 States - 6421 States - 6422 States - 6423 States - 6424 States - 6425 States - 6428 States - 6429 States - 6427 States - 6426 States - 6430 States - 6431 States - 6432 States - 6433 States - 6434 States - 6435 States - 6436 States - 6437 States - 6438 States - 6439 States - 6440 States - 6441 States - 6441 States - 6442 States - 6443 States - 6444 States - 6445 States - 6446 States - 6447 States - 6448 States - 6449 States - 6450 States - 6451 States - 6452 States - 6453 States - 6454 States - 6455 States - 6456 States - 6457 States - 6458 States - 6459 States - 6460 States - 6461 States - 6462 States - 6463 States - 6464 States - 6465 States - 6466 States - 6467 States - 6468 States - 6469 States - 6470 States - 6471 States - 6472 States - 6473 States - 6474 States - 6475 States - 6476 States - 6477 States - 6478 States - 6479 States - 6480 States - 6481 States - 6482 States - 6483 States - 6484 States - 6485 States - 6486 States - 6487 States - 6488 States - 6489 States - 6490 States - 6491 States - 6492 States - 6493 States - 6494 States - 6495 States - 6496 States - 6497 States - 6498 States - 6499 States - 6500 States - 6500 States - 6507 States - 6501 States - 6504 States - 6503 States - 6509 States - 6505 States - 6502 States - 6506 States - 6508 States - 6510'
       use_without_proxy:
         description: 'Run without proxy'
         required: true
